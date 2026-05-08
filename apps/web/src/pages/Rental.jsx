@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { fetchCustomers } from '../lib/api';
 
 const Rental = ({
@@ -13,6 +13,7 @@ const Rental = ({
     const [customer, setCustomer] = useState({
         name: '',
         phone: '',
+        address: '',
         guarantee: 'KTP',
         guaranteeOther: '',
         idNumber: '',
@@ -21,23 +22,37 @@ const Rental = ({
     const [customerSearch, setCustomerSearch] = useState('');
     const [customerSuggestions, setCustomerSuggestions] = useState([]);
     const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
+    const latestSearchRequestRef = useRef(0);
 
     useEffect(() => {
         const keyword = customerSearch.trim();
         if (keyword.length < 2) {
             setCustomerSuggestions([]);
+            setIsSearchingCustomer(false);
             return undefined;
         }
 
+        const requestId = latestSearchRequestRef.current + 1;
+        latestSearchRequestRef.current = requestId;
         const timeoutId = setTimeout(async () => {
             try {
                 setIsSearchingCustomer(true);
                 const data = await fetchCustomers(keyword);
+                if (requestId !== latestSearchRequestRef.current) {
+                    return;
+                }
+
                 setCustomerSuggestions(data);
             } catch {
+                if (requestId !== latestSearchRequestRef.current) {
+                    return;
+                }
+
                 setCustomerSuggestions([]);
             } finally {
-                setIsSearchingCustomer(false);
+                if (requestId === latestSearchRequestRef.current) {
+                    setIsSearchingCustomer(false);
+                }
             }
         }, 250);
 
@@ -114,6 +129,17 @@ const Rental = ({
             setIsSubmitting(true);
             await onCheckout(payload);
             setCart([]);
+            setCustomer({
+                name: '',
+                phone: '',
+                address: '',
+                guarantee: 'KTP',
+                guaranteeOther: '',
+                idNumber: '',
+            });
+            setCustomerSearch('');
+            setCustomerSuggestions([]);
+            setDuration(1);
             alert('Transaksi berhasil disimpan!');
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Gagal menyimpan transaksi sewa.';
@@ -127,6 +153,7 @@ const Rental = ({
         setCustomer({
             name: pickedCustomer.name || '',
             phone: pickedCustomer.phone || '',
+            address: pickedCustomer.address || '',
             guarantee: pickedCustomer.guarantee || 'KTP',
             guaranteeOther: pickedCustomer.guaranteeOther || '',
             idNumber: pickedCustomer.idNumber || '',
@@ -136,8 +163,8 @@ const Rental = ({
     };
 
     return (
-        <div className="flex flex-col gap-6 py-4 lg:flex-row lg:gap-[30px] lg:py-5">
-            <div className="flex-1">
+        <div className="flex flex-col gap-6 py-4 lg:h-full lg:min-h-0 lg:flex-row lg:gap-[30px] lg:py-5">
+            <div className="flex flex-1 flex-col lg:min-h-0">
                 <div className="mb-5 flex flex-col gap-3 sm:mb-[30px] sm:flex-row sm:items-center sm:justify-between">
                     <h3 className="text-[1.1rem] font-bold text-text-main sm:text-[1.2rem]">Pilih Barang</h3>
                     <div className="w-full rounded-lg border border-border bg-sidebar-bg px-4 py-2 sm:w-auto">
@@ -153,31 +180,33 @@ const Rental = ({
                         </select>
                     </div>
                 </div>
-                <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 sm:mt-5 sm:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] sm:gap-5">
-                    {filteredItems.map(item => (
-                        <div
-                            key={item.id}
-                            className={`bg-card-bg border border-border rounded-lg p-4 cursor-pointer transition-all hover:border-accent hover:transform hover:-translate-y-1 group ${item.stock <= 0 ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
-                            onClick={() => addToCart(item)}
-                        >
-                            <div className="relative mb-3 h-[130px] overflow-hidden rounded-lg bg-[#1A2222] sm:mb-4 sm:h-[150px]">
-                                <img className="w-full h-full object-cover transition-transform group-hover:scale-105" src={item.image || 'https://via.placeholder.com/150'} alt={item.name} />
-                                {item.stock <= 0 && <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[0.8rem] font-bold uppercase">Habis</div>}
+                <div className="custom-scrollbar lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-2">
+                    <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 sm:mt-5 sm:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] sm:gap-5">
+                        {filteredItems.map(item => (
+                            <div
+                                key={item.id}
+                                className={`bg-card-bg border border-border rounded-lg p-4 cursor-pointer transition-all hover:border-accent hover:transform hover:-translate-y-1 group ${item.stock <= 0 ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
+                                onClick={() => addToCart(item)}
+                            >
+                                <div className="relative mb-3 h-[130px] overflow-hidden rounded-lg bg-[#1A2222] sm:mb-4 sm:h-[150px]">
+                                    <img className="w-full h-full object-cover transition-transform group-hover:scale-105" src={item.image || 'https://via.placeholder.com/150'} alt={item.name} />
+                                    {item.stock <= 0 && <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[0.8rem] font-bold uppercase">Habis</div>}
+                                </div>
+                                <div className="rc-info">
+                                    <h5 className="text-text-main font-semibold mb-1 line-clamp-1">{item.name}</h5>
+                                    <span className="text-accent font-bold text-[0.95rem] block">Rp {parseInt(item.price).toLocaleString()} <small className="text-[0.7em] font-normal text-text-muted">/hari</small></span>
+                                    <span className="text-text-muted text-[0.75rem] block mt-1">Tersedia: {item.stock}</span>
+                                </div>
                             </div>
-                            <div className="rc-info">
-                                <h5 className="text-text-main font-semibold mb-1 line-clamp-1">{item.name}</h5>
-                                <span className="text-accent font-bold text-[0.95rem] block">Rp {parseInt(item.price).toLocaleString()} <small className="text-[0.7em] font-normal text-text-muted">/hari</small></span>
-                                <span className="text-text-muted text-[0.75rem] block mt-1">Tersedia: {item.stock}</span>
-                            </div>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
             </div>
 
-            <div className="w-full lg:w-[400px]">
-                <div className="rounded-lg border border-border bg-sidebar-bg p-4 sm:p-6 lg:sticky lg:top-5">
+            <div className="w-full lg:h-full lg:min-h-0 lg:w-[400px]">
+                <div className="rounded-lg border border-border bg-sidebar-bg p-4 sm:p-6 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
                     <h4 className="mb-4 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.1rem]">Detail Penyewa</h4>
-                    <div className="space-y-4">
+                    <div className="custom-scrollbar space-y-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
                         <div className="form-group relative">
                             <label className="block mb-1.5 text-[0.85rem] text-text-muted">Cari Customer Lama</label>
                             <input
@@ -229,6 +258,15 @@ const Rental = ({
                                 onChange={(e) => setCustomer({ ...customer, phone: e.target.value })}
                             />
                         </div>
+                        <div className="form-group">
+                            <label className="block mb-1.5 text-[0.85rem] text-text-muted">Alamat</label>
+                            <textarea
+                                className="w-full min-h-[78px] resize-y bg-bg-main border border-border p-2.5 rounded-lg text-text-main outline-none focus:border-accent transition-colors"
+                                placeholder="Alamat customer..."
+                                value={customer.address}
+                                onChange={(e) => setCustomer({ ...customer, address: e.target.value })}
+                            ></textarea>
+                        </div>
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div className="form-group">
                                 <label className="block mb-1.5 text-[0.85rem] text-text-muted">Jaminan</label>
@@ -266,8 +304,6 @@ const Rental = ({
                                 />
                             </div>
                         )}
-                    </div>
-
                     <div className="h-[1px] bg-border my-8"></div>
 
                     <h4 className="mb-4 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.1rem]">Keranjang Sewa</h4>
@@ -307,11 +343,15 @@ const Rental = ({
                             type="number"
                             min="1"
                             value={duration}
-                            onChange={(e) => setDuration(parseInt(e.target.value, 10) || 1)}
+                            onChange={(e) => {
+                                const nextValue = Number.parseInt(e.target.value, 10);
+                                setDuration(Number.isFinite(nextValue) ? Math.max(1, nextValue) : 1);
+                            }}
                         />
                     </div>
+                    </div>
 
-                    <div className="rounded-lg border border-accent/20 bg-accent/10 p-4 sm:p-5">
+                    <div className="mt-4 rounded-lg border border-accent/20 bg-accent/10 p-4 sm:p-5">
                         <div className="mb-1 flex items-center justify-between gap-3">
                             <span className="text-text-muted text-[0.9rem]">Total Bayar</span>
                             <span className="text-text-muted text-[0.7rem] uppercase tracking-tighter">({duration} Hari)</span>

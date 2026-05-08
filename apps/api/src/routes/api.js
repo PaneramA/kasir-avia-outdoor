@@ -3,6 +3,7 @@ import {
   changeOwnPassword,
   changeUserPasswordByAdmin,
   createCategory,
+  upsertCustomer,
   createItem,
   createRental,
   createUser,
@@ -19,6 +20,8 @@ import {
   listUsers,
   processReturn,
   rehashUserPassword,
+  updateCustomerById,
+  deleteCustomerById,
   updateUserByAdmin,
   updateItem,
 } from '../data/db.js';
@@ -27,6 +30,8 @@ import { needsPasswordRehash, verifyPassword } from '../auth/password.js';
 import {
   adminChangePasswordSchema,
   createCategorySchema,
+  createCustomerSchema,
+  updateCustomerSchema,
   createItemSchema,
   createUserSchema,
   createRentalSchema,
@@ -329,6 +334,28 @@ export async function apiRoute(req, res, env) {
       await ensureAuth();
       const query = (searchParams.get('q') || '').trim();
       sendSuccess(res, 200, await listCustomers({ query }));
+      return true;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/customers') {
+      const body = createCustomerSchema.parse(await readJsonBody(req));
+      const savedCustomer = await upsertCustomer(body);
+      sendSuccess(res, 201, savedCustomer);
+      return true;
+    }
+
+    if (req.method === 'PATCH' && pathname.startsWith('/api/customers/')) {
+      const customerId = decodeURIComponent(pathname.replace('/api/customers/', ''));
+      const body = updateCustomerSchema.parse(await readJsonBody(req));
+      const updatedCustomer = await updateCustomerById(customerId, body);
+      sendSuccess(res, 200, updatedCustomer);
+      return true;
+    }
+
+    if (req.method === 'DELETE' && pathname.startsWith('/api/customers/')) {
+      const customerId = decodeURIComponent(pathname.replace('/api/customers/', ''));
+      const deleted = await deleteCustomerById(customerId);
+      sendSuccess(res, 200, deleted);
       return true;
     }
 

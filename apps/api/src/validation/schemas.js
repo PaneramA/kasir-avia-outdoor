@@ -3,6 +3,7 @@ import { z } from 'zod';
 const customerSchema = z.object({
   name: z.string().trim().min(1),
   phone: z.string().trim().min(1),
+  address: z.string().trim().optional().default(''),
   guarantee: z.string().trim().min(1).default('KTP'),
   guaranteeOther: z.string().trim().optional().default(''),
   idNumber: z.string().trim().optional().default(''),
@@ -46,6 +47,9 @@ export const createRentalSchema = z.object({
   duration: z.coerce.number().int().min(1),
   id: z.string().trim().min(1).optional(),
 });
+
+export const createCustomerSchema = customerSchema;
+export const updateCustomerSchema = customerSchema;
 
 export const processReturnSchema = z.object({
   rentalId: z.string().trim().min(1),

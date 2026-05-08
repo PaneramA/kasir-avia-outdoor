@@ -28,7 +28,7 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
                 aria-label="Tutup menu navigasi"
             />
 
-            <aside className={`fixed inset-y-0 left-0 z-[120] flex h-screen w-[280px] max-w-[85vw] -translate-x-full flex-col border-r border-border bg-sidebar-bg transition-all duration-300 lg:static lg:z-[100] lg:w-[260px] lg:max-w-none lg:translate-x-0 ${isMobileOpen ? 'translate-x-0 shadow-2xl shadow-black/40' : ''}`}>
+            <aside className={`fixed inset-y-0 left-0 z-[120] flex h-screen w-[280px] max-w-[85vw] -translate-x-full flex-col overflow-hidden border-r border-border bg-sidebar-bg transition-all duration-300 lg:static lg:z-[100] lg:w-[260px] lg:max-w-none lg:translate-x-0 ${isMobileOpen ? 'translate-x-0 shadow-2xl shadow-black/40' : ''}`}>
                 <div className="flex items-center justify-between p-5 lg:p-[30px]">
                     <div className="flex items-center gap-3 text-[1.2rem] sm:text-[1.4rem] font-bold text-accent tracking-[-0.5px] font-display">
                         <i className="fas fa-mountain-sun text-[1.4rem] sm:text-[1.6rem]"></i>

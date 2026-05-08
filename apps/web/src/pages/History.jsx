@@ -45,7 +45,7 @@ const History = ({ rentals }) => {
     const totalTransactions = filteredRentals.length;
     const activeTransactions = filteredRentals.filter(r => r.status === 'Active').length;
     const returnedTransactions = filteredRentals.filter(r => r.status === 'Returned').length;
-    const totalRevenue = filteredRentals.reduce((sum, r) => sum + (r.finalTotal || r.total), 0);
+    const totalRevenue = filteredRentals.reduce((sum, r) => sum + (r.finalTotal ?? r.total ?? 0), 0);
 
     return (
         <div className="flex h-full flex-col py-4 sm:py-5">
@@ -169,7 +169,7 @@ const History = ({ rentals }) => {
                                         </div>
 
                                         <p className="text-xs text-text-muted">{rental.items.map((item) => `${item.name} (x${item.qty})`).join(', ')}</p>
-                                        <p className="mt-2 text-sm font-bold text-text-main">Rp {(rental.finalTotal || rental.total).toLocaleString()}</p>
+                                        <p className="mt-2 text-sm font-bold text-text-main">Rp {(rental.finalTotal ?? rental.total ?? 0).toLocaleString()}</p>
                                         {rental.status === 'Returned' && rental.additionalFee > 0 && (
                                             <p className="mt-1 inline-block rounded bg-[#e74c3c]/10 px-2 py-0.5 text-[0.72rem] text-[#e74c3c]">
                                                 + Rp {rental.additionalFee.toLocaleString()} (Denda/Extra)
@@ -243,7 +243,7 @@ const History = ({ rentals }) => {
                                             </td>
                                             <td className="align-top border-b border-border/50 p-4 text-right">
                                                 <div className="mb-1 text-[1.05rem] font-bold text-text-main">
-                                                    Rp {(rental.finalTotal || rental.total).toLocaleString()}
+                                                    Rp {(rental.finalTotal ?? rental.total ?? 0).toLocaleString()}
                                                 </div>
 
                                                 {rental.status === 'Returned' && rental.additionalFee > 0 && (

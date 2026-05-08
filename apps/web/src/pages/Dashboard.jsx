@@ -7,7 +7,7 @@ const Dashboard = ({ inventory, rentals }) => {
         const itemsOut = rentals
             .filter((r) => r.status === 'Active')
             .reduce((sum, r) => sum + r.items.reduce((iSum, item) => iSum + item.qty, 0), 0);
-        const revenue = rentals.reduce((sum, r) => sum + (r.total || 0), 0);
+        const revenue = rentals.reduce((sum, r) => sum + (r.finalTotal ?? r.total ?? 0), 0);
 
         return { available, activeRentals, itemsOut, revenue };
     };
@@ -88,7 +88,7 @@ const Dashboard = ({ inventory, rentals }) => {
                                             </span>
                                         </div>
                                         <p className="text-xs text-text-muted">{r.items.map((i) => `${i.name} (${i.qty})`).join(', ')}</p>
-                                        <p className="mt-2 font-bold text-accent">Rp {(r.total || 0).toLocaleString()}</p>
+                                        <p className="mt-2 font-bold text-accent">Rp {(r.finalTotal ?? r.total ?? 0).toLocaleString()}</p>
                                     </article>
                                 ))}
                             </div>
@@ -120,7 +120,7 @@ const Dashboard = ({ inventory, rentals }) => {
                                                         {r.status}
                                                     </span>
                                                 </td>
-                                                <td className="border-b border-white/5 p-4 font-bold text-accent">Rp {(r.total || 0).toLocaleString()}</td>
+                                                <td className="border-b border-white/5 p-4 font-bold text-accent">Rp {(r.finalTotal ?? r.total ?? 0).toLocaleString()}</td>
                                             </tr>
                                         ))}
                                     </tbody>

@@ -1,15 +1,23 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 
 const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const getInitialFormData = () => (editingItem || {
+    const getInitialFormData = useCallback(() => (editingItem || {
         name: '',
         category: categories[0] || '',
         stock: 1,
         price: '',
         image: '',
-    });
-    const [formData, setFormData] = useState(getInitialFormData);
+    }), [editingItem, categories]);
+    const [formData, setFormData] = useState(() => getInitialFormData());
+
+    useEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+
+        setFormData(getInitialFormData());
+    }, [isOpen, getInitialFormData]);
 
     const handleInputChange = (e) => {
         const { id, value } = e.target;
@@ -38,6 +46,21 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
             price: parseInt(formData.price, 10),
             image: formData.image || '',
         };
+
+        if (!itemData.category) {
+            alert('Kategori belum tersedia. Tambahkan kategori terlebih dahulu.');
+            return;
+        }
+
+        if (!Number.isFinite(itemData.stock) || itemData.stock < 0) {
+            alert('Stok harus berupa angka 0 atau lebih.');
+            return;
+        }
+
+        if (!Number.isFinite(itemData.price) || itemData.price < 0) {
+            alert('Harga harus berupa angka 0 atau lebih.');
+            return;
+        }
 
         try {
             setIsSubmitting(true);
@@ -96,7 +119,7 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
                                     className="w-full bg-bg-main border border-border p-3 rounded-lg text-text-main outline-none focus:border-accent transition-colors"
                                     type="number"
                                     id="item-stock"
-                                    min="1"
+                                    min="0"
                                     value={formData.stock}
                                     onChange={handleInputChange}
                                     required
@@ -110,6 +133,7 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
                                 type="number"
                                 id="item-price"
                                 placeholder="25000"
+                                min="0"
                                 value={formData.price}
                                 onChange={handleInputChange}
                                 required
