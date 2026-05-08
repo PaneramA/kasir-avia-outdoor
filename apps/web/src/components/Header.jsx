@@ -31,11 +31,21 @@ function getRentalDueDate(rental) {
     return dueDate
 }
 
+function isRunningStandalone() {
+    if (typeof window === 'undefined') {
+        return false
+    }
+
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
+}
+
 const Header = ({ title, subtitle, onOpenSidebar, inventory = [], rentals = [], syncError = '' }) => {
     const navigate = useNavigate()
     const containerRef = useRef(null)
     const [searchQuery, setSearchQuery] = useState('')
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
+    const [installPromptEvent, setInstallPromptEvent] = useState(null)
+    const [isStandalone, setIsStandalone] = useState(() => isRunningStandalone())
 
     const notifications = useMemo(() => {
         const todayStart = new Date()
@@ -214,12 +224,67 @@ const Header = ({ title, subtitle, onOpenSidebar, inventory = [], rentals = [], 
         return () => document.removeEventListener('mousedown', handleOutsideClick)
     }, [])
 
+    useEffect(() => {
+        const handleInstallPrompt = (event) => {
+            event.preventDefault()
+            setInstallPromptEvent(event)
+        }
+
+        const handleAppInstalled = () => {
+            setInstallPromptEvent(null)
+            setIsStandalone(true)
+        }
+
+        const mediaQuery = window.matchMedia('(display-mode: standalone)')
+        const handleDisplayModeChange = () => {
+            setIsStandalone(isRunningStandalone())
+        }
+
+        window.addEventListener('beforeinstallprompt', handleInstallPrompt)
+        window.addEventListener('appinstalled', handleAppInstalled)
+
+        if (mediaQuery.addEventListener) {
+            mediaQuery.addEventListener('change', handleDisplayModeChange)
+        } else if (mediaQuery.addListener) {
+            mediaQuery.addListener(handleDisplayModeChange)
+        }
+
+        return () => {
+            window.removeEventListener('beforeinstallprompt', handleInstallPrompt)
+            window.removeEventListener('appinstalled', handleAppInstalled)
+
+            if (mediaQuery.removeEventListener) {
+                mediaQuery.removeEventListener('change', handleDisplayModeChange)
+            } else if (mediaQuery.removeListener) {
+                mediaQuery.removeListener(handleDisplayModeChange)
+            }
+        }
+    }, [])
+
     const handleOpenResult = (route) => {
         navigate(route)
         setSearchQuery('')
     }
 
+    const handleInstallClick = async () => {
+        if (!installPromptEvent) {
+            return
+        }
+
+        installPromptEvent.prompt()
+        const { outcome } = await installPromptEvent.userChoice
+        if (outcome === 'accepted') {
+            setInstallPromptEvent(null)
+        }
+    }
+
+    const isIos =
+        typeof navigator !== 'undefined' &&
+        /iphone|ipad|ipod/i.test(navigator.userAgent)
+
     const showSearchResult = searchQuery.trim().length > 0
+    const showInstallButton = !isStandalone && Boolean(installPromptEvent)
+    const showIosInstallHint = !isStandalone && !installPromptEvent && isIos
 
     return (
         <header ref={containerRef} className="mb-4 flex flex-col gap-4 py-4 sm:mb-5 sm:py-6 lg:flex-row lg:items-center lg:justify-between lg:py-8">
@@ -276,6 +341,30 @@ const Header = ({ title, subtitle, onOpenSidebar, inventory = [], rentals = [], 
                         </div>
                     )}
                 </div>
+
+                {showInstallButton && (
+                    <button
+                        type="button"
+                        className="flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-sidebar-bg px-4 text-[0.78rem] font-semibold text-text-main transition hover:border-accent"
+                        onClick={handleInstallClick}
+                    >
+                        <i className="fas fa-download text-[0.75rem]"></i>
+                        Install App
+                    </button>
+                )}
+
+                {showIosInstallHint && (
+                    <button
+                        type="button"
+                        className="flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-sidebar-bg px-4 text-[0.74rem] text-text-muted"
+                        onClick={() => {
+                            window.alert('Di Safari iPhone/iPad: ketuk Share, lalu pilih "Add to Home Screen".')
+                        }}
+                    >
+                        <i className="fas fa-mobile-screen"></i>
+                        Add to Home Screen
+                    </button>
+                )}
 
                 <div className="relative">
                     <button
