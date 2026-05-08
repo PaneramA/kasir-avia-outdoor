@@ -4,20 +4,23 @@ const Return = ({ rentals, onProcessReturn }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedRental, setSelectedRental] = useState(null);
     const [returnNotes, setReturnNotes] = useState('');
-    const [additionalFee, setAdditionalFee] = useState(0);
+    const [additionalFeeInput, setAdditionalFeeInput] = useState('0');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const additionalFeeValue = Number.isFinite(Number(additionalFeeInput))
+        ? Math.max(0, Number(additionalFeeInput))
+        : 0;
 
     const activeRentals = rentals.filter(r => r.status === 'Active');
 
     const filteredRentals = activeRentals.filter(r =>
-        r.customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.id.toLowerCase().includes(searchQuery.toLowerCase())
+        (r.customer?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        String(r.id || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     const handleSelectRental = (rental) => {
         setSelectedRental(rental);
         setReturnNotes('');
-        setAdditionalFee(0);
+        setAdditionalFeeInput('0');
     };
 
     const processRentalReturn = async () => {
@@ -31,7 +34,7 @@ const Return = ({ rentals, onProcessReturn }) => {
             setIsSubmitting(true);
             await onProcessReturn({
                 rentalId: selectedRental.id,
-                additionalFee: Number(additionalFee),
+                additionalFee: additionalFeeValue,
                 returnNotes,
             });
 
@@ -162,8 +165,8 @@ const Return = ({ rentals, onProcessReturn }) => {
                                             type="number"
                                             className="w-full rounded-lg border border-border bg-bg-main p-2.5 pl-10 text-text-main outline-none focus:border-accent"
                                             placeholder="0"
-                                            value={additionalFee}
-                                            onChange={(e) => setAdditionalFee(e.target.value)}
+                                            value={additionalFeeInput}
+                                            onChange={(e) => setAdditionalFeeInput(e.target.value)}
                                             min="0"
                                         />
                                     </div>
@@ -183,7 +186,7 @@ const Return = ({ rentals, onProcessReturn }) => {
                                 <div className="mb-4 flex items-center justify-between gap-3">
                                     <span className="text-[0.9rem] text-text-muted sm:text-[0.95rem]">Total Pembayaran Akhir</span>
                                     <span className="text-[1.2rem] font-bold text-accent sm:text-[1.4rem]">
-                                        Rp {(selectedRental.total + Number(additionalFee)).toLocaleString()}
+                                        Rp {(selectedRental.total + additionalFeeValue).toLocaleString()}
                                     </span>
                                 </div>
                                 <button

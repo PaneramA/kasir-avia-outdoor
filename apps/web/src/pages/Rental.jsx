@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { fetchCustomers } from '../lib/api';
 
 const Rental = ({
@@ -21,23 +21,37 @@ const Rental = ({
     const [customerSearch, setCustomerSearch] = useState('');
     const [customerSuggestions, setCustomerSuggestions] = useState([]);
     const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
+    const latestSearchRequestRef = useRef(0);
 
     useEffect(() => {
         const keyword = customerSearch.trim();
         if (keyword.length < 2) {
             setCustomerSuggestions([]);
+            setIsSearchingCustomer(false);
             return undefined;
         }
 
+        const requestId = latestSearchRequestRef.current + 1;
+        latestSearchRequestRef.current = requestId;
         const timeoutId = setTimeout(async () => {
             try {
                 setIsSearchingCustomer(true);
                 const data = await fetchCustomers(keyword);
+                if (requestId !== latestSearchRequestRef.current) {
+                    return;
+                }
+
                 setCustomerSuggestions(data);
             } catch {
+                if (requestId !== latestSearchRequestRef.current) {
+                    return;
+                }
+
                 setCustomerSuggestions([]);
             } finally {
-                setIsSearchingCustomer(false);
+                if (requestId === latestSearchRequestRef.current) {
+                    setIsSearchingCustomer(false);
+                }
             }
         }, 250);
 
@@ -114,6 +128,16 @@ const Rental = ({
             setIsSubmitting(true);
             await onCheckout(payload);
             setCart([]);
+            setCustomer({
+                name: '',
+                phone: '',
+                guarantee: 'KTP',
+                guaranteeOther: '',
+                idNumber: '',
+            });
+            setCustomerSearch('');
+            setCustomerSuggestions([]);
+            setDuration(1);
             alert('Transaksi berhasil disimpan!');
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Gagal menyimpan transaksi sewa.';
@@ -307,7 +331,10 @@ const Rental = ({
                             type="number"
                             min="1"
                             value={duration}
-                            onChange={(e) => setDuration(parseInt(e.target.value, 10) || 1)}
+                            onChange={(e) => {
+                                const nextValue = Number.parseInt(e.target.value, 10);
+                                setDuration(Number.isFinite(nextValue) ? Math.max(1, nextValue) : 1);
+                            }}
                         />
                     </div>
 

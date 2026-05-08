@@ -17,6 +17,7 @@ import {
   createItem,
   createRental,
   fetchCategories,
+  fetchCurrentUser,
   fetchItems,
   fetchRentals,
   getStoredSession,
@@ -40,6 +41,7 @@ function NotFoundPage() {
 
 function App() {
   const location = useLocation()
+  const [initialSession] = useState(() => getStoredSession())
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [inventory, setInventory] = useState([])
   const [categories, setCategories] = useState([])
@@ -49,7 +51,10 @@ function App() {
   const [errorMessage, setErrorMessage] = useState('')
   const [authErrorMessage, setAuthErrorMessage] = useState('')
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false)
-  const [currentUser, setCurrentUser] = useState(() => getStoredSession().user)
+  const [isAuthInitializing, setIsAuthInitializing] = useState(
+    () => Boolean(initialSession.token),
+  )
+  const [currentUser, setCurrentUser] = useState(() => initialSession.user)
 
   const loadInitialData = useCallback(async () => {
     setErrorMessage('')
@@ -79,6 +84,54 @@ function App() {
     window.addEventListener('avia-auth-expired', handleAuthExpired)
     return () => window.removeEventListener('avia-auth-expired', handleAuthExpired)
   }, [])
+
+  useEffect(() => {
+    let isActive = true
+
+    if (!initialSession.token) {
+      setIsAuthInitializing(false)
+      return () => {
+        isActive = false
+      }
+    }
+
+    if (!initialSession.user) {
+      logout()
+      setIsAuthInitializing(false)
+      return () => {
+        isActive = false
+      }
+    }
+
+    const syncCurrentUser = async () => {
+      try {
+        const user = await fetchCurrentUser()
+        if (!isActive) {
+          return
+        }
+
+        setCurrentUser(user)
+      } catch {
+        if (!isActive) {
+          return
+        }
+
+        logout()
+        setCurrentUser(null)
+        setAuthErrorMessage('Sesi login tidak valid. Silakan login kembali.')
+      } finally {
+        if (isActive) {
+          setIsAuthInitializing(false)
+        }
+      }
+    }
+
+    syncCurrentUser()
+
+    return () => {
+      isActive = false
+    }
+  }, [initialSession.token, initialSession.user])
 
   useEffect(() => {
     if (!currentUser) {
@@ -202,6 +255,16 @@ function App() {
   useEffect(() => {
     setIsSidebarOpen(false)
   }, [location.pathname])
+
+  if (isAuthInitializing) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg-main px-4">
+        <div className="rounded-lg border border-border bg-sidebar-bg p-4 text-sm text-text-muted">
+          Memvalidasi sesi login...
+        </div>
+      </div>
+    )
+  }
 
   if (!currentUser) {
     return (

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchCustomers } from '../lib/api'
 
 const Customers = () => {
@@ -6,28 +6,38 @@ const Customers = () => {
     const [query, setQuery] = useState('')
     const [isLoading, setIsLoading] = useState(true)
     const [errorMessage, setErrorMessage] = useState('')
+    const latestRequestRef = useRef(0)
 
-    const loadCustomers = async (searchValue = '') => {
+    const loadCustomers = async (searchValue = '', requestId = 0) => {
         try {
             setIsLoading(true)
             setErrorMessage('')
             const data = await fetchCustomers(searchValue)
+
+            if (requestId !== latestRequestRef.current) {
+                return
+            }
+
             setCustomers(data)
         } catch (error) {
+            if (requestId !== latestRequestRef.current) {
+                return
+            }
+
             const message = error instanceof Error ? error.message : 'Gagal memuat data customer.'
             setErrorMessage(message)
         } finally {
-            setIsLoading(false)
+            if (requestId === latestRequestRef.current) {
+                setIsLoading(false)
+            }
         }
     }
 
     useEffect(() => {
-        loadCustomers('')
-    }, [])
-
-    useEffect(() => {
+        const requestId = latestRequestRef.current + 1
+        latestRequestRef.current = requestId
         const timeoutId = setTimeout(() => {
-            loadCustomers(query)
+            loadCustomers(query, requestId)
         }, 300)
 
         return () => clearTimeout(timeoutId)
