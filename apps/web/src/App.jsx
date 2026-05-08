@@ -279,7 +279,7 @@ function App() {
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-bg-main">
+    <div className="flex h-screen w-full overflow-hidden bg-bg-main">
       <Sidebar
         currentUser={currentUser}
         onLogout={handleLogout}
@@ -287,14 +287,17 @@ function App() {
         onCloseMobile={() => setIsSidebarOpen(false)}
       />
 
-      <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden px-4 sm:px-6 lg:px-10">
+      <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden px-4 sm:px-6 lg:min-h-0 lg:px-10">
         <Header
           title={headerInfo.title}
           subtitle={headerInfo.subtitle}
           onOpenSidebar={() => setIsSidebarOpen(true)}
+          inventory={inventory}
+          rentals={rentals}
+          syncError={errorMessage}
         />
 
-        <div id="content-view" className="flex-1 overflow-y-auto pb-6 sm:pb-10">
+        <div id="content-view" className="flex-1 overflow-y-auto pb-6 sm:pb-10 lg:min-h-0">
           {isLoading && (
             <div className="mb-4 rounded-lg border border-border bg-sidebar-bg p-4 text-sm text-text-muted">
               Memuat data dari backend...

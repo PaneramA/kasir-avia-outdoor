@@ -108,6 +108,26 @@ export function fetchCustomers(query = '') {
   return request(`/api/customers${suffix}`, {}, { auth: true });
 }
 
+export function createCustomerRecord(payload) {
+  return request('/api/customers', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
+export function updateCustomerRecord(customerId, payload) {
+  return request(`/api/customers/${encodeURIComponent(customerId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
+export function removeCustomerRecord(customerId) {
+  return request(`/api/customers/${encodeURIComponent(customerId)}`, {
+    method: 'DELETE',
+  }, { auth: true });
+}
+
 export function createCategory(name) {
   return request('/api/categories', {
     method: 'POST',

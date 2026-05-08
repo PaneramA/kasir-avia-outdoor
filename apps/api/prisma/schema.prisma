@@ -97,6 +97,7 @@ model Customer {
   id             String   @id @default(cuid())
   name           String
   phone          String   @unique
+  address        String?
   guarantee      String   @default("KTP")
   guaranteeOther String?
   idNumber       String?

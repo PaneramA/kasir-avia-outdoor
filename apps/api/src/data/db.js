@@ -69,6 +69,7 @@ function toCustomerDto(customer) {
     id: customer.id,
     name: customer.name,
     phone: customer.phone,
+    address: customer.address || '',
     guarantee: customer.guarantee,
     guaranteeOther: customer.guaranteeOther || '',
     idNumber: customer.idNumber || '',
@@ -335,6 +336,7 @@ export async function createRental(payload) {
   const customer = payload?.customer || {};
   const customerName = String(customer.name || '').trim();
   const customerPhone = String(customer.phone || '').trim();
+  const customerAddress = String(customer.address || '').trim();
   const guarantee = String(customer.guarantee || 'KTP').trim() || 'KTP';
   const guaranteeOther = guarantee === 'Lainnya' ? String(customer.guaranteeOther || '').trim() : '';
   const rawIdNumber = String(customer.idNumber || '').trim();
@@ -365,6 +367,7 @@ export async function createRental(payload) {
       where: { phone: customerPhone },
       update: {
         name: customerName,
+        ...(customerAddress ? { address: customerAddress } : {}),
         guarantee,
         guaranteeOther,
         ...(customerIdNumber ? { idNumber: customerIdNumber } : {}),
@@ -372,6 +375,7 @@ export async function createRental(payload) {
       create: {
         name: customerName,
         phone: customerPhone,
+        ...(customerAddress ? { address: customerAddress } : {}),
         guarantee,
         guaranteeOther,
         ...(customerIdNumber ? { idNumber: customerIdNumber } : {}),
@@ -524,6 +528,12 @@ export async function listCustomers({ query } = {}) {
                 mode: 'insensitive',
               },
             },
+            {
+              address: {
+                contains: keyword,
+                mode: 'insensitive',
+              },
+            },
           ],
         }
       : undefined,
@@ -532,6 +542,133 @@ export async function listCustomers({ query } = {}) {
   });
 
   return customers.map(toCustomerDto);
+}
+
+export async function upsertCustomer(payload) {
+  const customer = payload || {};
+  const customerName = String(customer.name || '').trim();
+  const customerPhone = String(customer.phone || '').trim();
+  const customerAddress = String(customer.address || '').trim();
+  const guarantee = String(customer.guarantee || 'KTP').trim() || 'KTP';
+  const guaranteeOther = guarantee === 'Lainnya' ? String(customer.guaranteeOther || '').trim() : '';
+  const rawIdNumber = String(customer.idNumber || '').trim();
+  const hasExplicitIdNumber = rawIdNumber !== '' && rawIdNumber !== '0';
+  const customerIdNumber = hasExplicitIdNumber ? rawIdNumber : null;
+
+  if (!customerName) {
+    throw new Error('Customer name is required');
+  }
+
+  if (!customerPhone) {
+    throw new Error('Customer phone is required');
+  }
+
+  if (guarantee === 'Lainnya' && !guaranteeOther) {
+    throw new Error('guaranteeOther is required when guarantee is Lainnya');
+  }
+
+  const savedCustomer = await prisma.customer.upsert({
+    where: { phone: customerPhone },
+    update: {
+      name: customerName,
+      ...(customerAddress ? { address: customerAddress } : {}),
+      guarantee,
+      guaranteeOther,
+      ...(customerIdNumber ? { idNumber: customerIdNumber } : {}),
+    },
+    create: {
+      name: customerName,
+      phone: customerPhone,
+      ...(customerAddress ? { address: customerAddress } : {}),
+      guarantee,
+      guaranteeOther,
+      ...(customerIdNumber ? { idNumber: customerIdNumber } : {}),
+    },
+  });
+
+  return toCustomerDto(savedCustomer);
+}
+
+export async function updateCustomerById(customerId, payload) {
+  const targetId = String(customerId || '').trim();
+  if (!targetId) {
+    throw new Error('Customer id is required');
+  }
+
+  const existing = await prisma.customer.findUnique({
+    where: { id: targetId },
+  });
+
+  if (!existing) {
+    throw new Error('Customer not found');
+  }
+
+  const customer = payload || {};
+  const customerName = String(customer.name || '').trim();
+  const customerPhone = String(customer.phone || '').trim();
+  const customerAddress = String(customer.address || '').trim();
+  const guarantee = String(customer.guarantee || 'KTP').trim() || 'KTP';
+  const guaranteeOther = guarantee === 'Lainnya' ? String(customer.guaranteeOther || '').trim() : '';
+  const rawIdNumber = String(customer.idNumber || '').trim();
+  const hasExplicitIdNumber = rawIdNumber !== '' && rawIdNumber !== '0';
+  const customerIdNumber = hasExplicitIdNumber ? rawIdNumber : null;
+
+  if (!customerName) {
+    throw new Error('Customer name is required');
+  }
+
+  if (!customerPhone) {
+    throw new Error('Customer phone is required');
+  }
+
+  if (guarantee === 'Lainnya' && !guaranteeOther) {
+    throw new Error('guaranteeOther is required when guarantee is Lainnya');
+  }
+
+  if (customerPhone !== existing.phone) {
+    const phoneOwner = await prisma.customer.findUnique({
+      where: { phone: customerPhone },
+    });
+
+    if (phoneOwner) {
+      throw new Error('Customer phone already exists');
+    }
+  }
+
+  const updatedCustomer = await prisma.customer.update({
+    where: { id: targetId },
+    data: {
+      name: customerName,
+      phone: customerPhone,
+      address: customerAddress || null,
+      guarantee,
+      guaranteeOther,
+      idNumber: customerIdNumber,
+    },
+  });
+
+  return toCustomerDto(updatedCustomer);
+}
+
+export async function deleteCustomerById(customerId) {
+  const targetId = String(customerId || '').trim();
+  if (!targetId) {
+    throw new Error('Customer id is required');
+  }
+
+  const existing = await prisma.customer.findUnique({
+    where: { id: targetId },
+  });
+
+  if (!existing) {
+    throw new Error('Customer not found');
+  }
+
+  await prisma.customer.delete({
+    where: { id: targetId },
+  });
+
+  return toCustomerDto(existing);
 }
 
 export async function processReturn(payload) {
