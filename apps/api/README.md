@@ -43,12 +43,20 @@ npm run dev:api
 
 Sebelum push ke production, ubah nilai ini di `.env`:
 
+- `CORS_ORIGIN`
 - `ADMIN_USERNAME`
 - `ADMIN_PASSWORD`
 - `JWT_SECRET`
 - `PASSWORD_PEPPER`
+- `LOGIN_RATE_LIMIT_MAX_ATTEMPTS`
+- `LOGIN_RATE_LIMIT_WINDOW_MS`
+- `LOGIN_RATE_LIMIT_BLOCK_MS`
 
 Server akan menampilkan warning saat nilai default masih dipakai.
+
+Catatan: hash password lama akan di-upgrade otomatis ke format hash terbaru saat user berhasil login.
+Catatan: endpoint login akan mengembalikan `429 Too Many Requests` saat limit gagal login terlampaui.
+Catatan: `CORS_ORIGIN` mendukung beberapa origin dengan format comma-separated.
 
 ## Endpoint
 
@@ -58,8 +66,6 @@ Public:
 - `GET /api/schema`
 - `GET /api/categories`
 - `GET /api/items`
-- `GET /api/rentals`
-- `GET /api/returns`
 - `POST /api/auth/login`
 
 Protected (Bearer token):
@@ -70,7 +76,9 @@ Protected (Bearer token):
 - `POST /api/items`
 - `PATCH /api/items/:id`
 - `DELETE /api/items/:id`
+- `GET /api/rentals`
 - `POST /api/rentals`
+- `GET /api/returns`
 - `POST /api/returns`
 - `GET /api/users` (admin only)
 - `POST /api/users` (admin only)

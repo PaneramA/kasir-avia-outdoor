@@ -146,7 +146,7 @@ export function removeItem(id) {
 }
 
 export function fetchRentals() {
-  return request('/api/rentals');
+  return request('/api/rentals', {}, { auth: true });
 }
 
 export function createRental(rental) {
@@ -164,7 +164,7 @@ export function processReturn(payload) {
 }
 
 export function fetchReturns() {
-  return request('/api/returns');
+  return request('/api/returns', {}, { auth: true });
 }
 
 export function fetchCurrentUser() {

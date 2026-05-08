@@ -29,6 +29,10 @@ paths:
       responses:
         '200':
           description: Login success
+        '401':
+          description: Invalid username or password
+        '429':
+          description: Too many login attempts
   /api/auth/me:
     get:
       summary: Get current authenticated user
@@ -127,6 +131,8 @@ paths:
   /api/rentals:
     get:
       summary: List rentals
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: OK
@@ -140,6 +146,8 @@ paths:
   /api/returns:
     get:
       summary: List return records
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: OK

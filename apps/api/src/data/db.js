@@ -92,7 +92,6 @@ export async function initDatabase(env) {
     await tx.user.upsert({
       where: { username: env.adminUsername },
       update: {
-        passwordHash: hashPassword(env.adminPassword, env.passwordPepper),
         role: 'admin',
       },
       create: {
@@ -621,6 +620,20 @@ export async function findUserByUsername(username) {
 export async function findUserById(id) {
   return prisma.user.findUnique({
     where: { id },
+  });
+}
+
+export async function rehashUserPassword(userId, plainPassword, passwordPepper) {
+  const targetId = String(userId || '').trim();
+  if (!targetId) {
+    throw new Error('User id is required');
+  }
+
+  await prisma.user.update({
+    where: { id: targetId },
+    data: {
+      passwordHash: hashPassword(plainPassword, passwordPepper),
+    },
   });
 }
 
