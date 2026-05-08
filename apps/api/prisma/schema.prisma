@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  items     Item[]
+}
+
+model Item {
+  id          String       @id @default(cuid())
+  name        String
+  categoryId  String
+  stock       Int
+  price       Int
+  image       String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  category    Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  rentalItems RentalItem[]
+}
+
+model Rental {
+  id             String        @id
+  customerId     String?
+  customerName   String
+  customerPhone  String
+  guarantee      String
+  guaranteeOther String?
+  idNumber       String?
+  duration       Int
+  total          Int
+  status         String        @default("Active")
+  date           DateTime      @default(now())
+  returnDate     DateTime?
+  returnNotes    String?
+  additionalFee  Int           @default(0)
+  finalTotal     Int?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  customer       Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items          RentalItem[]
+  returnRecord   ReturnRecord?
+
+  @@index([customerId])
+}
+
+model RentalItem {
+  id           String   @id @default(cuid())
+  rentalId     String
+  itemId       String
+  itemName     String
+  categoryName String
+  price        Int
+  qty          Int
+  notes        String?
+  createdAt    DateTime @default(now())
+  rental       Rental   @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+  item         Item     @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@index([rentalId])
+  @@index([itemId])
+}
+
+model ReturnRecord {
+  id            String   @id
+  rentalId      String   @unique
+  customerName  String
+  customerPhone String
+  itemsJson     Json
+  returnDate    DateTime
+  returnNotes   String?
+  additionalFee Int
+  finalTotal    Int
+  createdAt     DateTime @default(now())
+  rental        Rental   @relation(fields: [rentalId], references: [id], onDelete: Restrict)
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  role         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Customer {
+  id             String   @id @default(cuid())
+  name           String
+  phone          String   @unique
+  guarantee      String   @default("KTP")
+  guaranteeOther String?
+  idNumber       String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  rentals        Rental[]
+}

@@ -7,23 +7,9 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Dependencies
 node_modules
-**/node_modules
-
-# Build outputs
 dist
 dist-ssr
-**/dist
-**/.vite
-
-# API runtime data
-apps/api/data/db.json
-
-# Env and local files
-.env
-.env.*
-!.env.example
 *.local
 
 # Editor directories and files

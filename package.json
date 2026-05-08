@@ -1,0 +1,25 @@
+{
+  "name": "kasir-aviaoutdoor-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @avia/web",
+    "dev:web": "npm run dev --workspace @avia/web",
+    "dev:api": "npm run dev --workspace @avia/api",
+    "dev:api:watch": "npm run dev:watch --workspace @avia/api",
+    "build": "npm run build --workspace @avia/web && npm run build --workspace @avia/api",
+    "build:web": "npm run build --workspace @avia/web",
+    "build:api": "npm run build --workspace @avia/api",
+    "lint": "npm run lint --workspace @avia/web && npm run lint --workspace @avia/api",
+    "lint:web": "npm run lint --workspace @avia/web",
+    "lint:api": "npm run lint --workspace @avia/api",
+    "preview:web": "npm run preview --workspace @avia/web"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
