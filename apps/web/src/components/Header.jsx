@@ -225,9 +225,17 @@ const Header = ({ title, subtitle, onOpenSidebar, inventory = [], rentals = [], 
     }, [])
 
     useEffect(() => {
+        if (window.__aviaDeferredInstallPrompt) {
+            setInstallPromptEvent(window.__aviaDeferredInstallPrompt)
+        }
+
         const handleInstallPrompt = (event) => {
             event.preventDefault()
             setInstallPromptEvent(event)
+        }
+
+        const handleInstallAvailable = () => {
+            setInstallPromptEvent(window.__aviaDeferredInstallPrompt || null)
         }
 
         const handleAppInstalled = () => {
@@ -241,7 +249,9 @@ const Header = ({ title, subtitle, onOpenSidebar, inventory = [], rentals = [], 
         }
 
         window.addEventListener('beforeinstallprompt', handleInstallPrompt)
+        window.addEventListener('avia-install-available', handleInstallAvailable)
         window.addEventListener('appinstalled', handleAppInstalled)
+        window.addEventListener('avia-install-installed', handleAppInstalled)
 
         if (mediaQuery.addEventListener) {
             mediaQuery.addEventListener('change', handleDisplayModeChange)
@@ -251,7 +261,9 @@ const Header = ({ title, subtitle, onOpenSidebar, inventory = [], rentals = [], 
 
         return () => {
             window.removeEventListener('beforeinstallprompt', handleInstallPrompt)
+            window.removeEventListener('avia-install-available', handleInstallAvailable)
             window.removeEventListener('appinstalled', handleAppInstalled)
+            window.removeEventListener('avia-install-installed', handleAppInstalled)
 
             if (mediaQuery.removeEventListener) {
                 mediaQuery.removeEventListener('change', handleDisplayModeChange)
