@@ -2,9 +2,14 @@ import { prisma } from './prisma.js';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 
 const DEFAULT_CATEGORIES = ['Tenda', 'Carrier', 'Alat Masak', 'Lainnya'];
+const USER_ROLES = new Set(['admin', 'kasir']);
 
 function createId(prefix) {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+}
+
+function normalizeRole(rawRole) {
+  return String(rawRole || '').trim().toLowerCase();
 }
 
 function toItemDto(item) {
@@ -383,39 +388,61 @@ export async function createRental(payload) {
     });
 
     const normalizedItems = [];
+    const itemRequests = new Map();
 
     for (const inputItem of items) {
-      const item = await tx.item.findUnique({
-        where: { id: String(inputItem.id) },
-        include: { category: true },
-      });
-
+      const itemId = String(inputItem.id || '').trim();
       const qty = Number(inputItem.qty);
 
-      if (!item) {
-        throw new Error(`Item ${inputItem.id} not found`);
+      if (!itemId) {
+        throw new Error('Item id is required');
       }
 
       if (!Number.isFinite(qty) || qty < 1) {
-        throw new Error(`Invalid qty for item ${inputItem.id}`);
+        throw new Error(`Invalid qty for item ${itemId}`);
       }
 
-      if (qty > item.stock) {
+      const existing = itemRequests.get(itemId);
+      if (existing) {
+        existing.qty += qty;
+      } else {
+        itemRequests.set(itemId, { qty, notes: inputItem.notes || '' });
+      }
+    }
+
+    for (const [itemId, request] of itemRequests.entries()) {
+      const item = await tx.item.findUnique({
+        where: { id: itemId },
+        include: { category: true },
+      });
+
+      if (!item) {
+        throw new Error(`Item ${itemId} not found`);
+      }
+
+      const decrementResult = await tx.item.updateMany({
+        where: {
+          id: item.id,
+          stock: { gte: request.qty },
+        },
+        data: {
+          stock: {
+            decrement: request.qty,
+          },
+        },
+      });
+
+      if (decrementResult.count === 0) {
         throw new Error(`Insufficient stock for ${item.name}`);
       }
-
-      await tx.item.update({
-        where: { id: item.id },
-        data: { stock: item.stock - qty },
-      });
 
       normalizedItems.push({
         itemId: item.id,
         itemName: item.name,
         categoryName: item.category.name,
         price: item.price,
-        qty,
-        notes: inputItem.notes || '',
+        qty: request.qty,
+        notes: request.notes,
       });
     }
 
@@ -697,22 +724,15 @@ export async function processReturn(payload) {
       throw new Error('Rental already returned');
     }
 
-    for (const rentalItem of rental.items) {
-      const item = await tx.item.findUnique({ where: { id: rentalItem.itemId } });
-      if (item) {
-        await tx.item.update({
-          where: { id: item.id },
-          data: { stock: item.stock + rentalItem.qty },
-        });
-      }
-    }
-
     const returnDate = new Date();
     const returnNotes = payload?.returnNotes || '';
     const finalTotal = rental.total + additionalFee;
 
-    const updatedRental = await tx.rental.update({
-      where: { id: rental.id },
+    const updatedCount = await tx.rental.updateMany({
+      where: {
+        id: rental.id,
+        status: 'Active',
+      },
       data: {
         status: 'Returned',
         returnDate,
@@ -720,10 +740,33 @@ export async function processReturn(payload) {
         additionalFee,
         finalTotal,
       },
+    });
+
+    if (updatedCount.count === 0) {
+      throw new Error('Rental already returned');
+    }
+
+    for (const rentalItem of rental.items) {
+      await tx.item.updateMany({
+        where: { id: rentalItem.itemId },
+        data: {
+          stock: {
+            increment: rentalItem.qty,
+          },
+        },
+      });
+    }
+
+    const updatedRental = await tx.rental.findUnique({
+      where: { id: rental.id },
       include: {
         items: true,
       },
     });
+
+    if (!updatedRental) {
+      throw new Error('Rental not found');
+    }
 
     const returnRecord = await tx.returnRecord.create({
       data: {
@@ -778,7 +821,7 @@ function toUserDto(user) {
   return {
     id: user.id,
     username: user.username,
-    role: user.role,
+    role: normalizeRole(user.role),
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   };
@@ -794,7 +837,7 @@ export async function listUsers() {
 
 export async function createUser(payload, passwordPepper) {
   const normalizedUsername = String(payload.username || '').trim().toLowerCase();
-  const role = payload.role || 'kasir';
+  const role = normalizeRole(payload.role || 'kasir');
   const password = String(payload.password || '');
 
   if (!normalizedUsername) {
@@ -803,6 +846,10 @@ export async function createUser(payload, passwordPepper) {
 
   if (!password) {
     throw new Error('Password is required');
+  }
+
+  if (!USER_ROLES.has(role)) {
+    throw new Error('Role is invalid');
   }
 
   const existing = await prisma.user.findUnique({
@@ -839,7 +886,7 @@ export async function updateUserByAdmin(userId, payload) {
   }
 
   const normalizedUsername = String(payload?.username || '').trim().toLowerCase();
-  const role = String(payload?.role || '').trim();
+  const role = normalizeRole(payload?.role);
 
   if (!normalizedUsername) {
     throw new Error('Username is required');
@@ -847,6 +894,10 @@ export async function updateUserByAdmin(userId, payload) {
 
   if (!role) {
     throw new Error('Role is required');
+  }
+
+  if (!USER_ROLES.has(role)) {
+    throw new Error('Role is invalid');
   }
 
   if (normalizedUsername !== existing.username) {
@@ -859,7 +910,7 @@ export async function updateUserByAdmin(userId, payload) {
     }
   }
 
-  if (existing.role === 'admin' && role !== 'admin') {
+  if (normalizeRole(existing.role) === 'admin' && role !== 'admin') {
     const adminCount = await prisma.user.count({
       where: { role: 'admin' },
     });

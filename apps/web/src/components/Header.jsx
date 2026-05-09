@@ -44,7 +44,13 @@ const Header = ({ title, subtitle, onOpenSidebar, inventory = [], rentals = [], 
     const containerRef = useRef(null)
     const [searchQuery, setSearchQuery] = useState('')
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
-    const [installPromptEvent, setInstallPromptEvent] = useState(null)
+    const [installPromptEvent, setInstallPromptEvent] = useState(() => {
+        if (typeof window === 'undefined') {
+            return null
+        }
+
+        return window.__aviaDeferredInstallPrompt || null
+    })
     const [isStandalone, setIsStandalone] = useState(() => isRunningStandalone())
 
     const notifications = useMemo(() => {
@@ -225,10 +231,6 @@ const Header = ({ title, subtitle, onOpenSidebar, inventory = [], rentals = [], 
     }, [])
 
     useEffect(() => {
-        if (window.__aviaDeferredInstallPrompt) {
-            setInstallPromptEvent(window.__aviaDeferredInstallPrompt)
-        }
-
         const handleInstallPrompt = (event) => {
             event.preventDefault()
             setInstallPromptEvent(event)

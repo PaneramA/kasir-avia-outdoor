@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
@@ -55,6 +55,7 @@ function App() {
     () => Boolean(initialSession.token),
   )
   const [currentUser, setCurrentUser] = useState(() => initialSession.user)
+  const isBackgroundSyncingRef = useRef(false)
 
   const loadInitialData = useCallback(async () => {
     setErrorMessage('')
@@ -73,6 +74,10 @@ function App() {
   const refreshData = useCallback(async () => {
     await loadInitialData()
   }, [loadInitialData])
+
+  const getErrorMessage = useCallback((error) => (
+    error instanceof Error ? error.message : 'Gagal memuat data dari backend.'
+  ), [])
 
   useEffect(() => {
     const handleAuthExpired = () => {
@@ -155,8 +160,7 @@ function App() {
           return
         }
 
-        const message = error instanceof Error ? error.message : 'Gagal memuat data dari backend.'
-        setErrorMessage(message)
+        setErrorMessage(getErrorMessage(error))
       } finally {
         if (isActive) {
           setIsLoading(false)
@@ -169,7 +173,83 @@ function App() {
     return () => {
       isActive = false
     }
-  }, [currentUser, loadInitialData])
+  }, [currentUser, getErrorMessage, loadInitialData])
+
+  useEffect(() => {
+    if (cart.length === 0) {
+      return
+    }
+
+    setCart((previousCart) => previousCart
+      .map((cartItem) => {
+        const latestItem = inventory.find((item) => item.id === cartItem.id)
+        if (!latestItem || latestItem.stock <= 0) {
+          return null
+        }
+
+        const safeQty = Math.min(cartItem.qty, latestItem.stock)
+        if (safeQty < 1) {
+          return null
+        }
+
+        return safeQty === cartItem.qty ? cartItem : { ...cartItem, qty: safeQty }
+      })
+      .filter(Boolean))
+  }, [cart.length, inventory])
+
+  useEffect(() => {
+    if (!currentUser) {
+      return undefined
+    }
+
+    let isActive = true
+
+    const syncData = async () => {
+      if (!isActive || isBackgroundSyncingRef.current) {
+        return
+      }
+
+      isBackgroundSyncingRef.current = true
+      try {
+        await refreshData()
+        if (isActive) {
+          setErrorMessage('')
+        }
+      } catch (error) {
+        if (isActive) {
+          setErrorMessage(getErrorMessage(error))
+        }
+      } finally {
+        isBackgroundSyncingRef.current = false
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void syncData()
+      }
+    }
+
+    const handleWindowFocus = () => {
+      void syncData()
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void syncData()
+      }
+    }, 15000)
+
+    window.addEventListener('focus', handleWindowFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      isActive = false
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', handleWindowFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [currentUser, getErrorMessage, refreshData])
 
   const handleLogin = useCallback(async ({ username, password }) => {
     setAuthErrorMessage('')
@@ -231,9 +311,19 @@ function App() {
 
   const handleCheckout = useCallback(
     async (payload) => {
-      const createdRental = await createRental(payload)
-      await refreshData()
-      return createdRental
+      try {
+        const createdRental = await createRental(payload)
+        await refreshData()
+        return createdRental
+      } catch (error) {
+        try {
+          await refreshData()
+        } catch {
+          // Preserve original checkout error below.
+        }
+
+        throw error
+      }
     },
     [refreshData],
   )
