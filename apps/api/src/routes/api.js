@@ -138,6 +138,10 @@ function sendSuccess(res, statusCode, data) {
   });
 }
 
+function normalizeRole(rawRole) {
+  return String(rawRole || '').trim().toLowerCase();
+}
+
 function getBearerToken(req) {
   const authHeader = req.headers.authorization || '';
   if (!authHeader.startsWith('Bearer ')) {
@@ -182,7 +186,7 @@ async function authenticateRequest(req, env) {
   return {
     id: user.id,
     username: user.username,
-    role: user.role,
+    role: normalizeRole(user.role),
   };
 }
 
@@ -201,7 +205,7 @@ export async function apiRoute(req, res, env) {
 
   const ensureAdmin = async () => {
     const user = await ensureAuth();
-    if (user.role !== 'admin') {
+    if (normalizeRole(user.role) !== 'admin') {
       throw new Error('Forbidden');
     }
 
@@ -259,7 +263,7 @@ export async function apiRoute(req, res, env) {
         {
           sub: user.id,
           username: user.username,
-          role: user.role,
+          role: normalizeRole(user.role),
         },
         env,
       );
@@ -269,7 +273,7 @@ export async function apiRoute(req, res, env) {
         user: {
           id: user.id,
           username: user.username,
-          role: user.role,
+          role: normalizeRole(user.role),
         },
       });
       return true;
