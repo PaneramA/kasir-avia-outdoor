@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { createUserAccount, fetchUsers, getStoredSession, removeUserAccount, resetUserPassword, updateUserAccount } from '../lib/api'
 
 const Users = () => {
@@ -10,6 +10,9 @@ const Users = () => {
     const [message, setMessage] = useState('')
     const [errorMessage, setErrorMessage] = useState('')
     const [editingUserId, setEditingUserId] = useState('')
+    const latestLoadRequestRef = useRef(0)
+    const usersSyncChannelRef = useRef(null)
+    const isBackgroundSyncingRef = useRef(false)
     const [form, setForm] = useState({
         username: '',
         password: '',
@@ -22,22 +25,125 @@ const Users = () => {
     const currentUser = getStoredSession().user
 
     const loadUsers = async () => {
+        const requestId = latestLoadRequestRef.current + 1
+        latestLoadRequestRef.current = requestId
         setIsLoading(true)
         setErrorMessage('')
 
         try {
             const data = await fetchUsers()
+            if (requestId !== latestLoadRequestRef.current) {
+                return
+            }
             setUsers(data)
         } catch (error) {
+            if (requestId !== latestLoadRequestRef.current) {
+                return
+            }
             const messageText = error instanceof Error ? error.message : 'Gagal memuat daftar user.'
             setErrorMessage(messageText)
         } finally {
-            setIsLoading(false)
+            if (requestId === latestLoadRequestRef.current) {
+                setIsLoading(false)
+            }
         }
     }
 
     useEffect(() => {
         loadUsers()
+    }, [])
+
+    const notifyUsersChanged = () => {
+        const payload = {
+            type: 'users-changed',
+            at: Date.now(),
+        }
+
+        if (typeof BroadcastChannel !== 'undefined') {
+            if (!usersSyncChannelRef.current) {
+                usersSyncChannelRef.current = new BroadcastChannel('avia-users-sync')
+            }
+
+            usersSyncChannelRef.current.postMessage(payload)
+        }
+
+        try {
+            localStorage.setItem('avia-users-sync', JSON.stringify(payload))
+        } catch {
+            // Ignore quota/storage errors.
+        }
+    }
+
+    useEffect(() => {
+        if (typeof BroadcastChannel !== 'undefined' && !usersSyncChannelRef.current) {
+            usersSyncChannelRef.current = new BroadcastChannel('avia-users-sync')
+        }
+
+        const handleSync = async () => {
+            if (isBackgroundSyncingRef.current || editingUserId) {
+                return
+            }
+
+            isBackgroundSyncingRef.current = true
+            try {
+                await loadUsers()
+            } finally {
+                isBackgroundSyncingRef.current = false
+            }
+        }
+
+        const channel = usersSyncChannelRef.current
+        const onChannelMessage = (event) => {
+            if (event?.data?.type === 'users-changed') {
+                void handleSync()
+            }
+        }
+
+        const onStorage = (event) => {
+            if (event.key === 'avia-users-sync' && event.newValue) {
+                void handleSync()
+            }
+        }
+
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                void handleSync()
+            }
+        }
+
+        const onFocus = () => {
+            void handleSync()
+        }
+
+        const intervalId = window.setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                void handleSync()
+            }
+        }, 15000)
+
+        if (channel) {
+            channel.addEventListener('message', onChannelMessage)
+        }
+        window.addEventListener('storage', onStorage)
+        window.addEventListener('focus', onFocus)
+        document.addEventListener('visibilitychange', onVisibilityChange)
+
+        return () => {
+            if (channel) {
+                channel.removeEventListener('message', onChannelMessage)
+            }
+            window.removeEventListener('storage', onStorage)
+            window.removeEventListener('focus', onFocus)
+            document.removeEventListener('visibilitychange', onVisibilityChange)
+            window.clearInterval(intervalId)
+        }
+    }, [editingUserId])
+
+    useEffect(() => () => {
+        if (usersSyncChannelRef.current) {
+            usersSyncChannelRef.current.close()
+            usersSyncChannelRef.current = null
+        }
     }, [])
 
     const handleCreateUser = async (event) => {
@@ -51,6 +157,7 @@ const Users = () => {
             setForm({ username: '', password: '', role: 'kasir' })
             setMessage('User baru berhasil dibuat.')
             await loadUsers()
+            notifyUsersChanged()
         } catch (error) {
             const messageText = error instanceof Error ? error.message : 'Gagal membuat user.'
             setErrorMessage(messageText)
@@ -111,6 +218,7 @@ const Users = () => {
             setMessage('Data user berhasil diperbarui.')
             setEditingUserId('')
             await loadUsers()
+            notifyUsersChanged()
         } catch (error) {
             const messageText = error instanceof Error ? error.message : 'Gagal memperbarui user.'
             setErrorMessage(messageText)
@@ -132,6 +240,7 @@ const Users = () => {
             await removeUserAccount(user.id)
             setMessage(`User ${user.username} berhasil dihapus.`)
             await loadUsers()
+            notifyUsersChanged()
         } catch (error) {
             const messageText = error instanceof Error ? error.message : 'Gagal menghapus user.'
             setErrorMessage(messageText)

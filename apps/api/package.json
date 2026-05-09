@@ -8,6 +8,7 @@
     "dev:watch": "node --env-file=.env --watch src/server.js",
     "build": "node -e \"console.log('API build step: no transpilation required yet')\"",
     "lint": "node scripts/check-syntax.mjs",
+    "db:audit": "node --env-file=.env scripts/db-audit.mjs",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:migrate": "prisma migrate dev",

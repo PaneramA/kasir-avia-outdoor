@@ -4,6 +4,27 @@ const USER_KEY = 'avia_api_user';
 
 let accessToken = localStorage.getItem(TOKEN_KEY) || '';
 
+function normalizeRole(role) {
+  return String(role || '').trim().toLowerCase();
+}
+
+function normalizeRentalStatus(status) {
+  const normalized = String(status || '').trim().toLowerCase();
+  const returnedStatuses = new Set(['returned', 'selesai', 'completed', 'done']);
+  return returnedStatuses.has(normalized) ? 'Returned' : 'Active';
+}
+
+function normalizeRentalRecord(record) {
+  if (!record || typeof record !== 'object') {
+    return record;
+  }
+
+  return {
+    ...record,
+    status: normalizeRentalStatus(record.status),
+  };
+}
+
 function parseStoredUser() {
   const raw = localStorage.getItem(USER_KEY);
   if (!raw) {
@@ -54,6 +75,7 @@ async function request(path, options = {}, config = { auth: false }) {
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
+    cache: 'no-store',
     headers,
   });
 
@@ -90,8 +112,13 @@ export async function login(username, password) {
     body: JSON.stringify({ username, password }),
   });
 
-  setSession(loginData.token, loginData.user);
-  return loginData.user;
+  const normalizedUser = {
+    ...loginData.user,
+    role: normalizeRole(loginData?.user?.role),
+  };
+
+  setSession(loginData.token, normalizedUser);
+  return normalizedUser;
 }
 
 export function logout() {
@@ -166,7 +193,9 @@ export function removeItem(id) {
 }
 
 export function fetchRentals() {
-  return request('/api/rentals', {}, { auth: true });
+  return request('/api/rentals', {}, { auth: true }).then((rentals) => (
+    Array.isArray(rentals) ? rentals.map(normalizeRentalRecord) : []
+  ));
 }
 
 export function createRental(rental) {
@@ -188,7 +217,10 @@ export function fetchReturns() {
 }
 
 export function fetchCurrentUser() {
-  return request('/api/auth/me', {}, { auth: true });
+  return request('/api/auth/me', {}, { auth: true }).then((user) => ({
+    ...user,
+    role: normalizeRole(user?.role),
+  }));
 }
 
 export function fetchUsers() {

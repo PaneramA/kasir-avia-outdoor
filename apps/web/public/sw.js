@@ -34,6 +34,12 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url)
   const isNavigation = request.mode === 'navigate'
 
+  // Never cache API responses to avoid stale operational data.
+  if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(request))
+    return
+  }
+
   if (isNavigation) {
     event.respondWith(
       fetch(request).catch(() => caches.match('/index.html')),
