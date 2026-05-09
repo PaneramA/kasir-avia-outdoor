@@ -31,6 +31,7 @@ model Item {
 model Rental {
   id             String        @id
   customerId     String?
+  deletedByUserId String?
   customerName   String
   customerPhone  String
   guarantee      String
@@ -41,16 +42,21 @@ model Rental {
   status         String        @default("Active")
   date           DateTime      @default(now())
   returnDate     DateTime?
+  deletedAt      DateTime?
   returnNotes    String?
+  deleteReason   String?
   additionalFee  Int           @default(0)
   finalTotal     Int?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   customer       Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  deletedBy      User?         @relation("RentalDeletedByUser", fields: [deletedByUserId], references: [id], onDelete: SetNull)
   items          RentalItem[]
   returnRecord   ReturnRecord?
 
   @@index([customerId])
+  @@index([deletedAt])
+  @@index([deletedByUserId])
 }
 
 model RentalItem {
@@ -91,6 +97,8 @@ model User {
   role         String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  deletedRentals Rental[] @relation("RentalDeletedByUser")
+  auditLogs    AuditLog[]
 }
 
 model Customer {
@@ -104,4 +112,19 @@ model Customer {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   rentals        Rental[]
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  actorUserId    String
+  action         String
+  targetType     String
+  targetId       String
+  snapshotBefore Json
+  createdAt      DateTime @default(now())
+  actorUser      User     @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([actorUserId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
 }

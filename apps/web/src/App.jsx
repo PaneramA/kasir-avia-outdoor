@@ -23,6 +23,8 @@ import {
   getStoredSession,
   login,
   logout,
+  verifyRentalDelete,
+  deleteRentalByAdmin as deleteRentalByAdminApi,
   processReturn,
   removeCategory,
   removeItem,
@@ -337,10 +339,28 @@ function App() {
     [refreshData],
   )
 
+  const handleVerifyRentalDelete = useCallback(
+    async (rentalId, password) => verifyRentalDelete(rentalId, password),
+    [],
+  )
+
+  const handleDeleteRentalByAdmin = useCallback(
+    async (rentalId, payload) => {
+      const deleted = await deleteRentalByAdminApi(rentalId, payload)
+      await refreshData()
+      return deleted
+    },
+    [refreshData],
+  )
+
   const headerInfo = useMemo(
     () => PAGE_INFO[location.pathname] || PAGE_INFO[APP_ROUTES.dashboard],
     [location.pathname],
   )
+  const isAdminLikeUser = useMemo(() => {
+    const role = String(currentUser?.role || '').trim().toLowerCase()
+    return role === 'admin' || role === 'superuser'
+  }, [currentUser?.role])
 
   useEffect(() => {
     setIsSidebarOpen(false)
@@ -439,10 +459,20 @@ function App() {
               }
             />
             <Route path={APP_ROUTES.customers} element={<Customers />} />
-            <Route path={APP_ROUTES.history} element={<History rentals={rentals} />} />
+            <Route
+              path={APP_ROUTES.history}
+              element={(
+                <History
+                  rentals={rentals}
+                  currentUser={currentUser}
+                  onVerifyRentalDelete={handleVerifyRentalDelete}
+                  onDeleteRentalByAdmin={handleDeleteRentalByAdmin}
+                />
+              )}
+            />
             <Route
               path={APP_ROUTES.users}
-              element={String(currentUser?.role || '').toLowerCase() === 'admin' ? <Users /> : <Navigate to={APP_ROUTES.dashboard} replace />}
+              element={isAdminLikeUser ? <Users /> : <Navigate to={APP_ROUTES.dashboard} replace />}
             />
             <Route
               path={APP_ROUTES.account}

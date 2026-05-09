@@ -7,6 +7,7 @@ import {
   createItem,
   createRental,
   createUser,
+  deleteRentalByAdmin,
   deleteCategory,
   deleteItem,
   deleteUserByAdmin,
@@ -20,6 +21,7 @@ import {
   listReturns,
   listUsers,
   processReturn,
+  verifyUserPasswordById,
   rehashUserPassword,
   updateCustomerById,
   deleteCustomerById,
@@ -38,6 +40,8 @@ import {
   createRentalSchema,
   loginSchema,
   processReturnSchema,
+  deleteRentalByAdminSchema,
+  verifyRentalDeleteSchema,
   selfChangePasswordSchema,
   updateUserSchema,
   updateItemSchema,
@@ -45,6 +49,8 @@ import {
 import { parsePath, readJsonBody, sendJson } from '../utils/http.js';
 
 const loginRateLimitBuckets = new Map();
+const rentalDeleteVerificationBuckets = new Map();
+const RENTAL_DELETE_VERIFICATION_TTL_MS = 5 * 60 * 1000;
 
 function cleanupLoginRateLimitEntry(key, entry, env, now) {
   const maxIdleMs = Math.max(env.loginRateLimitWindowMs, env.loginRateLimitBlockMs);
@@ -122,6 +128,35 @@ function registerLoginFailure(key, env) {
 
 function clearLoginFailures(key) {
   loginRateLimitBuckets.delete(key);
+}
+
+function createRentalDeleteVerificationKey(actorUserId, rentalId) {
+  return `${String(actorUserId || '').trim()}:${String(rentalId || '').trim()}`;
+}
+
+function markRentalDeleteVerified(actorUserId, rentalId) {
+  const key = createRentalDeleteVerificationKey(actorUserId, rentalId);
+  rentalDeleteVerificationBuckets.set(key, Date.now() + RENTAL_DELETE_VERIFICATION_TTL_MS);
+}
+
+function clearRentalDeleteVerification(actorUserId, rentalId) {
+  const key = createRentalDeleteVerificationKey(actorUserId, rentalId);
+  rentalDeleteVerificationBuckets.delete(key);
+}
+
+function isRentalDeleteVerified(actorUserId, rentalId) {
+  const key = createRentalDeleteVerificationKey(actorUserId, rentalId);
+  const expiresAt = rentalDeleteVerificationBuckets.get(key);
+  if (!expiresAt) {
+    return false;
+  }
+
+  if (Date.now() > expiresAt) {
+    rentalDeleteVerificationBuckets.delete(key);
+    return false;
+  }
+
+  return true;
 }
 
 function sendError(res, statusCode, message, details) {
@@ -206,7 +241,8 @@ export async function apiRoute(req, res, env) {
 
   const ensureAdmin = async () => {
     const user = await ensureAuth();
-    if (normalizeRole(user.role) !== 'admin') {
+    const role = normalizeRole(user.role);
+    if (role !== 'admin' && role !== 'superuser') {
       throw new Error('Forbidden');
     }
 
@@ -432,6 +468,47 @@ export async function apiRoute(req, res, env) {
       return true;
     }
 
+    if (req.method === 'POST' && pathname.startsWith('/api/rentals/') && pathname.endsWith('/delete-verify')) {
+      const adminUser = await ensureAdmin();
+      const rentalId = decodeURIComponent(pathname.replace('/api/rentals/', '').replace('/delete-verify', ''));
+      const body = verifyRentalDeleteSchema.parse(await readJsonBody(req));
+      const validPassword = await verifyUserPasswordById(adminUser.id, body.password, env.passwordPepper);
+
+      if (!validPassword) {
+        throw new Error('Invalid password');
+      }
+
+      markRentalDeleteVerified(adminUser.id, rentalId);
+      sendSuccess(res, 200, { verified: true });
+      return true;
+    }
+
+    if (req.method === 'DELETE' && pathname.startsWith('/api/rentals/')) {
+      const adminUser = await ensureAdmin();
+      const rentalId = decodeURIComponent(pathname.replace('/api/rentals/', ''));
+      const body = deleteRentalByAdminSchema.parse(await readJsonBody(req));
+      const expectedConfirmation = `HAPUS ${rentalId}`.toUpperCase();
+      const actualConfirmation = body.confirmationText.trim().toUpperCase();
+
+      if (actualConfirmation !== expectedConfirmation) {
+        throw new Error(`Confirmation text must be exactly: HAPUS ${rentalId}`);
+      }
+
+      if (!isRentalDeleteVerified(adminUser.id, rentalId)) {
+        throw new Error('Password verification expired. Please verify again.');
+      }
+
+      const deleted = await deleteRentalByAdmin({
+        actorUserId: adminUser.id,
+        rentalId,
+        reason: body.reason,
+      });
+
+      clearRentalDeleteVerification(adminUser.id, rentalId);
+      sendSuccess(res, 200, deleted);
+      return true;
+    }
+
     if (req.method === 'GET' && pathname === '/api/returns') {
       await ensureAuth();
       sendSuccess(res, 200, await listReturns());
@@ -454,6 +531,11 @@ export async function apiRoute(req, res, env) {
 
     if (message === 'Unauthorized' || message.toLowerCase().includes('jwt')) {
       sendError(res, 401, 'Unauthorized');
+      return true;
+    }
+
+    if (message === 'Invalid password') {
+      sendError(res, 401, message);
       return true;
     }
 

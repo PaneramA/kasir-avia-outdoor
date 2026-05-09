@@ -57,7 +57,16 @@ export const processReturnSchema = z.object({
   returnNotes: z.string().trim().optional().default(''),
 });
 
-const userRoleSchema = z.enum(['admin', 'kasir']);
+export const verifyRentalDeleteSchema = z.object({
+  password: z.string().min(1).max(128),
+});
+
+export const deleteRentalByAdminSchema = z.object({
+  reason: z.string().trim().min(3).max(300),
+  confirmationText: z.string().trim().min(1).max(200),
+});
+
+const userRoleSchema = z.enum(['admin', 'superuser', 'kasir']);
 
 export const createUserSchema = z.object({
   username: z.string().trim().min(3).max(50),
