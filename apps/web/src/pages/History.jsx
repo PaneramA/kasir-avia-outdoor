@@ -1,26 +1,123 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
-const History = ({ rentals }) => {
+const History = ({
+    rentals,
+    currentUser,
+    onVerifyRentalDelete,
+    onDeleteRentalByAdmin,
+}) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [selectedRental, setSelectedRental] = useState(null);
+    const [deletePassword, setDeletePassword] = useState('');
+    const [deleteReason, setDeleteReason] = useState('');
+    const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
+    const [isPasswordVerified, setIsPasswordVerified] = useState(false);
+    const [isVerifyingDelete, setIsVerifyingDelete] = useState(false);
+    const [isDeletingRental, setIsDeletingRental] = useState(false);
+    const [deleteErrorMessage, setDeleteErrorMessage] = useState('');
+    const [deleteSuccessMessage, setDeleteSuccessMessage] = useState('');
 
-    // Filter logic
+    const isAdmin = useMemo(() => {
+        const role = String(currentUser?.role || '').trim().toLowerCase();
+        return role === 'admin' || role === 'superuser';
+    }, [currentUser?.role]);
+
+    const closeDeleteModal = () => {
+        setSelectedRental(null);
+        setDeletePassword('');
+        setDeleteReason('');
+        setDeleteConfirmationText('');
+        setIsPasswordVerified(false);
+        setIsVerifyingDelete(false);
+        setIsDeletingRental(false);
+        setDeleteErrorMessage('');
+    };
+
+    const openDeleteModal = (rental) => {
+        setDeleteSuccessMessage('');
+        setDeleteErrorMessage('');
+        setSelectedRental(rental);
+        setDeletePassword('');
+        setDeleteReason('');
+        setDeleteConfirmationText('');
+        setIsPasswordVerified(false);
+    };
+
+    const handleVerifyDeletePassword = async () => {
+        if (!selectedRental) {
+            return;
+        }
+
+        if (!deletePassword.trim()) {
+            setDeleteErrorMessage('Masukkan password akun admin terlebih dahulu.');
+            return;
+        }
+
+        try {
+            setIsVerifyingDelete(true);
+            setDeleteErrorMessage('');
+            await onVerifyRentalDelete(selectedRental.id, deletePassword);
+            setIsPasswordVerified(true);
+            setDeletePassword('');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Verifikasi password gagal.';
+            setDeleteErrorMessage(message);
+        } finally {
+            setIsVerifyingDelete(false);
+        }
+    };
+
+    const handleDeleteRental = async () => {
+        if (!selectedRental) {
+            return;
+        }
+
+        if (!deleteReason.trim()) {
+            setDeleteErrorMessage('Alasan penghapusan wajib diisi.');
+            return;
+        }
+
+        if (!deleteConfirmationText.trim()) {
+            setDeleteErrorMessage(`Ketik HAPUS ${selectedRental.id} untuk melanjutkan.`);
+            return;
+        }
+
+        if (!window.confirm(`Apakah kamu yakin ingin menghapus riwayat transaksi ${selectedRental.id}?`)) {
+            return;
+        }
+
+        try {
+            setIsDeletingRental(true);
+            setDeleteErrorMessage('');
+            await onDeleteRentalByAdmin(selectedRental.id, {
+                reason: deleteReason.trim(),
+                confirmationText: deleteConfirmationText.trim(),
+            });
+            setDeleteSuccessMessage(`Transaksi ${selectedRental.id} berhasil dihapus.`);
+            closeDeleteModal();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Gagal menghapus transaksi.';
+            setDeleteErrorMessage(message);
+        } finally {
+            setIsDeletingRental(false);
+        }
+    };
+
     const filteredRentals = rentals.filter(rental => {
-        // Status filter
         if (statusFilter !== 'All' && rental.status !== statusFilter) {
             return false;
         }
 
-        // Search query (ID or Customer Name)
         const query = searchQuery.toLowerCase();
         const matchesQuery = rental.id.toLowerCase().includes(query) ||
                              rental.customer.name.toLowerCase().includes(query);
-                             
-        if (!matchesQuery) return false;
+        if (!matchesQuery) {
+            return false;
+        }
 
-        // Date filter
         if (startDate || endDate) {
             const rentalDate = new Date(rental.date);
             rentalDate.setHours(0, 0, 0, 0);
@@ -28,20 +125,23 @@ const History = ({ rentals }) => {
             if (startDate) {
                 const start = new Date(startDate);
                 start.setHours(0, 0, 0, 0);
-                if (rentalDate < start) return false;
+                if (rentalDate < start) {
+                    return false;
+                }
             }
+
             if (endDate) {
                 const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999); // Include entire end day
-                // Note: since rentalDate has hours 0,0,0, checking if rentalDate <= end works perfectly.
-                if (rentalDate > end) return false;
+                end.setHours(23, 59, 59, 999);
+                if (rentalDate > end) {
+                    return false;
+                }
             }
         }
 
         return true;
     });
 
-    // Summary Statistics based on filtered data
     const totalTransactions = filteredRentals.length;
     const activeTransactions = filteredRentals.filter(r => r.status === 'Active').length;
     const returnedTransactions = filteredRentals.filter(r => r.status === 'Returned').length;
@@ -49,7 +149,12 @@ const History = ({ rentals }) => {
 
     return (
         <div className="flex h-full flex-col py-4 sm:py-5">
-            {/* Header & Stats Widget */}
+            {deleteSuccessMessage && (
+                <div className="mb-4 rounded-lg border border-[#2ecc71]/40 bg-[#2ecc71]/10 p-3 text-sm text-[#6ee7a8]">
+                    {deleteSuccessMessage}
+                </div>
+            )}
+
             <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h3 className="text-[1.2rem] font-bold text-text-main mb-1">Riwayat Transaksi</h3>
@@ -78,13 +183,12 @@ const History = ({ rentals }) => {
                 </div>
             </div>
 
-            {/* Filter and Search Controls */}
             <div className="mb-6 flex flex-col gap-4 rounded-lg border border-border bg-sidebar-bg p-4">
                 <div className="flex flex-col sm:flex-row gap-4">
                     <div className="flex-1 relative">
                         <i className="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-text-muted"></i>
-                        <input 
-                            type="text" 
+                        <input
+                            type="text"
                             className="w-full bg-bg-main border border-border py-2.5 pl-11 pr-4 rounded-lg text-text-main outline-none focus:border-accent text-sm"
                             placeholder="Cari berdasarkan Nama atau ID Transaksi..."
                             value={searchQuery}
@@ -92,7 +196,7 @@ const History = ({ rentals }) => {
                         />
                     </div>
                     <div className="w-full sm:w-[220px]">
-                        <select 
+                        <select
                             className="w-full bg-bg-main border border-border py-2.5 px-4 rounded-lg text-text-main outline-none focus:border-accent text-sm cursor-pointer appearance-none"
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}
@@ -104,24 +208,23 @@ const History = ({ rentals }) => {
                     </div>
                 </div>
 
-                {/* Date Filter */}
                 <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
                     <span className="text-text-muted text-[0.85rem] font-semibold"><i className="fas fa-calendar-alt mr-1.5"></i> Filter Tanggal:</span>
-                    <input 
-                        type="date" 
+                    <input
+                        type="date"
                         className="w-full bg-bg-main border border-border py-2 px-3 rounded-lg text-text-main outline-none focus:border-accent text-sm custom-date-input sm:w-auto"
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
                     />
                     <span className="text-text-muted text-[0.85rem]">s/d</span>
-                    <input 
-                        type="date" 
+                    <input
+                        type="date"
                         className="w-full bg-bg-main border border-border py-2 px-3 rounded-lg text-text-main outline-none focus:border-accent text-sm custom-date-input sm:w-auto"
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
                     />
                     {(startDate || endDate) && (
-                        <button 
+                        <button
                             className="text-[#e74c3c] bg-[#e74c3c]/10 hover:bg-[#e74c3c]/20 px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
                             onClick={() => { setStartDate(''); setEndDate(''); }}
                         >
@@ -131,7 +234,6 @@ const History = ({ rentals }) => {
                 </div>
             </div>
 
-            {/* Data Table */}
             <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-sidebar-bg/50">
                 <div className="custom-scrollbar flex-1 overflow-x-auto">
                     {filteredRentals.length === 0 ? (
@@ -175,6 +277,16 @@ const History = ({ rentals }) => {
                                                 + Rp {rental.additionalFee.toLocaleString()} (Denda/Extra)
                                             </p>
                                         )}
+
+                                        {isAdmin && (
+                                            <button
+                                                type="button"
+                                                className="mt-3 inline-flex items-center gap-2 rounded border border-[#e74c3c]/50 bg-[#e74c3c]/10 px-3 py-1.5 text-[0.75rem] font-semibold text-[#f3b2ad] hover:bg-[#e74c3c]/20"
+                                                onClick={() => openDeleteModal(rental)}
+                                            >
+                                                <i className="fas fa-trash"></i> Hapus Riwayat
+                                            </button>
+                                        )}
                                     </article>
                                 ))}
                             </div>
@@ -187,6 +299,9 @@ const History = ({ rentals }) => {
                                         <th className="border-b border-border p-4 text-left text-[0.8rem] font-semibold uppercase tracking-wider text-text-muted">Detail Sewa</th>
                                         <th className="border-b border-border p-4 text-left text-[0.8rem] font-semibold uppercase tracking-wider text-text-muted">Status</th>
                                         <th className="border-b border-border p-4 text-right text-[0.8rem] font-semibold uppercase tracking-wider text-text-muted">Total</th>
+                                        {isAdmin && (
+                                            <th className="border-b border-border p-4 text-right text-[0.8rem] font-semibold uppercase tracking-wider text-text-muted">Aksi</th>
+                                        )}
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -258,6 +373,17 @@ const History = ({ rentals }) => {
                                                     </div>
                                                 )}
                                             </td>
+                                            {isAdmin && (
+                                                <td className="align-top border-b border-border/50 p-4 text-right">
+                                                    <button
+                                                        type="button"
+                                                        className="inline-flex items-center gap-2 rounded border border-[#e74c3c]/50 bg-[#e74c3c]/10 px-3 py-1.5 text-[0.75rem] font-semibold text-[#f3b2ad] hover:bg-[#e74c3c]/20"
+                                                        onClick={() => openDeleteModal(rental)}
+                                                    >
+                                                        <i className="fas fa-trash"></i> Hapus
+                                                    </button>
+                                                </td>
+                                            )}
                                         </tr>
                                     ))}
                                 </tbody>
@@ -266,6 +392,89 @@ const History = ({ rentals }) => {
                     )}
                 </div>
             </div>
+
+            {selectedRental && (
+                <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/80 p-4 backdrop-blur-[3px]">
+                    <div className="w-full max-w-[560px] rounded-lg border border-border bg-sidebar-bg p-5">
+                        <h4 className="mb-1 text-[1.05rem] font-bold text-text-main">Hapus Riwayat Transaksi</h4>
+                        <p className="mb-4 text-sm text-text-muted">
+                            Transaksi: <span className="font-mono text-text-main">{selectedRental.id}</span>
+                        </p>
+
+                        {deleteErrorMessage && (
+                            <div className="mb-4 rounded-lg border border-[#e74c3c]/40 bg-[#e74c3c]/10 p-3 text-sm text-[#f3b2ad]">
+                                {deleteErrorMessage}
+                            </div>
+                        )}
+
+                        {!isPasswordVerified ? (
+                            <div className="space-y-3">
+                                <p className="text-sm text-text-muted">Masukkan password admin untuk membuka opsi penghapusan.</p>
+                                <input
+                                    type="password"
+                                    className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                                    placeholder="Password admin"
+                                    value={deletePassword}
+                                    onChange={(event) => setDeletePassword(event.target.value)}
+                                />
+                                <div className="flex flex-col gap-2 sm:flex-row">
+                                    <button
+                                        type="button"
+                                        disabled={isVerifyingDelete}
+                                        className="rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
+                                        onClick={handleVerifyDeletePassword}
+                                    >
+                                        {isVerifyingDelete ? 'Memverifikasi...' : 'Verifikasi Password'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="rounded-lg border border-border bg-sidebar-bg px-4 py-2.5 text-sm font-semibold text-text-main hover:border-accent"
+                                        onClick={closeDeleteModal}
+                                    >
+                                        Batal
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <div className="rounded border border-[#2ecc71]/30 bg-[#2ecc71]/10 p-3 text-sm text-[#6ee7a8]">
+                                    Password terverifikasi. Lanjutkan konfirmasi penghapusan.
+                                </div>
+                                <textarea
+                                    className="min-h-[90px] w-full resize-y rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                                    placeholder="Alasan penghapusan transaksi..."
+                                    value={deleteReason}
+                                    onChange={(event) => setDeleteReason(event.target.value)}
+                                ></textarea>
+                                <input
+                                    type="text"
+                                    className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                                    placeholder={`Ketik: HAPUS ${selectedRental.id}`}
+                                    value={deleteConfirmationText}
+                                    onChange={(event) => setDeleteConfirmationText(event.target.value)}
+                                />
+                                <div className="flex flex-col gap-2 sm:flex-row">
+                                    <button
+                                        type="button"
+                                        disabled={isDeletingRental}
+                                        className="rounded-lg bg-[#e74c3c] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#c0392b] disabled:opacity-60"
+                                        onClick={handleDeleteRental}
+                                    >
+                                        {isDeletingRental ? 'Menghapus...' : 'Hapus Riwayat'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="rounded-lg border border-border bg-sidebar-bg px-4 py-2.5 text-sm font-semibold text-text-main hover:border-accent"
+                                        onClick={closeDeleteModal}
+                                    >
+                                        Batal
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

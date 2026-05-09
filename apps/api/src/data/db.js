@@ -2,7 +2,7 @@ import { prisma } from './prisma.js';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 
 const DEFAULT_CATEGORIES = ['Tenda', 'Carrier', 'Alat Masak', 'Lainnya'];
-const USER_ROLES = new Set(['admin', 'kasir']);
+const USER_ROLES = new Set(['admin', 'superuser', 'kasir']);
 const RETURNED_RENTAL_STATUSES = new Set(['returned', 'selesai', 'completed', 'done']);
 
 function createId(prefix) {
@@ -332,13 +332,14 @@ export async function deleteItem(id) {
       rental: {
         select: {
           status: true,
+          deletedAt: true,
         },
       },
     },
   });
 
   const activeUsageCount = usages.reduce((count, usage) => (
-    isActiveRentalStatus(usage.rental?.status) ? count + 1 : count
+    usage.rental?.deletedAt === null && isActiveRentalStatus(usage.rental?.status) ? count + 1 : count
   ), 0);
 
   if (activeUsageCount > 0) {
@@ -363,8 +364,13 @@ export async function deleteItem(id) {
 }
 
 export async function listRentals({ status } = {}) {
+  const where = {
+    deletedAt: null,
+    ...(status ? { status } : {}),
+  };
+
   const rentals = await prisma.rental.findMany({
-    where: status ? { status } : undefined,
+    where,
     include: {
       items: true,
     },
@@ -757,6 +763,10 @@ export async function processReturn(payload) {
       throw new Error('Rental not found');
     }
 
+    if (rental.deletedAt) {
+      throw new Error('Rental already deleted');
+    }
+
     if (isReturnedRentalStatus(rental.status)) {
       throw new Error('Rental already returned');
     }
@@ -768,6 +778,7 @@ export async function processReturn(payload) {
     const updatedCount = await tx.rental.updateMany({
       where: {
         id: rental.id,
+        deletedAt: null,
         NOT: [
           {
             status: {
@@ -848,6 +859,127 @@ export async function processReturn(payload) {
       rental: toRentalDto(updatedRental),
       returnRecord: toReturnDto(returnRecord),
     };
+  });
+
+  return result;
+}
+
+export async function verifyUserPasswordById(userId, plainPassword, passwordPepper) {
+  const targetId = String(userId || '').trim();
+  if (!targetId) {
+    throw new Error('User id is required');
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: targetId },
+  });
+
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  return verifyPassword(plainPassword, user.passwordHash, passwordPepper);
+}
+
+function toAuditRentalSnapshot(rental) {
+  return {
+    id: rental.id,
+    customerId: rental.customerId || null,
+    customerName: rental.customerName,
+    customerPhone: rental.customerPhone,
+    guarantee: rental.guarantee,
+    guaranteeOther: rental.guaranteeOther || null,
+    idNumber: rental.idNumber || null,
+    duration: rental.duration,
+    total: rental.total,
+    status: rental.status,
+    date: rental.date.toISOString(),
+    returnDate: rental.returnDate ? rental.returnDate.toISOString() : null,
+    returnNotes: rental.returnNotes || null,
+    additionalFee: rental.additionalFee,
+    finalTotal: rental.finalTotal ?? null,
+    items: rental.items.map((item) => ({
+      id: item.id,
+      itemId: item.itemId,
+      itemName: item.itemName,
+      categoryName: item.categoryName,
+      price: item.price,
+      qty: item.qty,
+      notes: item.notes || '',
+    })),
+  };
+}
+
+export async function deleteRentalByAdmin({ actorUserId, rentalId, reason }) {
+  const actorId = String(actorUserId || '').trim();
+  const targetRentalId = String(rentalId || '').trim();
+  const deleteReason = String(reason || '').trim();
+
+  if (!actorId) {
+    throw new Error('Actor user id is required');
+  }
+
+  if (!targetRentalId) {
+    throw new Error('Rental id is required');
+  }
+
+  if (!deleteReason) {
+    throw new Error('Delete reason is required');
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const rental = await tx.rental.findUnique({
+      where: { id: targetRentalId },
+      include: {
+        items: true,
+        returnRecord: true,
+      },
+    });
+
+    if (!rental) {
+      throw new Error('Rental not found');
+    }
+
+    if (rental.deletedAt) {
+      throw new Error('Rental already deleted');
+    }
+
+    if (isActiveRentalStatus(rental.status) && !rental.returnRecord) {
+      for (const rentalItem of rental.items) {
+        await tx.item.updateMany({
+          where: { id: rentalItem.itemId },
+          data: {
+            stock: {
+              increment: rentalItem.qty,
+            },
+          },
+        });
+      }
+    }
+
+    const updated = await tx.rental.update({
+      where: { id: rental.id },
+      data: {
+        deletedAt: new Date(),
+        deletedByUserId: actorId,
+        deleteReason,
+      },
+      include: {
+        items: true,
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        actorUserId: actorId,
+        action: 'rental.delete',
+        targetType: 'rental',
+        targetId: rental.id,
+        snapshotBefore: toAuditRentalSnapshot(rental),
+      },
+    });
+
+    return toRentalDto(updated);
   });
 
   return result;

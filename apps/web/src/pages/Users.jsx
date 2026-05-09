@@ -286,6 +286,7 @@ const Users = () => {
                         >
                             <option value="kasir">Kasir</option>
                             <option value="admin">Admin</option>
+                            <option value="superuser">Superuser</option>
                         </select>
                     </div>
                     <button
@@ -339,6 +340,7 @@ const Users = () => {
                                             >
                                                 <option value="kasir">Kasir</option>
                                                 <option value="admin">Admin</option>
+                                                <option value="superuser">Superuser</option>
                                             </select>
                                         ) : (
                                             <span className="text-sm capitalize text-text-muted">Role: {user.role}</span>
@@ -426,6 +428,7 @@ const Users = () => {
                                                     >
                                                         <option value="kasir">Kasir</option>
                                                         <option value="admin">Admin</option>
+                                                        <option value="superuser">Superuser</option>
                                                     </select>
                                                 ) : (
                                                     user.role

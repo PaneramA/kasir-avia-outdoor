@@ -212,6 +212,20 @@ export function processReturn(payload) {
   }, { auth: true });
 }
 
+export function verifyRentalDelete(rentalId, password) {
+  return request(`/api/rentals/${encodeURIComponent(rentalId)}/delete-verify`, {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  }, { auth: true });
+}
+
+export function deleteRentalByAdmin(rentalId, payload) {
+  return request(`/api/rentals/${encodeURIComponent(rentalId)}`, {
+    method: 'DELETE',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
 export function fetchReturns() {
   return request('/api/returns', {}, { auth: true });
 }
