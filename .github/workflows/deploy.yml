@@ -7,9 +7,47 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
+  gate-merge-pr:
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
+    steps:
+      - name: Check commit comes from merged PR to main
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const commitSha = context.sha;
+            const baseRef = 'main';
+
+            const response = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner,
+              repo,
+              commit_sha: commitSha
+            });
+
+            const mergedPr = response.data.find(
+              (pr) => pr.base.ref === baseRef && pr.merged_at
+            );
+
+            if (mergedPr) {
+              core.info(`Deploy allowed. Commit is from merged PR #${mergedPr.number}.`);
+              core.setOutput('should_deploy', 'true');
+              return;
+            }
+
+            core.warning('Deploy skipped: push to main is not associated with a merged PR.');
+            core.setOutput('should_deploy', 'false');
+
   deploy:
-    if: ${{ github.event.pull_request.merged == true }}
+    needs: gate-merge-pr
+    if: ${{ needs.gate-merge-pr.outputs.should_deploy == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Validate deploy secrets
