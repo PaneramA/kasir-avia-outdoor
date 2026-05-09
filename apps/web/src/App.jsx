@@ -442,7 +442,7 @@ function App() {
             <Route path={APP_ROUTES.history} element={<History rentals={rentals} />} />
             <Route
               path={APP_ROUTES.users}
-              element={currentUser.role === 'admin' ? <Users /> : <Navigate to={APP_ROUTES.dashboard} replace />}
+              element={String(currentUser?.role || '').toLowerCase() === 'admin' ? <Users /> : <Navigate to={APP_ROUTES.dashboard} replace />}
             />
             <Route
               path={APP_ROUTES.account}
