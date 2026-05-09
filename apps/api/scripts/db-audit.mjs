@@ -13,13 +13,11 @@ function isReturnedStatus(rawStatus) {
 }
 
 async function main() {
-  const [usersCount, itemsCount, customersCount, rentalsCount, visibleRentalsCount, deletedRentalsCount, returnsCount] = await prisma.$transaction([
+  const [usersCount, itemsCount, customersCount, rentalsCount, returnsCount] = await prisma.$transaction([
     prisma.user.count(),
     prisma.item.count(),
     prisma.customer.count(),
     prisma.rental.count(),
-    prisma.rental.count({ where: { deletedAt: null } }),
-    prisma.rental.count({ where: { deletedAt: { not: null } } }),
     prisma.returnRecord.count(),
   ]);
 
@@ -30,7 +28,6 @@ async function main() {
       customerName: true,
       customerPhone: true,
       date: true,
-      deletedAt: true,
       returnRecord: {
         select: {
           id: true,
@@ -58,16 +55,16 @@ async function main() {
   }
 
   const rentalsReturnedButNoReturnRecord = rentals.filter((rental) => (
-    rental.deletedAt === null && isReturnedStatus(rental.status) && !rental.returnRecord
+    isReturnedStatus(rental.status) && !rental.returnRecord
   ));
 
   const rentalsActiveButHasReturnRecord = rentals.filter((rental) => (
-    rental.deletedAt === null && !isReturnedStatus(rental.status) && Boolean(rental.returnRecord)
+    !isReturnedStatus(rental.status) && Boolean(rental.returnRecord)
   ));
 
   const usersWithUnexpectedRole = users.filter((user) => {
     const role = String(user.role || '').trim().toLowerCase();
-    return role !== 'admin' && role !== 'superuser' && role !== 'kasir';
+    return role !== 'admin' && role !== 'kasir';
   });
 
   const result = {
@@ -76,9 +73,7 @@ async function main() {
       users: usersCount,
       items: itemsCount,
       customers: customersCount,
-      rentalsTotal: rentalsCount,
-      rentalsVisible: visibleRentalsCount,
-      rentalsDeleted: deletedRentalsCount,
+      rentals: rentalsCount,
       returnRecords: returnsCount,
     },
     rentalStatusDistribution: [...statusBuckets.entries()]
@@ -99,7 +94,7 @@ async function main() {
       },
     },
     latestUsers: users.slice(0, 20),
-    latestRentals: rentals.filter((rental) => rental.deletedAt === null).slice(0, 20),
+    latestRentals: rentals.slice(0, 20),
   };
 
   console.log(JSON.stringify(result, null, 2));
@@ -114,3 +109,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+

@@ -5,8 +5,7 @@ import { APP_ROUTES } from '../lib/routes'
 
 const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
-    const role = String(currentUser?.role || '').toLowerCase()
-    const isAdmin = role === 'admin' || role === 'superuser'
+    const isAdmin = String(currentUser?.role || '').toLowerCase() === 'admin'
 
     const menuItems = [
         { path: APP_ROUTES.dashboard, icon: 'fas fa-th-large', label: 'Dashboard' },
