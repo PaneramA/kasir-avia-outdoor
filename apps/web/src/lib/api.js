@@ -209,6 +209,12 @@ export function updateUserAccount(userId, payload) {
   }, { auth: true });
 }
 
+export function removeUserAccount(userId) {
+  return request(`/api/users/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  }, { auth: true });
+}
+
 export function resetUserPassword(userId, newPassword) {
   return request(`/api/users/${encodeURIComponent(userId)}/password`, {
     method: 'PATCH',

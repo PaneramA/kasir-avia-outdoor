@@ -3,6 +3,7 @@ import { hashPassword, verifyPassword } from '../auth/password.js';
 
 const DEFAULT_CATEGORIES = ['Tenda', 'Carrier', 'Alat Masak', 'Lainnya'];
 const USER_ROLES = new Set(['admin', 'kasir']);
+const RETURNED_RENTAL_STATUSES = new Set(['returned', 'selesai', 'completed', 'done']);
 
 function createId(prefix) {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -10,6 +11,23 @@ function createId(prefix) {
 
 function normalizeRole(rawRole) {
   return String(rawRole || '').trim().toLowerCase();
+}
+
+function normalizeRentalStatus(rawStatus) {
+  return String(rawStatus || '').trim().toLowerCase();
+}
+
+function isReturnedRentalStatus(rawStatus) {
+  return RETURNED_RENTAL_STATUSES.has(normalizeRentalStatus(rawStatus));
+}
+
+function isActiveRentalStatus(rawStatus) {
+  const status = normalizeRentalStatus(rawStatus);
+  if (!status) {
+    return true;
+  }
+
+  return !isReturnedRentalStatus(status);
 }
 
 function toItemDto(item) {
@@ -305,17 +323,36 @@ export async function deleteItem(id) {
     throw new Error('Item not found');
   }
 
-  const activeUsageCount = await prisma.rentalItem.count({
+  const usages = await prisma.rentalItem.findMany({
     where: {
       itemId: targetId,
+    },
+    select: {
+      id: true,
       rental: {
-        status: 'Active',
+        select: {
+          status: true,
+        },
       },
     },
   });
 
+  const activeUsageCount = usages.reduce((count, usage) => (
+    isActiveRentalStatus(usage.rental?.status) ? count + 1 : count
+  ), 0);
+
   if (activeUsageCount > 0) {
     throw new Error('Item is used by active rentals');
+  }
+
+  if (usages.length > 0) {
+    await prisma.rentalItem.deleteMany({
+      where: {
+        id: {
+          in: usages.map((usage) => usage.id),
+        },
+      },
+    });
   }
 
   await prisma.item.delete({
@@ -720,7 +757,7 @@ export async function processReturn(payload) {
       throw new Error('Rental not found');
     }
 
-    if (rental.status === 'Returned') {
+    if (isReturnedRentalStatus(rental.status)) {
       throw new Error('Rental already returned');
     }
 
@@ -731,7 +768,32 @@ export async function processReturn(payload) {
     const updatedCount = await tx.rental.updateMany({
       where: {
         id: rental.id,
-        status: 'Active',
+        NOT: [
+          {
+            status: {
+              equals: 'Returned',
+              mode: 'insensitive',
+            },
+          },
+          {
+            status: {
+              equals: 'Selesai',
+              mode: 'insensitive',
+            },
+          },
+          {
+            status: {
+              equals: 'Completed',
+              mode: 'insensitive',
+            },
+          },
+          {
+            status: {
+              equals: 'Done',
+              mode: 'insensitive',
+            },
+          },
+        ],
       },
       data: {
         status: 'Returned',
@@ -981,4 +1043,45 @@ export async function changeOwnPassword(userId, currentPassword, newPassword, pa
   });
 
   return { updated: true };
+}
+
+export async function deleteUserByAdmin(actorUserId, targetUserId) {
+  const actorId = String(actorUserId || '').trim();
+  const userId = String(targetUserId || '').trim();
+
+  if (!actorId) {
+    throw new Error('Actor user id is required');
+  }
+
+  if (!userId) {
+    throw new Error('User id is required');
+  }
+
+  if (actorId === userId) {
+    throw new Error('You cannot delete your own account');
+  }
+
+  const existing = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!existing) {
+    throw new Error('User not found');
+  }
+
+  if (normalizeRole(existing.role) === 'admin') {
+    const adminCount = await prisma.user.count({
+      where: { role: 'admin' },
+    });
+
+    if (adminCount <= 1) {
+      throw new Error('At least one admin account is required');
+    }
+  }
+
+  await prisma.user.delete({
+    where: { id: userId },
+  });
+
+  return toUserDto(existing);
 }

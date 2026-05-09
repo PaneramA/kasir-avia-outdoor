@@ -9,6 +9,7 @@ import {
   createUser,
   deleteCategory,
   deleteItem,
+  deleteUserByAdmin,
   findUserById,
   findUserByUsername,
   getSchemaSummary,
@@ -309,6 +310,14 @@ export async function apiRoute(req, res, env) {
       const body = updateUserSchema.parse(await readJsonBody(req));
       const updated = await updateUserByAdmin(userId, body);
       sendSuccess(res, 200, updated);
+      return true;
+    }
+
+    if (req.method === 'DELETE' && pathname.startsWith('/api/users/') && !pathname.endsWith('/password')) {
+      const adminUser = await ensureAdmin();
+      const userId = decodeURIComponent(pathname.replace('/api/users/', ''));
+      const removed = await deleteUserByAdmin(adminUser.id, userId);
+      sendSuccess(res, 200, removed);
       return true;
     }
 
