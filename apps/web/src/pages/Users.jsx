@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import { createUserAccount, fetchUsers, resetUserPassword, updateUserAccount } from '../lib/api'
+import { createUserAccount, fetchUsers, getStoredSession, removeUserAccount, resetUserPassword, updateUserAccount } from '../lib/api'
 
 const Users = () => {
     const [users, setUsers] = useState([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isSavingEdit, setIsSavingEdit] = useState(false)
+    const [deletingUserId, setDeletingUserId] = useState('')
     const [message, setMessage] = useState('')
     const [errorMessage, setErrorMessage] = useState('')
     const [editingUserId, setEditingUserId] = useState('')
@@ -18,6 +19,7 @@ const Users = () => {
         username: '',
         role: 'kasir',
     })
+    const currentUser = getStoredSession().user
 
     const loadUsers = async () => {
         setIsLoading(true)
@@ -117,6 +119,27 @@ const Users = () => {
         }
     }
 
+    const handleDeleteUser = async (user) => {
+        if (!window.confirm(`Yakin ingin menghapus user ${user.username}?`)) {
+            return
+        }
+
+        setMessage('')
+        setErrorMessage('')
+
+        try {
+            setDeletingUserId(user.id)
+            await removeUserAccount(user.id)
+            setMessage(`User ${user.username} berhasil dihapus.`)
+            await loadUsers()
+        } catch (error) {
+            const messageText = error instanceof Error ? error.message : 'Gagal menghapus user.'
+            setErrorMessage(messageText)
+        } finally {
+            setDeletingUserId('')
+        }
+    }
+
     return (
         <div className="space-y-6 py-4 sm:py-5">
             <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">
@@ -176,7 +199,7 @@ const Users = () => {
 
             <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">
                 <h3 className="text-[1.1rem] font-bold text-text-main mb-1">Daftar User</h3>
-                <p className="text-text-muted text-sm mb-5">Reset password user dari tabel ini jika diperlukan.</p>
+                <p className="text-text-muted text-sm mb-5">Reset password, edit role, dan hapus user dari tabel ini.</p>
 
                 {isLoading ? (
                     <div className="text-text-muted">Memuat daftar user...</div>
@@ -241,8 +264,17 @@ const Users = () => {
                                                 <button
                                                     className="min-h-11 rounded border border-border bg-sidebar-bg px-3 py-2 text-sm text-text-main hover:border-accent"
                                                     onClick={() => handleResetPassword(user)}
+                                                    disabled={deletingUserId === user.id}
                                                 >
                                                     Reset Password
+                                                </button>
+                                                <button
+                                                    className="min-h-11 rounded border border-[#e74c3c]/50 bg-[#e74c3c]/10 px-3 py-2 text-sm text-[#f3b2ad] hover:bg-[#e74c3c]/20 disabled:opacity-60"
+                                                    onClick={() => handleDeleteUser(user)}
+                                                    disabled={deletingUserId === user.id || currentUser?.id === user.id}
+                                                    title={currentUser?.id === user.id ? 'Akun yang sedang dipakai tidak bisa dihapus.' : ''}
+                                                >
+                                                    {deletingUserId === user.id ? 'Menghapus...' : 'Hapus User'}
                                                 </button>
                                             </>
                                         )}
@@ -259,6 +291,7 @@ const Users = () => {
                                         <th className="border-b border-border p-3 text-left text-xs uppercase tracking-wider text-text-muted">Role</th>
                                         <th className="border-b border-border p-3 text-left text-xs uppercase tracking-wider text-text-muted">Dibuat</th>
                                         <th className="border-b border-border p-3 text-right text-xs uppercase tracking-wider text-text-muted">Aksi</th>
+                                        <th className="border-b border-border p-3 text-right text-xs uppercase tracking-wider text-text-muted">Hapus</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -319,12 +352,23 @@ const Users = () => {
                                                             <button
                                                                 className="rounded border border-border bg-sidebar-bg px-3 py-1.5 text-sm text-text-main hover:border-accent"
                                                                 onClick={() => handleResetPassword(user)}
+                                                                disabled={deletingUserId === user.id}
                                                             >
                                                                 Reset Password
                                                             </button>
                                                         </>
                                                     )}
                                                 </div>
+                                            </td>
+                                            <td className="border-b border-border/40 p-3 text-right">
+                                                <button
+                                                    className="rounded border border-[#e74c3c]/50 bg-[#e74c3c]/10 px-3 py-1.5 text-sm text-[#f3b2ad] hover:bg-[#e74c3c]/20 disabled:opacity-60"
+                                                    onClick={() => handleDeleteUser(user)}
+                                                    disabled={deletingUserId === user.id || currentUser?.id === user.id || editingUserId === user.id}
+                                                    title={currentUser?.id === user.id ? 'Akun yang sedang dipakai tidak bisa dihapus.' : ''}
+                                                >
+                                                    {deletingUserId === user.id ? 'Menghapus...' : 'Hapus User'}
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}
