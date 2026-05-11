@@ -472,7 +472,7 @@ function App() {
             />
             <Route
               path={APP_ROUTES.users}
-              element={String(currentUser?.role || '').toLowerCase() === 'admin' ? <Users /> : <Navigate to={APP_ROUTES.dashboard} replace />}
+              element={isAdminLikeUser ? <Users /> : <Navigate to={APP_ROUTES.dashboard} replace />}
             />
             <Route
               path={APP_ROUTES.account}
