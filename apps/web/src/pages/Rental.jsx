@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchCustomers } from '../lib/api';
 import ViewModeToggle from '../components/ViewModeToggle';
 
@@ -45,6 +45,8 @@ const Rental = ({
     setCart,
     onCheckout,
 }) => {
+    const safeInventory = useMemo(() => (Array.isArray(inventory) ? inventory : []), [inventory]);
+    const safeCategories = useMemo(() => (Array.isArray(categories) ? categories : []), [categories]);
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [customer, setCustomer] = useState(INITIAL_CUSTOMER);
@@ -111,6 +113,12 @@ const Rental = ({
 
         window.localStorage.setItem(RENTAL_VIEW_STORAGE_KEY, inventoryViewMode);
     }, [inventoryViewMode]);
+
+    useEffect(() => {
+        if (categoryFilter !== 'all' && !safeCategories.includes(categoryFilter)) {
+            setCategoryFilter('all');
+        }
+    }, [categoryFilter, safeCategories]);
 
     useEffect(() => {
         const keyword = customerSearch.trim();
@@ -181,8 +189,8 @@ const Rental = ({
     }, [cart.length, clearSavedDraft, customer.name, customer.phone, duration, restoreDraftFromStorage]);
 
     const filteredItems = categoryFilter === 'all'
-        ? inventory
-        : inventory.filter((item) => item.category === categoryFilter);
+        ? safeInventory
+        : safeInventory.filter((item) => item.category === categoryFilter);
 
     const clearSavedDraft = useCallback(() => {
         if (typeof window === 'undefined') {
@@ -207,18 +215,18 @@ const Rental = ({
         const draftItems = Array.isArray(draftPayload.items) ? draftPayload.items : [];
         const restoredItems = draftItems
             .map((savedItem) => {
-                const sourceItem = inventory.find((inventoryItem) => inventoryItem.id === savedItem.id);
-                if (!sourceItem || sourceItem.stock < 1) {
+                const inventorySource = safeInventory.find((inventoryItem) => inventoryItem.id === savedItem.id);
+                if (!inventorySource || inventorySource.stock < 1) {
                     return null;
                 }
 
                 const requestedQty = Number.parseInt(savedItem.qty, 10);
                 const safeQty = Number.isFinite(requestedQty)
-                    ? Math.max(1, Math.min(sourceItem.stock, requestedQty))
+                    ? Math.max(1, Math.min(inventorySource.stock, requestedQty))
                     : 1;
 
                 return {
-                    ...sourceItem,
+                    ...inventorySource,
                     qty: safeQty,
                     notes: savedItem.notes || '',
                 };
@@ -229,7 +237,7 @@ const Rental = ({
         setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
         setDuration(Number.isFinite(draftPayload.duration) ? Math.max(1, draftPayload.duration) : 1);
         setCategoryFilter(
-            draftPayload.categoryFilter === 'all' || categories.includes(draftPayload.categoryFilter)
+            draftPayload.categoryFilter === 'all' || safeCategories.includes(draftPayload.categoryFilter)
                 ? draftPayload.categoryFilter
                 : 'all',
         );
@@ -241,7 +249,7 @@ const Rental = ({
         setCart(restoredItems);
 
         return true;
-    }, [categories, inventory, setCart]);
+    }, [safeCategories, safeInventory, setCart]);
 
     useEffect(() => {
         if (typeof window === 'undefined' || hasRestoredDraftRef.current) {
@@ -341,7 +349,7 @@ const Rental = ({
 
     const updateCartQty = (id, delta) => {
         const item = cart.find((c) => c.id === id);
-        const invItem = inventory.find((i) => i.id === id);
+        const invItem = safeInventory.find((i) => i.id === id);
 
         if (!item || !invItem) {
             return;
@@ -872,7 +880,7 @@ const Rental = ({
                                     onChange={(e) => setCategoryFilter(e.target.value)}
                                 >
                                     <option value="all">Semua Kategori</option>
-                                    {categories.map((cat) => (
+                                    {safeCategories.map((cat) => (
                                         <option key={cat} value={cat}>{cat}</option>
                                     ))}
                                 </select>

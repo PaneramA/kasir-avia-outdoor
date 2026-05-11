@@ -68,9 +68,9 @@ function App() {
       fetchRentals(),
     ])
 
-    setInventory(itemsData)
-    setCategories(categoriesData)
-    setRentals(rentalsData)
+    setInventory(Array.isArray(itemsData) ? itemsData : [])
+    setCategories(Array.isArray(categoriesData) ? categoriesData : [])
+    setRentals(Array.isArray(rentalsData) ? rentalsData : [])
   }, [])
 
   const refreshData = useCallback(async () => {
