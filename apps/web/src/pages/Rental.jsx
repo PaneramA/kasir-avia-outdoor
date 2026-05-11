@@ -24,6 +24,15 @@ const MOBILE_FLOW_STEPS = [
 ];
 
 const sanitizeDigits = (value) => value.replace(/\D/g, '');
+const isEditableTarget = (target) => (
+    target instanceof HTMLElement
+    && (
+        target.isContentEditable
+        || target.tagName === 'INPUT'
+        || target.tagName === 'TEXTAREA'
+        || target.tagName === 'SELECT'
+    )
+);
 
 const STOCK_WARNING_MESSAGE = 'Stok item tidak mencukupi.';
 const RENTAL_VIEW_STORAGE_KEY = 'avia_rental_inventory_view_mode';
@@ -65,15 +74,15 @@ const Rental = ({
     const focusTimeoutRef = useRef(null);
     const hasRestoredDraftRef = useRef(false);
 
-    const getActiveLayout = () => {
+    const getActiveLayout = useCallback(() => {
         if (typeof window === 'undefined') {
             return 'desktop';
         }
 
         return window.matchMedia('(min-width: 1024px)').matches ? 'desktop' : 'mobile';
-    };
+    }, []);
 
-    const focusFieldByKey = (fieldKey) => {
+    const focusFieldByKey = useCallback((fieldKey) => {
         const activeLayout = getActiveLayout();
         const scopedFieldSelector = `[data-rental-field="${activeLayout}-${fieldKey}"]`;
         const fallbackFieldSelector = `[data-rental-field="shared-${fieldKey}"]`;
@@ -85,9 +94,9 @@ const Rental = ({
                 field.scrollIntoView({ block: 'center', behavior: 'smooth' });
             }
         }
-    };
+    }, [getActiveLayout]);
 
-    const scheduleFocusField = (fieldKey) => {
+    const scheduleFocusField = useCallback((fieldKey) => {
         if (typeof window === 'undefined') {
             return;
         }
@@ -99,7 +108,7 @@ const Rental = ({
         focusTimeoutRef.current = window.setTimeout(() => {
             focusFieldByKey(fieldKey);
         }, 20);
-    };
+    }, [focusFieldByKey]);
 
     useEffect(() => () => {
         if (typeof window !== 'undefined' && focusTimeoutRef.current) {
@@ -170,6 +179,45 @@ const Rental = ({
         const category = String(item.category || '').toLowerCase();
         return name.includes(normalizedInventorySearch) || category.includes(normalizedInventorySearch);
     });
+
+    useEffect(() => {
+        if (typeof window === 'undefined') {
+            return undefined;
+        }
+
+        const handleInventoryShortcut = (event) => {
+            if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
+                return;
+            }
+
+            if (event.key === '/' && getActiveLayout() === 'desktop' && !isEditableTarget(event.target)) {
+                event.preventDefault();
+                if (mobileStep !== 2) {
+                    setMobileStep(2);
+                }
+                scheduleFocusField('inventorySearch');
+                return;
+            }
+
+            const isSearchField = event.target instanceof HTMLElement
+                && event.target.getAttribute('data-rental-field') === 'shared-inventorySearch';
+
+            if (event.key !== 'Enter' || !isSearchField || !normalizedInventorySearch) {
+                return;
+            }
+
+            const firstAvailableItem = filteredItems.find((item) => item.stock > 0);
+            if (!firstAvailableItem) {
+                return;
+            }
+
+            event.preventDefault();
+            addToCart(firstAvailableItem);
+        };
+
+        window.addEventListener('keydown', handleInventoryShortcut);
+        return () => window.removeEventListener('keydown', handleInventoryShortcut);
+    }, [addToCart, filteredItems, mobileStep, normalizedInventorySearch, scheduleFocusField, getActiveLayout]);
 
     const clearSavedDraft = useCallback(() => {
         if (typeof window === 'undefined') {
@@ -307,7 +355,7 @@ const Rental = ({
         </button>
     );
 
-    const addToCart = (item) => {
+    const addToCart = useCallback((item) => {
         if (item.stock <= 0) return;
 
         const existing = cart.find((c) => c.id === item.id);
@@ -324,7 +372,7 @@ const Rental = ({
             setItemsError('');
             setMobileStepHint('');
         }
-    };
+    }, [cart, setCart]);
 
     const updateCartQty = (id, delta) => {
         const item = cart.find((c) => c.id === id);
@@ -553,11 +601,14 @@ const Rental = ({
             setCustomerSearch('');
             setCustomerSuggestions([]);
             setDuration(1);
+            setInventorySearch('');
+            setCategoryFilter('all');
             setDurationError('');
             setItemsError('');
             setMobileStepHint('');
             setMobileStep(1);
             alert('Transaksi berhasil disimpan!');
+            scheduleFocusField('name');
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Gagal menyimpan transaksi sewa.';
             alert(message);
@@ -845,6 +896,9 @@ const Rental = ({
                                     onChange={(e) => setInventorySearch(e.target.value)}
                                 />
                             </div>
+                            <p className="text-[0.68rem] text-text-muted">
+                                Shortcut desktop: `/` fokus pencarian, `Enter` tambah hasil teratas.
+                            </p>
                             <div className="w-full rounded-lg border border-border bg-sidebar-bg px-4 py-2 sm:w-auto">
                                 <select
                                     className="w-full cursor-pointer border-none bg-transparent text-sm text-text-main outline-none sm:min-w-[180px]"
@@ -1024,7 +1078,7 @@ const Rental = ({
                                 </div>
                             </div>
 
-                            <div className="mt-4 rounded-lg border border-accent/20 bg-accent/10 p-4 sm:p-5">
+                            <div className="mt-4 rounded-lg border border-accent/20 bg-accent/10 p-4 sm:p-5 lg:sticky lg:bottom-0 lg:z-10 lg:backdrop-blur">
                                 <div className="mb-1 flex items-center justify-between gap-3">
                                     <span className="text-text-muted text-[0.9rem]">Total Bayar</span>
                                     <span className="text-text-muted text-[0.7rem] uppercase tracking-tighter">({duration} Hari)</span>
