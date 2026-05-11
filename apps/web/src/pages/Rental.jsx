@@ -48,6 +48,7 @@ const Rental = ({
     const safeInventory = useMemo(() => (Array.isArray(inventory) ? inventory : []), [inventory]);
     const safeCategories = useMemo(() => (Array.isArray(categories) ? categories : []), [categories]);
     const [categoryFilter, setCategoryFilter] = useState('all');
+    const [inventorySearch, setInventorySearch] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [customer, setCustomer] = useState(INITIAL_CUSTOMER);
     const [duration, setDuration] = useState(1);
@@ -155,9 +156,20 @@ const Rental = ({
         return () => clearTimeout(timeoutId);
     }, [customerSearch]);
 
-    const filteredItems = categoryFilter === 'all'
-        ? safeInventory
-        : safeInventory.filter((item) => item.category === categoryFilter);
+    const normalizedInventorySearch = inventorySearch.trim().toLowerCase();
+    const filteredItems = safeInventory.filter((item) => {
+        if (categoryFilter !== 'all' && item.category !== categoryFilter) {
+            return false;
+        }
+
+        if (!normalizedInventorySearch) {
+            return true;
+        }
+
+        const name = String(item.name || '').toLowerCase();
+        const category = String(item.category || '').toLowerCase();
+        return name.includes(normalizedInventorySearch) || category.includes(normalizedInventorySearch);
+    });
 
     const clearSavedDraft = useCallback(() => {
         if (typeof window === 'undefined') {
@@ -822,7 +834,17 @@ const Rental = ({
                 <div className={`${mobileStep === 2 ? 'flex' : 'hidden'} flex-1 flex-col lg:flex lg:min-h-0`}>
                     <div className="mb-5 flex flex-col gap-3 sm:mb-[30px] sm:flex-row sm:items-center sm:justify-between">
                         <h3 className="text-[1.1rem] font-bold text-text-main sm:text-[1.2rem]">Pilih Barang</h3>
-                        <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+                        <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[260px] sm:items-end">
+                            <div className="w-full rounded-lg border border-border bg-sidebar-bg px-4 py-2">
+                                <input
+                                    className="w-full border-none bg-transparent text-sm text-text-main outline-none placeholder:text-text-muted"
+                                    type="text"
+                                    data-rental-field="shared-inventorySearch"
+                                    placeholder="Cari barang atau kategori..."
+                                    value={inventorySearch}
+                                    onChange={(e) => setInventorySearch(e.target.value)}
+                                />
+                            </div>
                             <div className="w-full rounded-lg border border-border bg-sidebar-bg px-4 py-2 sm:w-auto">
                                 <select
                                     className="w-full cursor-pointer border-none bg-transparent text-sm text-text-main outline-none sm:min-w-[180px]"
@@ -847,7 +869,9 @@ const Rental = ({
                     <div className="custom-scrollbar lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-2">
                         {filteredItems.length === 0 ? (
                             <div className="mt-4 rounded-lg border border-border bg-card-bg/40 p-4 text-center text-sm text-text-muted">
-                                Tidak ada barang pada kategori ini.
+                                {normalizedInventorySearch
+                                    ? 'Barang tidak ditemukan. Coba kata kunci lain.'
+                                    : 'Tidak ada barang pada kategori ini.'}
                             </div>
                         ) : inventoryViewMode === 'grid' ? (
                             <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 sm:mt-5 sm:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] sm:gap-5">
