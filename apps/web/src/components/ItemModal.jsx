@@ -1,15 +1,20 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const categoriesRef = useRef(Array.isArray(categories) ? categories : []);
     const getInitialFormData = useCallback(() => (editingItem || {
         name: '',
-        category: categories[0] || '',
+        category: categoriesRef.current[0] || '',
         stock: 1,
         price: '',
         image: '',
-    }), [editingItem, categories]);
+    }), [editingItem]);
     const [formData, setFormData] = useState(() => getInitialFormData());
+
+    useEffect(() => {
+        categoriesRef.current = Array.isArray(categories) ? categories : [];
+    }, [categories]);
 
     useEffect(() => {
         if (!isOpen) {
@@ -18,6 +23,26 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
 
         setFormData(getInitialFormData());
     }, [isOpen, getInitialFormData]);
+
+    useEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+
+        const safeCategories = Array.isArray(categories) ? categories : [];
+
+        setFormData((previous) => {
+            if (safeCategories.length === 0) {
+                return previous.category ? { ...previous, category: '' } : previous;
+            }
+
+            if (previous.category && safeCategories.includes(previous.category)) {
+                return previous;
+            }
+
+            return { ...previous, category: safeCategories[0] };
+        });
+    }, [categories, isOpen]);
 
     const handleInputChange = (e) => {
         const { id, value } = e.target;
@@ -76,6 +101,8 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
 
     if (!isOpen) return null;
 
+    const safeCategories = Array.isArray(categories) ? categories : [];
+
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-3 backdrop-blur-[5px] sm:p-4">
             <div className="max-h-[92vh] w-full max-w-[500px] overflow-hidden rounded-DEFAULT border border-border bg-sidebar-bg animate-[modalIn_0.3s_ease-out]">
@@ -106,7 +133,7 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
                                     value={formData.category}
                                     onChange={handleInputChange}
                                 >
-                                    {categories.map((cat) => (
+                                    {safeCategories.map((cat) => (
                                         <option key={cat} value={cat}>
                                             {cat}
                                         </option>
