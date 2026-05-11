@@ -147,6 +147,39 @@ const Rental = ({
         return () => clearTimeout(timeoutId);
     }, [customerSearch]);
 
+    useEffect(() => {
+        if (typeof window === 'undefined' || hasRestoredDraftRef.current) {
+            return;
+        }
+
+        hasRestoredDraftRef.current = true;
+
+        try {
+            const rawDraft = window.localStorage.getItem(RENTAL_DRAFT_STORAGE_KEY);
+            if (!rawDraft) {
+                return;
+            }
+
+            const parsedDraft = JSON.parse(rawDraft);
+            const hasExistingInput = cart.length > 0 || customer.name.trim() || customer.phone.trim() || duration !== 1;
+            if (hasExistingInput) {
+                return;
+            }
+
+            const shouldRestore = window.confirm('Ditemukan draft transaksi sewa. Muat draft dan lanjutkan?');
+            if (!shouldRestore) {
+                return;
+            }
+
+            const didRestore = restoreDraftFromStorage(parsedDraft);
+            if (!didRestore) {
+                clearSavedDraft();
+            }
+        } catch {
+            clearSavedDraft();
+        }
+    }, [cart.length, clearSavedDraft, customer.name, customer.phone, duration, restoreDraftFromStorage]);
+
     const filteredItems = categoryFilter === 'all'
         ? inventory
         : inventory.filter((item) => item.category === categoryFilter);
@@ -544,6 +577,22 @@ const Rental = ({
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    const handleSaveDraftManually = () => {
+        saveDraftToStorage();
+        resetRentalFormState({ clearCart: true });
+        alert('Draft transaksi berhasil disimpan.');
+    };
+
+    const handleDiscardRentalInput = () => {
+        const shouldDiscard = window.confirm('Batalkan seluruh input transaksi sewa ini?');
+        if (!shouldDiscard) {
+            return;
+        }
+
+        clearSavedDraft();
+        resetRentalFormState({ clearCart: true });
     };
 
     const handlePickCustomer = (pickedCustomer) => {
