@@ -183,6 +183,137 @@ const Rental = ({
         ? inventory
         : inventory.filter((item) => item.category === categoryFilter);
 
+    const clearSavedDraft = useCallback(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        window.localStorage.removeItem(RENTAL_DRAFT_STORAGE_KEY);
+    }, []);
+
+    const resetRentalFormState = useCallback(({ clearCart = true } = {}) => {
+        setCustomer(INITIAL_CUSTOMER);
+        setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
+        setCustomerSearch('');
+        setCustomerSuggestions([]);
+        setDuration(1);
+        setDurationError('');
+        setItemsError('');
+        setMobileStepHint('');
+        setMobileStep(1);
+        setCategoryFilter('all');
+
+        if (clearCart) {
+            setCart([]);
+        }
+    }, [setCart]);
+
+    const saveDraftToStorage = useCallback(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+
+        const draftPayload = {
+            customer,
+            duration,
+            categoryFilter,
+            mobileStep,
+            inventoryViewMode,
+            items: cart.map((item) => ({
+                id: item.id,
+                qty: item.qty,
+                notes: item.notes || '',
+            })),
+            savedAt: new Date().toISOString(),
+        };
+
+        window.localStorage.setItem(RENTAL_DRAFT_STORAGE_KEY, JSON.stringify(draftPayload));
+    }, [cart, categoryFilter, customer, duration, inventoryViewMode, mobileStep]);
+
+    const restoreDraftFromStorage = useCallback((draftPayload) => {
+        if (!draftPayload || typeof draftPayload !== 'object') {
+            return false;
+        }
+
+        const normalizedCustomer = {
+            ...INITIAL_CUSTOMER,
+            ...(draftPayload.customer || {}),
+            phone: sanitizeDigits(draftPayload?.customer?.phone || ''),
+            idNumber: sanitizeDigits(draftPayload?.customer?.idNumber || ''),
+        };
+
+        const draftItems = Array.isArray(draftPayload.items) ? draftPayload.items : [];
+        const restoredItems = draftItems
+            .map((savedItem) => {
+                const sourceItem = inventory.find((inventoryItem) => inventoryItem.id === savedItem.id);
+                if (!sourceItem || sourceItem.stock < 1) {
+                    return null;
+                }
+
+                const requestedQty = Number.parseInt(savedItem.qty, 10);
+                const safeQty = Number.isFinite(requestedQty)
+                    ? Math.max(1, Math.min(sourceItem.stock, requestedQty))
+                    : 1;
+
+                return {
+                    ...sourceItem,
+                    qty: safeQty,
+                    notes: savedItem.notes || '',
+                };
+            })
+            .filter(Boolean);
+
+        setCustomer(normalizedCustomer);
+        setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
+        setDuration(Number.isFinite(draftPayload.duration) ? Math.max(1, draftPayload.duration) : 1);
+        setCategoryFilter(
+            draftPayload.categoryFilter === 'all' || categories.includes(draftPayload.categoryFilter)
+                ? draftPayload.categoryFilter
+                : 'all',
+        );
+        setMobileStep(Number.isFinite(draftPayload.mobileStep) ? Math.min(3, Math.max(1, draftPayload.mobileStep)) : 1);
+        setInventoryViewMode(draftPayload.inventoryViewMode === 'list' ? 'list' : 'grid');
+        setItemsError('');
+        setDurationError('');
+        setMobileStepHint('Draft berhasil dimuat. Lanjutkan proses sewa.');
+        setCart(restoredItems);
+
+        return true;
+    }, [categories, inventory, setCart]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || hasRestoredDraftRef.current) {
+            return;
+        }
+
+        hasRestoredDraftRef.current = true;
+
+        try {
+            const rawDraft = window.localStorage.getItem(RENTAL_DRAFT_STORAGE_KEY);
+            if (!rawDraft) {
+                return;
+            }
+
+            const parsedDraft = JSON.parse(rawDraft);
+            const hasExistingInput = cart.length > 0 || customer.name.trim() || customer.phone.trim() || duration !== 1;
+            if (hasExistingInput) {
+                return;
+            }
+
+            const shouldRestore = window.confirm('Ditemukan draft transaksi sewa. Muat draft dan lanjutkan?');
+            if (!shouldRestore) {
+                return;
+            }
+
+            const didRestore = restoreDraftFromStorage(parsedDraft);
+            if (!didRestore) {
+                clearSavedDraft();
+            }
+        } catch {
+            clearSavedDraft();
+        }
+    }, [cart.length, clearSavedDraft, customer.name, customer.phone, duration, restoreDraftFromStorage]);
+
     const renderInventoryGridItem = (item) => (
         <div
             key={item.id}
