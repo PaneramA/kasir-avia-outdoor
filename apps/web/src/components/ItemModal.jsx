@@ -1,16 +1,17 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [modalCategories, setModalCategories] = useState([]);
     const categoriesRef = useRef(Array.isArray(categories) ? categories : []);
-    const getInitialFormData = useCallback(() => (editingItem || {
+    const fileInputRef = useRef(null);
+    const [formData, setFormData] = useState({
         name: '',
-        category: categoriesRef.current[0] || '',
+        category: '',
         stock: 1,
         price: '',
         image: '',
-    }), [editingItem]);
-    const [formData, setFormData] = useState(() => getInitialFormData());
+    });
 
     useEffect(() => {
         categoriesRef.current = Array.isArray(categories) ? categories : [];
@@ -21,28 +22,16 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
             return;
         }
 
-        setFormData(getInitialFormData());
-    }, [isOpen, getInitialFormData]);
-
-    useEffect(() => {
-        if (!isOpen) {
-            return;
-        }
-
-        const safeCategories = Array.isArray(categories) ? categories : [];
-
-        setFormData((previous) => {
-            if (safeCategories.length === 0) {
-                return previous.category ? { ...previous, category: '' } : previous;
-            }
-
-            if (previous.category && safeCategories.includes(previous.category)) {
-                return previous;
-            }
-
-            return { ...previous, category: safeCategories[0] };
+        const snapshotCategories = categoriesRef.current;
+        setModalCategories(snapshotCategories);
+        setFormData(editingItem || {
+            name: '',
+            category: snapshotCategories[0] || '',
+            stock: 1,
+            price: '',
+            image: '',
         });
-    }, [categories, isOpen]);
+    }, [isOpen, editingItem]);
 
     const handleInputChange = (e) => {
         const { id, value } = e.target;
@@ -55,10 +44,18 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
         if (file) {
             const reader = new FileReader();
             reader.onload = (event) => {
-                setFormData((prev) => ({ ...prev, image: event.target.result }));
+                const imageData = typeof event.target?.result === 'string' ? event.target.result : '';
+                if (!imageData) {
+                    return;
+                }
+
+                setFormData((prev) => ({ ...prev, image: imageData }));
             };
             reader.readAsDataURL(file);
         }
+
+        // Allow selecting the same file again without requiring a different file first.
+        e.target.value = '';
     };
 
     const handleSubmit = async (e) => {
@@ -101,7 +98,7 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
 
     if (!isOpen) return null;
 
-    const safeCategories = Array.isArray(categories) ? categories : [];
+    const safeCategories = modalCategories;
 
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-3 backdrop-blur-[5px] sm:p-4">
@@ -168,7 +165,7 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
                         </div>
                         <div className="mb-5">
                             <label className="block mb-2 text-[0.9rem] text-text-muted">Gambar Barang</label>
-                            <div className="cursor-pointer rounded-DEFAULT border-2 border-dashed border-border p-5 text-center transition hover:border-accent hover:bg-accent/5 sm:p-[30px]" onClick={() => document.getElementById('item-image-input').click()}>
+                            <div className="cursor-pointer rounded-DEFAULT border-2 border-dashed border-border p-5 text-center transition hover:border-accent hover:bg-accent/5 sm:p-[30px]" onClick={() => fileInputRef.current?.click()}>
                                 {formData.image ? (
                                     <>
                                         <img src={formData.image} alt="Preview" className="mt-[10px] max-h-[150px] w-full object-cover rounded-lg block" />
@@ -184,9 +181,9 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
                                 )}
                                 <input
                                     type="file"
-                                    id="item-image-input"
                                     className="hidden"
                                     accept="image/*"
+                                    ref={fileInputRef}
                                     onChange={handleImageUpload}
                                 />
                             </div>
