@@ -28,7 +28,6 @@ const sanitizeDigits = (value) => value.replace(/\D/g, '');
 
 const STOCK_WARNING_MESSAGE = 'Stok item tidak mencukupi.';
 const RENTAL_VIEW_STORAGE_KEY = 'avia_rental_inventory_view_mode';
-const RENTAL_DRAFT_STORAGE_KEY = 'avia_rental_draft_v1';
 
 const getInitialRentalInventoryView = () => {
     if (typeof window === 'undefined') {
@@ -61,8 +60,6 @@ const Rental = ({
     const [inventoryViewMode, setInventoryViewMode] = useState(getInitialRentalInventoryView);
     const latestSearchRequestRef = useRef(0);
     const focusTimeoutRef = useRef(null);
-    const hasRestoredDraftRef = useRef(false);
-    const bypassNavigationGuardRef = useRef(false);
 
     const getActiveLayout = () => {
         if (typeof window === 'undefined') {
@@ -186,104 +183,6 @@ const Rental = ({
         ? inventory
         : inventory.filter((item) => item.category === categoryFilter);
 
-    const clearSavedDraft = useCallback(() => {
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        window.localStorage.removeItem(RENTAL_DRAFT_STORAGE_KEY);
-    }, []);
-
-    const resetRentalFormState = useCallback(({ clearCart = true } = {}) => {
-        setCustomer(INITIAL_CUSTOMER);
-        setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
-        setCustomerSearch('');
-        setCustomerSuggestions([]);
-        setDuration(1);
-        setDurationError('');
-        setItemsError('');
-        setMobileStepHint('');
-        setMobileStep(1);
-        setCategoryFilter('all');
-
-        if (clearCart) {
-            setCart([]);
-        }
-    }, [setCart]);
-
-    const saveDraftToStorage = useCallback(() => {
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        const draftPayload = {
-            customer,
-            duration,
-            categoryFilter,
-            mobileStep,
-            inventoryViewMode,
-            items: cart.map((item) => ({
-                id: item.id,
-                qty: item.qty,
-                notes: item.notes || '',
-            })),
-            savedAt: new Date().toISOString(),
-        };
-
-        window.localStorage.setItem(RENTAL_DRAFT_STORAGE_KEY, JSON.stringify(draftPayload));
-    }, [cart, categoryFilter, customer, duration, inventoryViewMode, mobileStep]);
-
-    const restoreDraftFromStorage = useCallback((draftPayload) => {
-        if (!draftPayload || typeof draftPayload !== 'object') {
-            return false;
-        }
-
-        const normalizedCustomer = {
-            ...INITIAL_CUSTOMER,
-            ...(draftPayload.customer || {}),
-            phone: sanitizeDigits(draftPayload?.customer?.phone || ''),
-            idNumber: sanitizeDigits(draftPayload?.customer?.idNumber || ''),
-        };
-
-        const draftItems = Array.isArray(draftPayload.items) ? draftPayload.items : [];
-        const restoredItems = draftItems
-            .map((savedItem) => {
-                const sourceItem = inventory.find((inventoryItem) => inventoryItem.id === savedItem.id);
-                if (!sourceItem || sourceItem.stock < 1) {
-                    return null;
-                }
-
-                const requestedQty = Number.parseInt(savedItem.qty, 10);
-                const safeQty = Number.isFinite(requestedQty)
-                    ? Math.max(1, Math.min(sourceItem.stock, requestedQty))
-                    : 1;
-
-                return {
-                    ...sourceItem,
-                    qty: safeQty,
-                    notes: savedItem.notes || '',
-                };
-            })
-            .filter(Boolean);
-
-        setCustomer(normalizedCustomer);
-        setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
-        setDuration(Number.isFinite(draftPayload.duration) ? Math.max(1, draftPayload.duration) : 1);
-        setCategoryFilter(
-            draftPayload.categoryFilter === 'all' || categories.includes(draftPayload.categoryFilter)
-                ? draftPayload.categoryFilter
-                : 'all',
-        );
-        setMobileStep(Number.isFinite(draftPayload.mobileStep) ? Math.min(3, Math.max(1, draftPayload.mobileStep)) : 1);
-        setInventoryViewMode(draftPayload.inventoryViewMode === 'list' ? 'list' : 'grid');
-        setItemsError('');
-        setDurationError('');
-        setMobileStepHint('Draft berhasil dimuat. Lanjutkan proses sewa.');
-        setCart(restoredItems);
-
-        return true;
-    }, [categories, inventory, setCart]);
-
     const renderInventoryGridItem = (item) => (
         <div
             key={item.id}
@@ -378,64 +277,12 @@ const Rental = ({
 
     const calculateTotal = () => cart.reduce((sum, item) => sum + (item.price * item.qty * duration), 0);
     const cartQuantity = cart.reduce((sum, item) => sum + item.qty, 0);
-    const hasCustomerInput = Boolean(
-        customer.name.trim()
-        || customer.phone.trim()
-        || customer.address.trim()
-        || customer.idNumber.trim()
-        || customer.guaranteeOther.trim(),
-    );
-    const hasUnsavedRentalInput = hasCustomerInput || cart.length > 0 || duration !== 1;
     const isCustomerStepComplete = Boolean(
         customer.name.trim()
         && customer.phone.trim()
         && (customer.guarantee !== 'Lainnya' || customer.guaranteeOther.trim()),
     );
     const isItemsStepComplete = cart.length > 0;
-
-    const shouldBlockNavigation = useCallback(({ currentLocation, nextLocation }) => (
-        hasUnsavedRentalInput
-        && !bypassNavigationGuardRef.current
-        && currentLocation.pathname !== nextLocation.pathname
-    ), [hasUnsavedRentalInput]);
-
-    const blocker = useBlocker(shouldBlockNavigation);
-
-    useEffect(() => {
-        if (blocker.state !== 'blocked') {
-            return;
-        }
-
-        const wantsSaveDraft = window.confirm('Anda sedang mengisi transaksi sewa.\n\nKlik OK untuk simpan sebagai draft lalu keluar.\nKlik Cancel untuk melihat opsi lainnya.');
-        if (wantsSaveDraft) {
-            saveDraftToStorage();
-            resetRentalFormState({ clearCart: true });
-            bypassNavigationGuardRef.current = true;
-            blocker.proceed();
-            return;
-        }
-
-        const wantsDiscard = window.confirm('Batalkan input transaksi sewa dan keluar halaman?\n\nKlik OK untuk batalkan input.\nKlik Cancel untuk tetap di halaman ini.');
-        if (wantsDiscard) {
-            clearSavedDraft();
-            resetRentalFormState({ clearCart: true });
-            bypassNavigationGuardRef.current = true;
-            blocker.proceed();
-            return;
-        }
-
-        blocker.reset();
-    }, [blocker, clearSavedDraft, resetRentalFormState, saveDraftToStorage]);
-
-    useBeforeUnload(useCallback((event) => {
-        if (!hasUnsavedRentalInput) {
-            return;
-        }
-
-        saveDraftToStorage();
-        event.preventDefault();
-        event.returnValue = '';
-    }, [hasUnsavedRentalInput, saveDraftToStorage]));
 
     const validateCustomerStep = ({ focusOnError = false } = {}) => {
         const nextErrors = {
@@ -620,8 +467,16 @@ const Rental = ({
         try {
             setIsSubmitting(true);
             await onCheckout(payload);
-            clearSavedDraft();
-            resetRentalFormState({ clearCart: true });
+            setCart([]);
+            setCustomer(INITIAL_CUSTOMER);
+            setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
+            setCustomerSearch('');
+            setCustomerSuggestions([]);
+            setDuration(1);
+            setDurationError('');
+            setItemsError('');
+            setMobileStepHint('');
+            setMobileStep(1);
             alert('Transaksi berhasil disimpan!');
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Gagal menyimpan transaksi sewa.';
@@ -968,22 +823,6 @@ const Rental = ({
                                     >
                                         Lanjut ke Pilih Barang
                                     </button>
-                                    <div className="mt-3 grid grid-cols-2 gap-2">
-                                        <button
-                                            type="button"
-                                            className="w-full rounded-lg border border-border py-2 text-xs font-semibold text-text-main transition hover:border-accent"
-                                            onClick={handleSaveDraftManually}
-                                        >
-                                            Simpan Draft
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className="w-full rounded-lg border border-[#e74c3c]/50 py-2 text-xs font-semibold text-[#e74c3c] transition hover:bg-[#e74c3c]/10"
-                                            onClick={handleDiscardRentalInput}
-                                        >
-                                            Batalkan Input
-                                        </button>
-                                    </div>
                                 </>
                             )}
 
@@ -1123,22 +962,6 @@ const Rental = ({
                                 >
                                     <i className="fas fa-shopping-cart group-hover:animate-bounce"></i> {isSubmitting ? 'Menyimpan...' : 'Konfirmasi Sewa'}
                                 </button>
-                                <div className="mt-3 grid grid-cols-2 gap-2">
-                                    <button
-                                        type="button"
-                                        className="w-full rounded-lg border border-border py-2 text-xs font-semibold text-text-main transition hover:border-accent"
-                                        onClick={handleSaveDraftManually}
-                                    >
-                                        Simpan Draft
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="w-full rounded-lg border border-[#e74c3c]/50 py-2 text-xs font-semibold text-[#e74c3c] transition hover:bg-[#e74c3c]/10"
-                                        onClick={handleDiscardRentalInput}
-                                    >
-                                        Batalkan Input
-                                    </button>
-                                </div>
                             </div>
                         </div>
                     </div>
