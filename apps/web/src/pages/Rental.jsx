@@ -180,45 +180,6 @@ const Rental = ({
         return name.includes(normalizedInventorySearch) || category.includes(normalizedInventorySearch);
     });
 
-    useEffect(() => {
-        if (typeof window === 'undefined') {
-            return undefined;
-        }
-
-        const handleInventoryShortcut = (event) => {
-            if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) {
-                return;
-            }
-
-            if (event.key === '/' && getActiveLayout() === 'desktop' && !isEditableTarget(event.target)) {
-                event.preventDefault();
-                if (mobileStep !== 2) {
-                    setMobileStep(2);
-                }
-                scheduleFocusField('inventorySearch');
-                return;
-            }
-
-            const isSearchField = event.target instanceof HTMLElement
-                && event.target.getAttribute('data-rental-field') === 'shared-inventorySearch';
-
-            if (event.key !== 'Enter' || !isSearchField || !normalizedInventorySearch) {
-                return;
-            }
-
-            const firstAvailableItem = filteredItems.find((item) => item.stock > 0);
-            if (!firstAvailableItem) {
-                return;
-            }
-
-            event.preventDefault();
-            addToCart(firstAvailableItem);
-        };
-
-        window.addEventListener('keydown', handleInventoryShortcut);
-        return () => window.removeEventListener('keydown', handleInventoryShortcut);
-    }, [addToCart, filteredItems, mobileStep, normalizedInventorySearch, scheduleFocusField, getActiveLayout]);
-
     const clearSavedDraft = useCallback(() => {
         if (typeof window === 'undefined') {
             return;
