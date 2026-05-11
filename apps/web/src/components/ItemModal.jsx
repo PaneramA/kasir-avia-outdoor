@@ -18,6 +18,10 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
     }, [categories]);
 
     useEffect(() => {
+        categoriesRef.current = Array.isArray(categories) ? categories : [];
+    }, [categories]);
+
+    useEffect(() => {
         if (!isOpen) {
             return;
         }
@@ -32,6 +36,26 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
             image: '',
         });
     }, [isOpen, editingItem]);
+
+    useEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+
+        const safeCategories = Array.isArray(categories) ? categories : [];
+
+        setFormData((previous) => {
+            if (safeCategories.length === 0) {
+                return previous.category ? { ...previous, category: '' } : previous;
+            }
+
+            if (previous.category && safeCategories.includes(previous.category)) {
+                return previous;
+            }
+
+            return { ...previous, category: safeCategories[0] };
+        });
+    }, [categories, isOpen]);
 
     const handleInputChange = (e) => {
         const { id, value } = e.target;
