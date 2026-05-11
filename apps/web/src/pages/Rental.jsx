@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useBeforeUnload, useBlocker } from 'react-router-dom';
 import { fetchCustomers } from '../lib/api';
 import ViewModeToggle from '../components/ViewModeToggle';
 
@@ -28,6 +27,7 @@ const sanitizeDigits = (value) => value.replace(/\D/g, '');
 
 const STOCK_WARNING_MESSAGE = 'Stok item tidak mencukupi.';
 const RENTAL_VIEW_STORAGE_KEY = 'avia_rental_inventory_view_mode';
+const RENTAL_DRAFT_STORAGE_KEY = 'avia_rental_draft_v1';
 
 const getInitialRentalInventoryView = () => {
     if (typeof window === 'undefined') {
@@ -60,6 +60,7 @@ const Rental = ({
     const [inventoryViewMode, setInventoryViewMode] = useState(getInitialRentalInventoryView);
     const latestSearchRequestRef = useRef(0);
     const focusTimeoutRef = useRef(null);
+    const hasRestoredDraftRef = useRef(false);
 
     const getActiveLayout = () => {
         if (typeof window === 'undefined') {
@@ -190,45 +191,6 @@ const Rental = ({
 
         window.localStorage.removeItem(RENTAL_DRAFT_STORAGE_KEY);
     }, []);
-
-    const resetRentalFormState = useCallback(({ clearCart = true } = {}) => {
-        setCustomer(INITIAL_CUSTOMER);
-        setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
-        setCustomerSearch('');
-        setCustomerSuggestions([]);
-        setDuration(1);
-        setDurationError('');
-        setItemsError('');
-        setMobileStepHint('');
-        setMobileStep(1);
-        setCategoryFilter('all');
-
-        if (clearCart) {
-            setCart([]);
-        }
-    }, [setCart]);
-
-    const saveDraftToStorage = useCallback(() => {
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        const draftPayload = {
-            customer,
-            duration,
-            categoryFilter,
-            mobileStep,
-            inventoryViewMode,
-            items: cart.map((item) => ({
-                id: item.id,
-                qty: item.qty,
-                notes: item.notes || '',
-            })),
-            savedAt: new Date().toISOString(),
-        };
-
-        window.localStorage.setItem(RENTAL_DRAFT_STORAGE_KEY, JSON.stringify(draftPayload));
-    }, [cart, categoryFilter, customer, duration, inventoryViewMode, mobileStep]);
 
     const restoreDraftFromStorage = useCallback((draftPayload) => {
         if (!draftPayload || typeof draftPayload !== 'object') {
