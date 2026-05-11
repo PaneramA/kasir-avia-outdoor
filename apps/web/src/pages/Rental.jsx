@@ -311,6 +311,25 @@ const Rental = ({
         }
     }, [cart.length, clearSavedDraft, customer.name, customer.phone, duration, restoreDraftFromStorage]);
 
+    const addToCart = useCallback((item) => {
+        if (item.stock <= 0) return;
+
+        const existing = cart.find((c) => c.id === item.id);
+        if (existing) {
+            if (existing.qty < item.stock) {
+                setCart(cart.map((c) => (c.id === item.id ? { ...c, qty: c.qty + 1 } : c)));
+                setItemsError('');
+                setMobileStepHint('');
+            } else {
+                alert(STOCK_WARNING_MESSAGE);
+            }
+        } else {
+            setCart([...cart, { ...item, qty: 1, notes: '' }]);
+            setItemsError('');
+            setMobileStepHint('');
+        }
+    }, [cart, setCart]);
+
     const renderInventoryGridItem = (item) => (
         <div
             key={item.id}
@@ -354,25 +373,6 @@ const Rental = ({
             </div>
         </button>
     );
-
-    const addToCart = useCallback((item) => {
-        if (item.stock <= 0) return;
-
-        const existing = cart.find((c) => c.id === item.id);
-        if (existing) {
-            if (existing.qty < item.stock) {
-                setCart(cart.map((c) => (c.id === item.id ? { ...c, qty: c.qty + 1 } : c)));
-                setItemsError('');
-                setMobileStepHint('');
-            } else {
-                alert(STOCK_WARNING_MESSAGE);
-            }
-        } else {
-            setCart([...cart, { ...item, qty: 1, notes: '' }]);
-            setItemsError('');
-            setMobileStepHint('');
-        }
-    }, [cart, setCart]);
 
     useEffect(() => {
         if (typeof window === 'undefined') {
