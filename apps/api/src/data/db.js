@@ -2212,7 +2212,10 @@ export async function processReturn(payload, context) {
   const result = await prisma.$transaction(async (tx) => {
     const rental = await tx.rental.findUnique({
       where: { id: rentalId },
-      include: { items: true },
+      include: {
+        items: true,
+        returnRecord: true,
+      },
     });
 
     if (!rental) {
@@ -2223,7 +2226,7 @@ export async function processReturn(payload, context) {
       throw new Error('Forbidden');
     }
 
-    if (context?.branchId && rental.branchId && rental.branchId !== context.branchId) {
+    if (context?.branchId && rental.branchId !== context.branchId) {
       throw new Error('Forbidden');
     }
 
@@ -2232,7 +2235,61 @@ export async function processReturn(payload, context) {
     }
 
     if (isReturnedRentalStatus(rental.status)) {
-      throw new Error('Rental already returned');
+      if (rental.returnRecord) {
+        return {
+          rental: toRentalDto(rental),
+          returnRecord: toReturnDto(rental.returnRecord),
+        };
+      }
+
+      const synthesizedReturnDate = rental.returnDate || rental.updatedAt || new Date();
+      const synthesizedAdditionalFee = Number(rental.additionalFee || 0);
+      const synthesizedFinalTotal = Number(
+        rental.finalTotal == null ? rental.total + synthesizedAdditionalFee : rental.finalTotal,
+      );
+      const synthesizedRecord = await tx.returnRecord.create({
+        data: {
+          id: createId('RT'),
+          rentalId: rental.id,
+          customerName: rental.customerName,
+          customerPhone: rental.customerPhone,
+          tenantId: rental.tenantId,
+          branchId: rental.branchId,
+          itemsJson: rental.items,
+          returnDate: synthesizedReturnDate,
+          returnNotes: rental.returnNotes || '',
+          additionalFee: synthesizedAdditionalFee,
+          finalTotal: synthesizedFinalTotal,
+        },
+      });
+
+      return {
+        rental: toRentalDto(rental),
+        returnRecord: toReturnDto(synthesizedRecord),
+      };
+    }
+
+    // Legacy data guard: return record exists but status is still active.
+    if (rental.returnRecord) {
+      const alignedRental = await tx.rental.update({
+        where: { id: rental.id },
+        data: {
+          status: 'Returned',
+          returnDate: rental.returnRecord.returnDate,
+          returnNotes: rental.returnRecord.returnNotes || '',
+          additionalFee: rental.returnRecord.additionalFee,
+          finalTotal: rental.returnRecord.finalTotal,
+        },
+        include: {
+          items: true,
+          returnRecord: true,
+        },
+      });
+
+      return {
+        rental: toRentalDto(alignedRental),
+        returnRecord: toReturnDto(alignedRental.returnRecord),
+      };
     }
 
     const returnDate = new Date();
