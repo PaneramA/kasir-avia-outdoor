@@ -3,7 +3,26 @@ import { hashPassword, verifyPassword } from '../auth/password.js';
 
 const DEFAULT_CATEGORIES = ['Tenda', 'Carrier', 'Alat Masak', 'Lainnya'];
 const USER_ROLES = new Set(['admin', 'superuser', 'kasir']);
+const TENANT_MEMBERSHIP_ROLES = new Set(['owner', 'admin', 'kasir']);
+const TENANT_MEMBERSHIP_STATUSES = new Set(['active', 'inactive']);
+const BRANCH_ACCESS_ROLES = new Set(['admin', 'kasir']);
+const TENANT_STATUSES = new Set(['active', 'suspended']);
 const RETURNED_RENTAL_STATUSES = new Set(['returned', 'selesai', 'completed', 'done']);
+const DEFAULT_TENANT_SLUG = 'default-avia';
+const DEFAULT_TENANT_NAME = 'AviaOutdoor';
+const DEFAULT_BRANCH_CODE = 'pusat';
+const DEFAULT_BRANCH_NAME = 'Toko Pusat';
+const DEFAULT_TENANT_SETTINGS = {
+  storeName: 'AviaOutdoor',
+  addressLines: ['Jl. Contoh Alamat No. 123', 'Bandung, Jawa Barat'],
+  phone: '0812-0000-0000',
+  legalFooterLines: [
+    'Barang yang sudah disewa menjadi tanggung jawab penyewa.',
+    'Keterlambatan pengembalian dapat dikenakan biaya tambahan.',
+  ],
+  timezone: 'Asia/Jakarta',
+  currency: 'IDR',
+};
 
 function createId(prefix) {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -11,6 +30,19 @@ function createId(prefix) {
 
 function normalizeRole(rawRole) {
   return String(rawRole || '').trim().toLowerCase();
+}
+
+function slugifyTenant(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+function isSuperuserRole(rawRole) {
+  return normalizeRole(rawRole) === 'superuser';
 }
 
 function normalizeRentalStatus(rawStatus) {
@@ -101,19 +133,142 @@ function toCustomerDto(customer) {
   };
 }
 
+function normalizeLines(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((line) => String(line || '').trim())
+    .filter(Boolean);
+}
+
+function toTenantSettingsDto(settings) {
+  return {
+    tenantId: settings.tenantId,
+    storeName: settings.storeName,
+    addressLines: normalizeLines(settings.addressLines),
+    phone: settings.phone || '',
+    legalFooterLines: normalizeLines(settings.legalFooterLines),
+    timezone: settings.timezone || DEFAULT_TENANT_SETTINGS.timezone,
+    currency: settings.currency || DEFAULT_TENANT_SETTINGS.currency,
+    createdAt: settings.createdAt.toISOString(),
+    updatedAt: settings.updatedAt.toISOString(),
+  };
+}
+
+function toBranchSettingsDto(settings) {
+  return {
+    branchId: settings.branchId,
+    storeName: settings.storeName || '',
+    addressLines: normalizeLines(settings.addressLines),
+    phone: settings.phone || '',
+    legalFooterLines: normalizeLines(settings.legalFooterLines),
+    createdAt: settings.createdAt.toISOString(),
+    updatedAt: settings.updatedAt.toISOString(),
+  };
+}
+
+function toBranchDto(branch) {
+  return {
+    id: branch.id,
+    tenantId: branch.tenantId,
+    code: branch.code,
+    name: branch.name,
+    status: branch.status,
+    createdAt: branch.createdAt.toISOString(),
+    updatedAt: branch.updatedAt.toISOString(),
+  };
+}
+
+function toTenantMembershipDto(membership) {
+  return {
+    id: membership.id,
+    userId: membership.userId,
+    tenantId: membership.tenantId,
+    username: membership.user?.username || '',
+    role: membership.role,
+    status: membership.status,
+    createdAt: membership.createdAt.toISOString(),
+    updatedAt: membership.updatedAt.toISOString(),
+  };
+}
+
+function toTenantDto(tenant) {
+  return {
+    id: tenant.id,
+    slug: tenant.slug,
+    name: tenant.name,
+    status: tenant.status,
+    createdAt: tenant.createdAt.toISOString(),
+    updatedAt: tenant.updatedAt.toISOString(),
+  };
+}
+
+function toBranchAccessDto(access) {
+  return {
+    id: access.id,
+    userId: access.userId,
+    username: access.user?.username || '',
+    branchId: access.branchId,
+    branchCode: access.branch?.code || '',
+    branchName: access.branch?.name || '',
+    role: access.role,
+    createdAt: access.createdAt.toISOString(),
+  };
+}
+
+async function ensureDefaultTenantAndBranch(tx) {
+  const tenant = await tx.tenant.upsert({
+    where: { slug: DEFAULT_TENANT_SLUG },
+    update: {},
+    create: {
+      slug: DEFAULT_TENANT_SLUG,
+      name: DEFAULT_TENANT_NAME,
+      status: 'active',
+    },
+  });
+
+  await tx.branch.upsert({
+    where: {
+      tenantId_code: {
+        tenantId: tenant.id,
+        code: DEFAULT_BRANCH_CODE,
+      },
+    },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      code: DEFAULT_BRANCH_CODE,
+      name: DEFAULT_BRANCH_NAME,
+      status: 'active',
+    },
+  });
+
+  await tx.tenantSettings.upsert({
+    where: { tenantId: tenant.id },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      storeName: DEFAULT_TENANT_SETTINGS.storeName,
+      addressLines: DEFAULT_TENANT_SETTINGS.addressLines,
+      phone: DEFAULT_TENANT_SETTINGS.phone,
+      legalFooterLines: DEFAULT_TENANT_SETTINGS.legalFooterLines,
+      timezone: DEFAULT_TENANT_SETTINGS.timezone,
+      currency: DEFAULT_TENANT_SETTINGS.currency,
+    },
+  });
+
+  return tenant;
+}
+
 export async function initDatabase(env) {
   await prisma.$connect();
 
   await prisma.$transaction(async (tx) => {
-    for (const categoryName of DEFAULT_CATEGORIES) {
-      await tx.category.upsert({
-        where: { name: categoryName },
-        update: {},
-        create: { name: categoryName },
-      });
-    }
+    const defaultTenant = await ensureDefaultTenantAndBranch(tx);
 
-    await tx.user.upsert({
+    const adminUser = await tx.user.upsert({
       where: { username: env.adminUsername },
       update: {
         role: 'admin',
@@ -124,30 +279,67 @@ export async function initDatabase(env) {
         role: 'admin',
       },
     });
+
+    await tx.userMembership.upsert({
+      where: {
+        userId_tenantId: {
+          userId: adminUser.id,
+          tenantId: defaultTenant.id,
+        },
+      },
+      update: {
+        role: 'owner',
+        status: 'active',
+      },
+      create: {
+        userId: adminUser.id,
+        tenantId: defaultTenant.id,
+        role: 'owner',
+        status: 'active',
+      },
+    });
+
+    for (const categoryName of DEFAULT_CATEGORIES) {
+      await tx.category.upsert({
+        where: {
+          tenantId_name: {
+            tenantId: defaultTenant.id,
+            name: categoryName,
+          },
+        },
+        update: {},
+        create: {
+          name: categoryName,
+          tenantId: defaultTenant.id,
+        },
+      });
+    }
   });
 }
 
-export async function listCategories() {
+export async function listCategories(context) {
   const categories = await prisma.category.findMany({
+    where: withTenantScope({}, context),
     orderBy: { name: 'asc' },
   });
 
   return categories.map((category) => category.name);
 }
 
-export async function createCategory(name) {
+export async function createCategory(name, context) {
+  const tenantId = requireTenantId(context);
   const normalized = String(name || '').trim();
   if (!normalized) {
     throw new Error('Category name is required');
   }
 
   const exists = await prisma.category.findFirst({
-    where: {
+    where: withTenantScope({
       name: {
         equals: normalized,
         mode: 'insensitive',
       },
-    },
+    }, context),
   });
 
   if (exists) {
@@ -155,22 +347,25 @@ export async function createCategory(name) {
   }
 
   const created = await prisma.category.create({
-    data: { name: normalized },
+    data: {
+      name: normalized,
+      tenantId,
+    },
   });
 
   return created.name;
 }
 
-export async function deleteCategory(name) {
+export async function deleteCategory(name, context) {
   const normalized = String(name || '').trim();
 
   const existing = await prisma.category.findFirst({
-    where: {
+    where: withTenantScope({
       name: {
         equals: normalized,
         mode: 'insensitive',
       },
-    },
+    }, context),
   });
 
   if (!existing) {
@@ -178,7 +373,7 @@ export async function deleteCategory(name) {
   }
 
   const itemCount = await prisma.item.count({
-    where: { categoryId: existing.id },
+    where: withTenantBranchScope({ categoryId: existing.id }, context),
   });
 
   if (itemCount > 0) {
@@ -192,8 +387,9 @@ export async function deleteCategory(name) {
   return existing.name;
 }
 
-export async function listItems() {
+export async function listItems(context) {
   const items = await prisma.item.findMany({
+    where: withTenantBranchScope({}, context),
     include: { category: true },
     orderBy: { createdAt: 'asc' },
   });
@@ -201,7 +397,9 @@ export async function listItems() {
   return items.map(toItemDto);
 }
 
-export async function createItem(payload) {
+export async function createItem(payload, context) {
+  const tenantId = requireTenantId(context);
+  const branchId = String(context?.branchId || '').trim() || null;
   const name = String(payload?.name || '').trim();
   const categoryName = String(payload?.category || '').trim();
   const stock = Number(payload?.stock);
@@ -224,12 +422,12 @@ export async function createItem(payload) {
   }
 
   const category = await prisma.category.findFirst({
-    where: {
+    where: withTenantScope({
       name: {
         equals: categoryName,
         mode: 'insensitive',
       },
-    },
+    }, context),
   });
 
   if (!category) {
@@ -241,6 +439,8 @@ export async function createItem(payload) {
       ...(payload?.id ? { id: String(payload.id) } : {}),
       name,
       categoryId: category.id,
+      tenantId,
+      branchId,
       stock,
       price,
       image: payload?.image || '',
@@ -251,7 +451,9 @@ export async function createItem(payload) {
   return toItemDto(item);
 }
 
-export async function updateItem(id, payload) {
+export async function updateItem(id, payload, context) {
+  const tenantId = requireTenantId(context);
+  const branchId = String(context?.branchId || '').trim() || null;
   const targetId = String(id);
 
   const existing = await prisma.item.findUnique({
@@ -260,6 +462,14 @@ export async function updateItem(id, payload) {
 
   if (!existing) {
     throw new Error('Item not found');
+  }
+
+  if (context?.tenantId && existing.tenantId && existing.tenantId !== context.tenantId) {
+    throw new Error('Forbidden');
+  }
+
+  if (context?.branchId && existing.branchId && existing.branchId !== context.branchId) {
+    throw new Error('Forbidden');
   }
 
   const name = String(payload?.name || '').trim();
@@ -284,12 +494,12 @@ export async function updateItem(id, payload) {
   }
 
   const category = await prisma.category.findFirst({
-    where: {
+    where: withTenantScope({
       name: {
         equals: categoryName,
         mode: 'insensitive',
       },
-    },
+    }, context),
   });
 
   if (!category) {
@@ -301,6 +511,8 @@ export async function updateItem(id, payload) {
     data: {
       name,
       categoryId: category.id,
+      tenantId,
+      branchId,
       stock,
       price,
       image: payload?.image || '',
@@ -311,7 +523,7 @@ export async function updateItem(id, payload) {
   return toItemDto(updated);
 }
 
-export async function deleteItem(id) {
+export async function deleteItem(id, context) {
   const targetId = String(id);
 
   const existing = await prisma.item.findUnique({
@@ -323,9 +535,18 @@ export async function deleteItem(id) {
     throw new Error('Item not found');
   }
 
+  if (context?.tenantId && existing.tenantId && existing.tenantId !== context.tenantId) {
+    throw new Error('Forbidden');
+  }
+
+  if (context?.branchId && existing.branchId && existing.branchId !== context.branchId) {
+    throw new Error('Forbidden');
+  }
+
   const usages = await prisma.rentalItem.findMany({
     where: {
       itemId: targetId,
+      rental: withTenantBranchScope({}, context),
     },
     select: {
       id: true,
@@ -363,11 +584,11 @@ export async function deleteItem(id) {
   return toItemDto(existing);
 }
 
-export async function listRentals({ status } = {}) {
-  const where = {
+export async function listRentals({ status } = {}, context) {
+  const where = withTenantBranchScope({
     deletedAt: null,
     ...(status ? { status } : {}),
-  };
+  }, context);
 
   const rentals = await prisma.rental.findMany({
     where,
@@ -380,7 +601,9 @@ export async function listRentals({ status } = {}) {
   return rentals.map(toRentalDto);
 }
 
-export async function createRental(payload) {
+export async function createRental(payload, context) {
+  const tenantId = requireTenantId(context);
+  const branchId = requireBranchId(context);
   const customer = payload?.customer || {};
   const customerName = String(customer.name || '').trim();
   const customerPhone = String(customer.phone || '').trim();
@@ -411,24 +634,38 @@ export async function createRental(payload) {
   }
 
   const rental = await prisma.$transaction(async (tx) => {
-    const customerRecord = await tx.customer.upsert({
-      where: { phone: customerPhone },
-      update: {
-        name: customerName,
-        ...(customerAddress ? { address: customerAddress } : {}),
-        guarantee,
-        guaranteeOther,
-        ...(customerIdNumber ? { idNumber: customerIdNumber } : {}),
-      },
-      create: {
-        name: customerName,
+    const existingCustomer = await tx.customer.findFirst({
+      where: withTenantBranchScope({
         phone: customerPhone,
-        ...(customerAddress ? { address: customerAddress } : {}),
-        guarantee,
-        guaranteeOther,
-        ...(customerIdNumber ? { idNumber: customerIdNumber } : {}),
-      },
+      }, context),
+      orderBy: { createdAt: 'asc' },
     });
+
+    const customerRecord = existingCustomer
+      ? await tx.customer.update({
+          where: { id: existingCustomer.id },
+          data: {
+            name: customerName,
+            ...(customerAddress ? { address: customerAddress } : {}),
+            guarantee,
+            guaranteeOther,
+            ...(customerIdNumber ? { idNumber: customerIdNumber } : {}),
+            tenantId,
+            branchId,
+          },
+        })
+      : await tx.customer.create({
+          data: {
+            name: customerName,
+            phone: customerPhone,
+            ...(customerAddress ? { address: customerAddress } : {}),
+            guarantee,
+            guaranteeOther,
+            ...(customerIdNumber ? { idNumber: customerIdNumber } : {}),
+            tenantId,
+            branchId,
+          },
+        });
 
     const normalizedItems = [];
     const itemRequests = new Map();
@@ -463,6 +700,14 @@ export async function createRental(payload) {
         throw new Error(`Item ${itemId} not found`);
       }
 
+      if (context?.tenantId && item.tenantId && item.tenantId !== context.tenantId) {
+        throw new Error(`Item ${itemId} not available in current tenant`);
+      }
+
+      if (context?.branchId && item.branchId && item.branchId !== context.branchId) {
+        throw new Error(`Item ${itemId} not available in current branch`);
+      }
+
       const decrementResult = await tx.item.updateMany({
         where: {
           id: item.id,
@@ -495,6 +740,8 @@ export async function createRental(payload) {
       data: {
         id: payload?.id || createId('TX'),
         customerId: customerRecord.id,
+        tenantId,
+        branchId,
         customerName,
         customerPhone,
         guarantee,
@@ -516,8 +763,9 @@ export async function createRental(payload) {
   return toRentalDto(rental);
 }
 
-export async function listReturns() {
+export async function listReturns(context) {
   const records = await prisma.returnRecord.findMany({
+    where: withTenantBranchScope({}, context),
     orderBy: { createdAt: 'asc' },
   });
 
@@ -573,40 +821,1198 @@ export async function getSchemaSummary() {
   };
 }
 
-export async function listCustomers({ query } = {}) {
+async function ensureDefaultTenant() {
+  return prisma.$transaction(async (tx) => ensureDefaultTenantAndBranch(tx));
+}
+
+function withTenantScope(where = {}, context) {
+  if (!context?.tenantId) {
+    return where;
+  }
+
+  return {
+    AND: [
+      where,
+      { tenantId: context.tenantId },
+    ],
+  };
+}
+
+function requireTenantId(context) {
+  const tenantId = String(context?.tenantId || '').trim();
+  if (!tenantId) {
+    throw new Error('Tenant context is required');
+  }
+
+  return tenantId;
+}
+
+function requireBranchId(context) {
+  const branchId = String(context?.branchId || '').trim();
+  if (!branchId) {
+    throw new Error('Branch context is required');
+  }
+
+  return branchId;
+}
+
+function withTenantBranchScope(where = {}, context) {
+  if (!context?.tenantId) {
+    return where;
+  }
+
+  if (!context?.branchId) {
+    return withTenantScope(where, context);
+  }
+
+  return {
+    AND: [
+      where,
+      { tenantId: context.tenantId },
+      {
+        OR: [
+          { branchId: context.branchId },
+          { branchId: null },
+        ],
+      },
+    ],
+  };
+}
+
+async function resolveTenantForUser({ userId, role, requestedTenantId }) {
+  const normalizedTenantId = String(requestedTenantId || '').trim();
+  const isSuperuser = isSuperuserRole(role);
+
+  if (normalizedTenantId && normalizedTenantId !== 'current') {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: normalizedTenantId },
+    });
+
+    if (!tenant) {
+      throw new Error('Tenant not found');
+    }
+
+    if (isSuperuser) {
+      return tenant;
+    }
+
+    const membership = await prisma.userMembership.findUnique({
+      where: {
+        userId_tenantId: {
+          userId,
+          tenantId: tenant.id,
+        },
+      },
+    });
+
+    if (!membership || membership.status !== 'active') {
+      throw new Error('Forbidden');
+    }
+
+    return tenant;
+  }
+
+  const membership = await prisma.userMembership.findFirst({
+    where: {
+      userId,
+      status: 'active',
+    },
+    include: {
+      tenant: true,
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  if (membership?.tenant) {
+    return membership.tenant;
+  }
+
+  if (isSuperuser) {
+    return ensureDefaultTenant();
+  }
+
+  // Backward compatibility: existing kasir accounts without membership
+  // still need to access default tenant while migration is in progress.
+  return ensureDefaultTenant();
+}
+
+async function ensureCanManageOwnerMembership({ actorUserId, actorRole, tenantId }) {
+  if (isSuperuserRole(actorRole)) {
+    return true;
+  }
+
+  const actorMembership = await prisma.userMembership.findUnique({
+    where: {
+      userId_tenantId: {
+        userId: actorUserId,
+        tenantId,
+      },
+    },
+  });
+
+  if (actorMembership?.status !== 'active' || actorMembership.role !== 'owner') {
+    throw new Error('Only tenant owner or superuser can manage owner membership');
+  }
+
+  return true;
+}
+
+async function ensureCanAdministerTenant({ actorUserId, actorRole, tenantId }) {
+  if (isSuperuserRole(actorRole)) {
+    return true;
+  }
+
+  const actorMembership = await prisma.userMembership.findUnique({
+    where: {
+      userId_tenantId: {
+        userId: actorUserId,
+        tenantId,
+      },
+    },
+  });
+
+  if (!actorMembership || actorMembership.status !== 'active') {
+    throw new Error('Forbidden');
+  }
+
+  const membershipRole = String(actorMembership.role || '').trim().toLowerCase();
+  if (membershipRole !== 'owner' && membershipRole !== 'admin') {
+    throw new Error('Only tenant owner/admin or superuser can manage tenant resources');
+  }
+
+  return true;
+}
+
+export async function listTenantsForUser({ userId, role }) {
+  const isSuperuser = isSuperuserRole(role);
+
+  if (isSuperuser) {
+    const tenants = await prisma.tenant.findMany({
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return tenants.map((tenant) => toTenantDto(tenant));
+  }
+
+  const memberships = await prisma.userMembership.findMany({
+    where: {
+      userId,
+      status: 'active',
+    },
+    include: {
+      tenant: true,
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  if (memberships.length === 0) {
+    const fallbackTenant = await ensureDefaultTenant();
+    return [toTenantDto(fallbackTenant)];
+  }
+
+  return memberships.map(({ tenant }) => toTenantDto(tenant));
+}
+
+export async function createTenantForSuperuser(payload) {
+  const tenantName = String(payload?.name || '').trim();
+  const tenantStatus = String(payload?.status || 'active').trim().toLowerCase();
+  const slugFromPayload = String(payload?.slug || '').trim().toLowerCase();
+  const ownerUserId = String(payload?.ownerUserId || '').trim();
+  const initialBranchCode = String(payload?.initialBranchCode || DEFAULT_BRANCH_CODE).trim().toLowerCase();
+  const initialBranchName = String(payload?.initialBranchName || DEFAULT_BRANCH_NAME).trim();
+
+  if (!tenantName) {
+    throw new Error('Tenant name is required');
+  }
+
+  if (!TENANT_STATUSES.has(tenantStatus)) {
+    throw new Error('Tenant status is invalid');
+  }
+
+  const tenantSlug = slugifyTenant(slugFromPayload || tenantName);
+  if (!tenantSlug) {
+    throw new Error('Tenant slug is invalid');
+  }
+
+  if (!initialBranchCode) {
+    throw new Error('Initial branch code is required');
+  }
+
+  if (!initialBranchName) {
+    throw new Error('Initial branch name is required');
+  }
+
+  if (ownerUserId) {
+    const owner = await prisma.user.findUnique({
+      where: { id: ownerUserId },
+    });
+
+    if (!owner) {
+      throw new Error('Owner user not found');
+    }
+  }
+
+  const duplicate = await prisma.tenant.findUnique({
+    where: { slug: tenantSlug },
+  });
+
+  if (duplicate) {
+    throw new Error('Tenant slug already exists');
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const createdTenant = await tx.tenant.create({
+      data: {
+        slug: tenantSlug,
+        name: tenantName,
+        status: tenantStatus,
+      },
+    });
+
+    const createdBranch = await tx.branch.create({
+      data: {
+        tenantId: createdTenant.id,
+        code: initialBranchCode,
+        name: initialBranchName,
+        status: 'active',
+      },
+    });
+
+    await tx.tenantSettings.create({
+      data: {
+        tenantId: createdTenant.id,
+        storeName: tenantName,
+        addressLines: DEFAULT_TENANT_SETTINGS.addressLines,
+        phone: DEFAULT_TENANT_SETTINGS.phone,
+        legalFooterLines: DEFAULT_TENANT_SETTINGS.legalFooterLines,
+        timezone: DEFAULT_TENANT_SETTINGS.timezone,
+        currency: DEFAULT_TENANT_SETTINGS.currency,
+      },
+    });
+
+    if (ownerUserId) {
+      await tx.userMembership.upsert({
+        where: {
+          userId_tenantId: {
+            userId: ownerUserId,
+            tenantId: createdTenant.id,
+          },
+        },
+        update: {
+          role: 'owner',
+          status: 'active',
+        },
+        create: {
+          userId: ownerUserId,
+          tenantId: createdTenant.id,
+          role: 'owner',
+          status: 'active',
+        },
+      });
+    }
+
+    return {
+      tenant: createdTenant,
+      initialBranch: createdBranch,
+    };
+  });
+
+  return {
+    ...toTenantDto(result.tenant),
+    initialBranch: toBranchDto(result.initialBranch),
+  };
+}
+
+export async function updateTenantForSuperuser(tenantId, payload) {
+  const targetTenantId = String(tenantId || '').trim();
+  if (!targetTenantId) {
+    throw new Error('Tenant id is required');
+  }
+
+  const existing = await prisma.tenant.findUnique({
+    where: { id: targetTenantId },
+  });
+
+  if (!existing) {
+    throw new Error('Tenant not found');
+  }
+
+  const nextName = typeof payload?.name === 'string' ? payload.name.trim() : undefined;
+  const nextStatus = typeof payload?.status === 'string' ? payload.status.trim().toLowerCase() : undefined;
+  const nextSlugRaw = typeof payload?.slug === 'string' ? payload.slug.trim().toLowerCase() : undefined;
+  const nextSlug = typeof nextSlugRaw === 'string' ? slugifyTenant(nextSlugRaw) : undefined;
+
+  if (nextName === '') {
+    throw new Error('Tenant name is required');
+  }
+
+  if (typeof nextStatus === 'string' && !TENANT_STATUSES.has(nextStatus)) {
+    throw new Error('Tenant status is invalid');
+  }
+
+  if (typeof nextSlug === 'string' && !nextSlug) {
+    throw new Error('Tenant slug is invalid');
+  }
+
+  if (nextSlug && nextSlug !== existing.slug) {
+    const slugOwner = await prisma.tenant.findUnique({
+      where: { slug: nextSlug },
+    });
+    if (slugOwner) {
+      throw new Error('Tenant slug already exists');
+    }
+  }
+
+  const updated = await prisma.tenant.update({
+    where: { id: existing.id },
+    data: {
+      ...(typeof nextName === 'string' ? { name: nextName } : {}),
+      ...(typeof nextStatus === 'string' ? { status: nextStatus } : {}),
+      ...(typeof nextSlug === 'string' ? { slug: nextSlug } : {}),
+    },
+  });
+
+  return toTenantDto(updated);
+}
+
+export async function listBranchesForUser({ userId, role, tenantId }) {
+  const tenant = await resolveTenantForUser({
+    userId,
+    role,
+    requestedTenantId: tenantId || 'current',
+  });
+
+  const normalizedRole = normalizeRole(role);
+  const isAdminLike = normalizedRole === 'admin' || normalizedRole === 'superuser';
+  const hasAccessRules = await prisma.userBranchAccess.count({
+    where: { userId },
+  });
+
+  if (!isAdminLike && hasAccessRules > 0) {
+    const accessRows = await prisma.userBranchAccess.findMany({
+      where: {
+        userId,
+        branch: {
+          tenantId: tenant.id,
+        },
+      },
+      include: {
+        branch: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return accessRows.map(({ branch }) => toBranchDto(branch));
+  }
+
+  const branches = await prisma.branch.findMany({
+    where: {
+      tenantId: tenant.id,
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return branches.map((branch) => toBranchDto(branch));
+}
+
+export async function createBranchForUser({
+  userId,
+  role,
+  tenantId,
+  payload,
+}) {
+  const tenant = await resolveTenantForUser({
+    userId,
+    role,
+    requestedTenantId: tenantId || 'current',
+  });
+
+  await ensureCanAdministerTenant({
+    actorUserId: userId,
+    actorRole: role,
+    tenantId: tenant.id,
+  });
+
+  const code = String(payload?.code || '').trim().toLowerCase();
+  const name = String(payload?.name || '').trim();
+  const status = String(payload?.status || 'active').trim().toLowerCase();
+
+  if (!code) {
+    throw new Error('Branch code is required');
+  }
+
+  if (!name) {
+    throw new Error('Branch name is required');
+  }
+
+  if (status !== 'active' && status !== 'inactive') {
+    throw new Error('Branch status is invalid');
+  }
+
+  const duplicate = await prisma.branch.findFirst({
+    where: {
+      tenantId: tenant.id,
+      code: {
+        equals: code,
+        mode: 'insensitive',
+      },
+    },
+  });
+
+  if (duplicate) {
+    throw new Error('Branch code already exists');
+  }
+
+  const created = await prisma.branch.create({
+    data: {
+      tenantId: tenant.id,
+      code,
+      name,
+      status,
+    },
+  });
+
+  return toBranchDto(created);
+}
+
+export async function updateBranchForUser({
+  userId,
+  role,
+  branchId,
+  payload,
+}) {
+  const targetBranchId = String(branchId || '').trim();
+  if (!targetBranchId) {
+    throw new Error('Branch id is required');
+  }
+
+  const existing = await prisma.branch.findUnique({
+    where: { id: targetBranchId },
+  });
+
+  if (!existing) {
+    throw new Error('Branch not found');
+  }
+
+  await resolveTenantForUser({
+    userId,
+    role,
+    requestedTenantId: existing.tenantId,
+  });
+
+  await ensureCanAdministerTenant({
+    actorUserId: userId,
+    actorRole: role,
+    tenantId: existing.tenantId,
+  });
+
+  const nextCode = typeof payload?.code === 'string'
+    ? payload.code.trim().toLowerCase()
+    : undefined;
+  const nextName = typeof payload?.name === 'string'
+    ? payload.name.trim()
+    : undefined;
+  const nextStatus = typeof payload?.status === 'string'
+    ? payload.status.trim().toLowerCase()
+    : undefined;
+
+  if (nextCode === '') {
+    throw new Error('Branch code is required');
+  }
+
+  if (nextName === '') {
+    throw new Error('Branch name is required');
+  }
+
+  if (typeof nextStatus === 'string' && nextStatus !== 'active' && nextStatus !== 'inactive') {
+    throw new Error('Branch status is invalid');
+  }
+
+  if (nextCode && nextCode !== existing.code.toLowerCase()) {
+    const duplicate = await prisma.branch.findFirst({
+      where: {
+        tenantId: existing.tenantId,
+        code: {
+          equals: nextCode,
+          mode: 'insensitive',
+        },
+        id: {
+          not: existing.id,
+        },
+      },
+    });
+
+    if (duplicate) {
+      throw new Error('Branch code already exists');
+    }
+  }
+
+  const updated = await prisma.branch.update({
+    where: { id: existing.id },
+    data: {
+      ...(typeof nextCode === 'string' ? { code: nextCode } : {}),
+      ...(typeof nextName === 'string' ? { name: nextName } : {}),
+      ...(typeof nextStatus === 'string' ? { status: nextStatus } : {}),
+    },
+  });
+
+  return toBranchDto(updated);
+}
+
+export async function listTenantMembershipsForUser({
+  userId,
+  role,
+  tenantId,
+}) {
+  const tenant = await resolveTenantForUser({
+    userId,
+    role,
+    requestedTenantId: tenantId || 'current',
+  });
+
+  await ensureCanAdministerTenant({
+    actorUserId: userId,
+    actorRole: role,
+    tenantId: tenant.id,
+  });
+
+  const memberships = await prisma.userMembership.findMany({
+    where: {
+      tenantId: tenant.id,
+    },
+    include: {
+      user: true,
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return memberships.map((membership) => toTenantMembershipDto(membership));
+}
+
+export async function upsertTenantMembershipForUser({
+  actorUserId,
+  actorRole,
+  tenantId,
+  payload,
+}) {
+  const tenant = await resolveTenantForUser({
+    userId: actorUserId,
+    role: actorRole,
+    requestedTenantId: tenantId || 'current',
+  });
+
+  await ensureCanAdministerTenant({
+    actorUserId,
+    actorRole,
+    tenantId: tenant.id,
+  });
+
+  const targetUserId = String(payload?.userId || '').trim();
+  const membershipRole = String(payload?.role || 'kasir').trim().toLowerCase();
+  const membershipStatus = String(payload?.status || 'active').trim().toLowerCase();
+
+  if (!targetUserId) {
+    throw new Error('User id is required');
+  }
+
+  if (!TENANT_MEMBERSHIP_ROLES.has(membershipRole)) {
+    throw new Error('Membership role is invalid');
+  }
+
+  if (!TENANT_MEMBERSHIP_STATUSES.has(membershipStatus)) {
+    throw new Error('Membership status is invalid');
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: targetUserId },
+  });
+
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  if (membershipRole === 'owner') {
+    await ensureCanManageOwnerMembership({
+      actorUserId,
+      actorRole,
+      tenantId: tenant.id,
+    });
+  }
+
+  const membership = await prisma.userMembership.upsert({
+    where: {
+      userId_tenantId: {
+        userId: targetUserId,
+        tenantId: tenant.id,
+      },
+    },
+    update: {
+      role: membershipRole,
+      status: membershipStatus,
+    },
+    create: {
+      userId: targetUserId,
+      tenantId: tenant.id,
+      role: membershipRole,
+      status: membershipStatus,
+    },
+    include: {
+      user: true,
+    },
+  });
+
+  return toTenantMembershipDto(membership);
+}
+
+export async function updateTenantMembershipForUser({
+  actorUserId,
+  actorRole,
+  membershipId,
+  payload,
+}) {
+  const targetMembershipId = String(membershipId || '').trim();
+  if (!targetMembershipId) {
+    throw new Error('Membership id is required');
+  }
+
+  const existing = await prisma.userMembership.findUnique({
+    where: { id: targetMembershipId },
+    include: {
+      user: true,
+    },
+  });
+
+  if (!existing) {
+    throw new Error('Membership not found');
+  }
+
+  await resolveTenantForUser({
+    userId: actorUserId,
+    role: actorRole,
+    requestedTenantId: existing.tenantId,
+  });
+
+  await ensureCanAdministerTenant({
+    actorUserId,
+    actorRole,
+    tenantId: existing.tenantId,
+  });
+
+  const membershipRole = typeof payload?.role === 'string'
+    ? payload.role.trim().toLowerCase()
+    : undefined;
+  const membershipStatus = typeof payload?.status === 'string'
+    ? payload.status.trim().toLowerCase()
+    : undefined;
+
+  if (typeof membershipRole === 'string' && !TENANT_MEMBERSHIP_ROLES.has(membershipRole)) {
+    throw new Error('Membership role is invalid');
+  }
+
+  if (typeof membershipStatus === 'string' && !TENANT_MEMBERSHIP_STATUSES.has(membershipStatus)) {
+    throw new Error('Membership status is invalid');
+  }
+
+  if (
+    existing.role === 'owner'
+    || membershipRole === 'owner'
+    || (existing.role === 'owner' && membershipStatus === 'inactive')
+  ) {
+    await ensureCanManageOwnerMembership({
+      actorUserId,
+      actorRole,
+      tenantId: existing.tenantId,
+    });
+  }
+
+  const updated = await prisma.userMembership.update({
+    where: { id: existing.id },
+    data: {
+      ...(typeof membershipRole === 'string' ? { role: membershipRole } : {}),
+      ...(typeof membershipStatus === 'string' ? { status: membershipStatus } : {}),
+    },
+    include: {
+      user: true,
+    },
+  });
+
+  return toTenantMembershipDto(updated);
+}
+
+export async function listBranchAccessForUser({
+  userId,
+  role,
+  tenantId,
+}) {
+  const tenant = await resolveTenantForUser({
+    userId,
+    role,
+    requestedTenantId: tenantId || 'current',
+  });
+
+  await ensureCanAdministerTenant({
+    actorUserId: userId,
+    actorRole: role,
+    tenantId: tenant.id,
+  });
+
+  const accesses = await prisma.userBranchAccess.findMany({
+    where: {
+      branch: {
+        tenantId: tenant.id,
+      },
+    },
+    include: {
+      user: true,
+      branch: true,
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return accesses.map((access) => toBranchAccessDto(access));
+}
+
+export async function upsertBranchAccessForUser({
+  actorUserId,
+  actorRole,
+  tenantId,
+  payload,
+}) {
+  const tenant = await resolveTenantForUser({
+    userId: actorUserId,
+    role: actorRole,
+    requestedTenantId: tenantId || 'current',
+  });
+
+  await ensureCanAdministerTenant({
+    actorUserId,
+    actorRole,
+    tenantId: tenant.id,
+  });
+
+  const targetUserId = String(payload?.userId || '').trim();
+  const targetBranchId = String(payload?.branchId || '').trim();
+  const accessRole = String(payload?.role || 'kasir').trim().toLowerCase();
+
+  if (!targetUserId) {
+    throw new Error('User id is required');
+  }
+
+  if (!targetBranchId) {
+    throw new Error('Branch id is required');
+  }
+
+  if (!BRANCH_ACCESS_ROLES.has(accessRole)) {
+    throw new Error('Branch access role is invalid');
+  }
+
+  const [user, branch] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: targetUserId },
+    }),
+    prisma.branch.findFirst({
+      where: {
+        id: targetBranchId,
+        tenantId: tenant.id,
+      },
+    }),
+  ]);
+
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  if (!branch) {
+    throw new Error('Branch not found');
+  }
+
+  const existingMembership = await prisma.userMembership.findUnique({
+    where: {
+      userId_tenantId: {
+        userId: user.id,
+        tenantId: tenant.id,
+      },
+    },
+  });
+
+  if (!existingMembership) {
+    await prisma.userMembership.create({
+      data: {
+        userId: user.id,
+        tenantId: tenant.id,
+        role: 'kasir',
+        status: 'active',
+      },
+    });
+  } else if (existingMembership.status !== 'active') {
+    await prisma.userMembership.update({
+      where: { id: existingMembership.id },
+      data: { status: 'active' },
+    });
+  }
+
+  const access = await prisma.userBranchAccess.upsert({
+    where: {
+      userId_branchId: {
+        userId: user.id,
+        branchId: branch.id,
+      },
+    },
+    update: {
+      role: accessRole,
+    },
+    create: {
+      userId: user.id,
+      branchId: branch.id,
+      role: accessRole,
+    },
+    include: {
+      user: true,
+      branch: true,
+    },
+  });
+
+  return toBranchAccessDto(access);
+}
+
+export async function removeBranchAccessForUser({
+  actorUserId,
+  actorRole,
+  accessId,
+}) {
+  const targetAccessId = String(accessId || '').trim();
+  if (!targetAccessId) {
+    throw new Error('Access id is required');
+  }
+
+  const existing = await prisma.userBranchAccess.findUnique({
+    where: { id: targetAccessId },
+    include: {
+      branch: true,
+      user: true,
+    },
+  });
+
+  if (!existing) {
+    throw new Error('Branch access not found');
+  }
+
+  await resolveTenantForUser({
+    userId: actorUserId,
+    role: actorRole,
+    requestedTenantId: existing.branch.tenantId,
+  });
+
+  await ensureCanAdministerTenant({
+    actorUserId,
+    actorRole,
+    tenantId: existing.branch.tenantId,
+  });
+
+  const removed = await prisma.userBranchAccess.delete({
+    where: { id: existing.id },
+    include: {
+      user: true,
+      branch: true,
+    },
+  });
+
+  return toBranchAccessDto(removed);
+}
+
+export async function resolveTenantBranchContextForUser({
+  userId,
+  role,
+  requestedTenantId,
+  requestedBranchId,
+}) {
+  const tenant = await resolveTenantForUser({
+    userId,
+    role,
+    requestedTenantId,
+  });
+
+  const normalizedRole = normalizeRole(role);
+  const isAdminLike = normalizedRole === 'admin' || normalizedRole === 'superuser';
+  const branchId = String(requestedBranchId || '').trim();
+  const hasAccessRules = await prisma.userBranchAccess.count({
+    where: { userId },
+  });
+
+  const baseBranchWhere = {
+    tenantId: tenant.id,
+    ...(branchId ? { id: branchId } : {}),
+  };
+
+  if (!isAdminLike && hasAccessRules > 0) {
+    const accessBranch = await prisma.userBranchAccess.findFirst({
+      where: {
+        userId,
+        branch: baseBranchWhere,
+      },
+      include: {
+        branch: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (!accessBranch?.branch) {
+      throw new Error('Forbidden');
+    }
+
+    return {
+      tenantId: tenant.id,
+      branchId: accessBranch.branch.id,
+    };
+  }
+
+  const branch = await prisma.branch.findFirst({
+    where: baseBranchWhere,
+    orderBy: { createdAt: 'asc' },
+  });
+
+  if (!branch) {
+    throw new Error('Branch not found');
+  }
+
+  return {
+    tenantId: tenant.id,
+    branchId: branch.id,
+  };
+}
+
+export async function getTenantSettingsForUser({ userId, role, requestedTenantId }) {
+  const tenant = await resolveTenantForUser({
+    userId,
+    role,
+    requestedTenantId,
+  });
+
+  const settings = await prisma.tenantSettings.upsert({
+    where: {
+      tenantId: tenant.id,
+    },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      storeName: tenant.name || DEFAULT_TENANT_SETTINGS.storeName,
+      addressLines: DEFAULT_TENANT_SETTINGS.addressLines,
+      phone: DEFAULT_TENANT_SETTINGS.phone,
+      legalFooterLines: DEFAULT_TENANT_SETTINGS.legalFooterLines,
+      timezone: DEFAULT_TENANT_SETTINGS.timezone,
+      currency: DEFAULT_TENANT_SETTINGS.currency,
+    },
+  });
+
+  return toTenantSettingsDto(settings);
+}
+
+export async function getBranchSettingsForUser({
+  userId,
+  role,
+  requestedTenantId,
+  requestedBranchId,
+}) {
+  const context = await resolveTenantBranchContextForUser({
+    userId,
+    role,
+    requestedTenantId: requestedTenantId || 'current',
+    requestedBranchId,
+  });
+
+  const settings = await prisma.branchSettings.upsert({
+    where: {
+      branchId: context.branchId,
+    },
+    update: {},
+    create: {
+      branchId: context.branchId,
+      storeName: null,
+      addressLines: [],
+      phone: null,
+      legalFooterLines: [],
+    },
+  });
+
+  return toBranchSettingsDto(settings);
+}
+
+export async function updateBranchSettingsByIdForUser({
+  actorUserId,
+  actorRole,
+  branchId,
+  payload,
+}) {
+  const targetBranchId = String(branchId || '').trim();
+  if (!targetBranchId) {
+    throw new Error('Branch id is required');
+  }
+
+  const branch = await prisma.branch.findUnique({
+    where: { id: targetBranchId },
+  });
+
+  if (!branch) {
+    throw new Error('Branch not found');
+  }
+
+  await resolveTenantForUser({
+    userId: actorUserId,
+    role: actorRole,
+    requestedTenantId: branch.tenantId,
+  });
+
+  await ensureCanAdministerTenant({
+    actorUserId,
+    actorRole,
+    tenantId: branch.tenantId,
+  });
+
+  const nextStoreName = typeof payload?.storeName === 'string'
+    ? payload.storeName.trim()
+    : undefined;
+  const nextAddressLines = Array.isArray(payload?.addressLines)
+    ? normalizeLines(payload.addressLines)
+    : undefined;
+  const nextLegalFooterLines = Array.isArray(payload?.legalFooterLines)
+    ? normalizeLines(payload.legalFooterLines)
+    : undefined;
+  const nextPhone = typeof payload?.phone === 'string'
+    ? payload.phone.trim()
+    : undefined;
+
+  const updated = await prisma.branchSettings.upsert({
+    where: {
+      branchId: branch.id,
+    },
+    update: {
+      ...(typeof nextStoreName === 'string' ? { storeName: nextStoreName || null } : {}),
+      ...(typeof nextAddressLines !== 'undefined' ? { addressLines: nextAddressLines } : {}),
+      ...(typeof nextLegalFooterLines !== 'undefined' ? { legalFooterLines: nextLegalFooterLines } : {}),
+      ...(typeof nextPhone === 'string' ? { phone: nextPhone || null } : {}),
+    },
+    create: {
+      branchId: branch.id,
+      storeName: nextStoreName || null,
+      addressLines: nextAddressLines || [],
+      phone: typeof nextPhone === 'string' ? (nextPhone || null) : null,
+      legalFooterLines: nextLegalFooterLines || [],
+    },
+  });
+
+  return toBranchSettingsDto(updated);
+}
+
+export async function updateTenantSettingsByTenantId(tenantId, payload, actor = {}) {
+  const targetTenantId = String(tenantId || '').trim();
+  if (!targetTenantId) {
+    throw new Error('Tenant id is required');
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: targetTenantId },
+  });
+
+  if (!tenant) {
+    throw new Error('Tenant not found');
+  }
+
+  if (actor?.userId) {
+    await ensureCanAdministerTenant({
+      actorUserId: actor.userId,
+      actorRole: actor.role,
+      tenantId: tenant.id,
+    });
+  }
+
+  const nextStoreName = typeof payload?.storeName === 'string'
+    ? payload.storeName.trim()
+    : undefined;
+  const nextAddressLines = Array.isArray(payload?.addressLines)
+    ? normalizeLines(payload.addressLines)
+    : undefined;
+  const nextLegalFooterLines = Array.isArray(payload?.legalFooterLines)
+    ? normalizeLines(payload.legalFooterLines)
+    : undefined;
+  const nextPhone = typeof payload?.phone === 'string'
+    ? payload.phone.trim()
+    : undefined;
+  const nextTimezone = typeof payload?.timezone === 'string'
+    ? payload.timezone.trim()
+    : undefined;
+  const nextCurrency = typeof payload?.currency === 'string'
+    ? payload.currency.trim().toUpperCase()
+    : undefined;
+
+  const updated = await prisma.tenantSettings.upsert({
+    where: { tenantId: tenant.id },
+    update: {
+      ...(typeof nextStoreName === 'string' ? { storeName: nextStoreName || tenant.name } : {}),
+      ...(typeof nextAddressLines !== 'undefined' ? { addressLines: nextAddressLines } : {}),
+      ...(typeof nextLegalFooterLines !== 'undefined' ? { legalFooterLines: nextLegalFooterLines } : {}),
+      ...(typeof nextPhone === 'string' ? { phone: nextPhone || null } : {}),
+      ...(typeof nextTimezone === 'string' ? { timezone: nextTimezone || DEFAULT_TENANT_SETTINGS.timezone } : {}),
+      ...(typeof nextCurrency === 'string' ? { currency: nextCurrency || DEFAULT_TENANT_SETTINGS.currency } : {}),
+    },
+    create: {
+      tenantId: tenant.id,
+      storeName: nextStoreName || tenant.name || DEFAULT_TENANT_SETTINGS.storeName,
+      addressLines: nextAddressLines || DEFAULT_TENANT_SETTINGS.addressLines,
+      phone: typeof nextPhone === 'string' ? (nextPhone || null) : DEFAULT_TENANT_SETTINGS.phone,
+      legalFooterLines: nextLegalFooterLines || DEFAULT_TENANT_SETTINGS.legalFooterLines,
+      timezone: nextTimezone || DEFAULT_TENANT_SETTINGS.timezone,
+      currency: nextCurrency || DEFAULT_TENANT_SETTINGS.currency,
+    },
+  });
+
+  if (nextStoreName && nextStoreName !== tenant.name) {
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data: { name: nextStoreName },
+    });
+  }
+
+  return toTenantSettingsDto(updated);
+}
+
+export async function listCustomers({ query } = {}, context) {
   const keyword = String(query || '').trim();
 
   const customers = await prisma.customer.findMany({
     where: keyword
-      ? {
-          OR: [
+      ? withTenantBranchScope({
+          AND: [
             {
-              name: {
-                contains: keyword,
-                mode: 'insensitive',
-              },
-            },
-            {
-              phone: {
-                contains: keyword,
-                mode: 'insensitive',
-              },
-            },
-            {
-              idNumber: {
-                contains: keyword,
-                mode: 'insensitive',
-              },
-            },
-            {
-              address: {
-                contains: keyword,
-                mode: 'insensitive',
-              },
+              OR: [
+                {
+                  name: {
+                    contains: keyword,
+                    mode: 'insensitive',
+                  },
+                },
+                {
+                  phone: {
+                    contains: keyword,
+                    mode: 'insensitive',
+                  },
+                },
+                {
+                  idNumber: {
+                    contains: keyword,
+                    mode: 'insensitive',
+                  },
+                },
+                {
+                  address: {
+                    contains: keyword,
+                    mode: 'insensitive',
+                  },
+                },
+              ],
             },
           ],
-        }
-      : undefined,
+        }, context)
+      : withTenantBranchScope({}, context),
     orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
     take: keyword ? 20 : 100,
   });
@@ -614,7 +2020,9 @@ export async function listCustomers({ query } = {}) {
   return customers.map(toCustomerDto);
 }
 
-export async function upsertCustomer(payload) {
+export async function upsertCustomer(payload, context) {
+  const tenantId = requireTenantId(context);
+  const branchId = String(context?.branchId || '').trim() || null;
   const customer = payload || {};
   const customerName = String(customer.name || '').trim();
   const customerPhone = String(customer.phone || '').trim();
@@ -637,29 +2045,45 @@ export async function upsertCustomer(payload) {
     throw new Error('guaranteeOther is required when guarantee is Lainnya');
   }
 
-  const savedCustomer = await prisma.customer.upsert({
-    where: { phone: customerPhone },
-    update: {
-      name: customerName,
-      ...(customerAddress ? { address: customerAddress } : {}),
-      guarantee,
-      guaranteeOther,
-      ...(customerIdNumber ? { idNumber: customerIdNumber } : {}),
-    },
-    create: {
-      name: customerName,
+  const existingCustomer = await prisma.customer.findFirst({
+    where: withTenantBranchScope({
       phone: customerPhone,
-      ...(customerAddress ? { address: customerAddress } : {}),
-      guarantee,
-      guaranteeOther,
-      ...(customerIdNumber ? { idNumber: customerIdNumber } : {}),
-    },
+    }, context),
+    orderBy: { createdAt: 'asc' },
   });
+
+  const savedCustomer = existingCustomer
+    ? await prisma.customer.update({
+        where: { id: existingCustomer.id },
+        data: {
+          name: customerName,
+          ...(customerAddress ? { address: customerAddress } : {}),
+          guarantee,
+          guaranteeOther,
+          ...(customerIdNumber ? { idNumber: customerIdNumber } : {}),
+          tenantId,
+          branchId,
+        },
+      })
+    : await prisma.customer.create({
+        data: {
+          name: customerName,
+          phone: customerPhone,
+          ...(customerAddress ? { address: customerAddress } : {}),
+          guarantee,
+          guaranteeOther,
+          ...(customerIdNumber ? { idNumber: customerIdNumber } : {}),
+          tenantId,
+          branchId,
+        },
+      });
 
   return toCustomerDto(savedCustomer);
 }
 
-export async function updateCustomerById(customerId, payload) {
+export async function updateCustomerById(customerId, payload, context) {
+  const tenantId = requireTenantId(context);
+  const branchId = String(context?.branchId || '').trim() || null;
   const targetId = String(customerId || '').trim();
   if (!targetId) {
     throw new Error('Customer id is required');
@@ -671,6 +2095,14 @@ export async function updateCustomerById(customerId, payload) {
 
   if (!existing) {
     throw new Error('Customer not found');
+  }
+
+  if (context?.tenantId && existing.tenantId && existing.tenantId !== context.tenantId) {
+    throw new Error('Forbidden');
+  }
+
+  if (context?.branchId && existing.branchId && existing.branchId !== context.branchId) {
+    throw new Error('Forbidden');
   }
 
   const customer = payload || {};
@@ -696,8 +2128,14 @@ export async function updateCustomerById(customerId, payload) {
   }
 
   if (customerPhone !== existing.phone) {
-    const phoneOwner = await prisma.customer.findUnique({
-      where: { phone: customerPhone },
+    const phoneOwner = await prisma.customer.findFirst({
+      where: {
+        tenantId,
+        phone: customerPhone,
+        id: {
+          not: targetId,
+        },
+      },
     });
 
     if (phoneOwner) {
@@ -714,13 +2152,15 @@ export async function updateCustomerById(customerId, payload) {
       guarantee,
       guaranteeOther,
       idNumber: customerIdNumber,
+      tenantId,
+      branchId,
     },
   });
 
   return toCustomerDto(updatedCustomer);
 }
 
-export async function deleteCustomerById(customerId) {
+export async function deleteCustomerById(customerId, context) {
   const targetId = String(customerId || '').trim();
   if (!targetId) {
     throw new Error('Customer id is required');
@@ -734,6 +2174,14 @@ export async function deleteCustomerById(customerId) {
     throw new Error('Customer not found');
   }
 
+  if (context?.tenantId && existing.tenantId && existing.tenantId !== context.tenantId) {
+    throw new Error('Forbidden');
+  }
+
+  if (context?.branchId && existing.branchId && existing.branchId !== context.branchId) {
+    throw new Error('Forbidden');
+  }
+
   await prisma.customer.delete({
     where: { id: targetId },
   });
@@ -741,7 +2189,9 @@ export async function deleteCustomerById(customerId) {
   return toCustomerDto(existing);
 }
 
-export async function processReturn(payload) {
+export async function processReturn(payload, context) {
+  const tenantId = requireTenantId(context);
+  const branchId = requireBranchId(context);
   const rentalId = String(payload?.rentalId || '').trim();
   const additionalFee = Number(payload?.additionalFee || 0);
 
@@ -761,6 +2211,14 @@ export async function processReturn(payload) {
 
     if (!rental) {
       throw new Error('Rental not found');
+    }
+
+    if (context?.tenantId && rental.tenantId && rental.tenantId !== context.tenantId) {
+      throw new Error('Forbidden');
+    }
+
+    if (context?.branchId && rental.branchId && rental.branchId !== context.branchId) {
+      throw new Error('Forbidden');
     }
 
     if (rental.deletedAt) {
@@ -847,6 +2305,8 @@ export async function processReturn(payload) {
         rentalId: rental.id,
         customerName: rental.customerName,
         customerPhone: rental.customerPhone,
+        tenantId,
+        branchId,
         itemsJson: rental.items,
         returnDate,
         returnNotes,
@@ -910,7 +2370,9 @@ function toAuditRentalSnapshot(rental) {
   };
 }
 
-export async function deleteRentalByAdmin({ actorUserId, rentalId, reason }) {
+export async function deleteRentalByAdmin({ actorUserId, rentalId, reason, context }) {
+  const tenantId = requireTenantId(context);
+  const branchId = requireBranchId(context);
   const actorId = String(actorUserId || '').trim();
   const targetRentalId = String(rentalId || '').trim();
   const deleteReason = String(reason || '').trim();
@@ -938,6 +2400,14 @@ export async function deleteRentalByAdmin({ actorUserId, rentalId, reason }) {
 
     if (!rental) {
       throw new Error('Rental not found');
+    }
+
+    if (context?.tenantId && rental.tenantId && rental.tenantId !== context.tenantId) {
+      throw new Error('Forbidden');
+    }
+
+    if (context?.branchId && rental.branchId && rental.branchId !== context.branchId) {
+      throw new Error('Forbidden');
     }
 
     if (rental.deletedAt) {
@@ -972,6 +2442,8 @@ export async function deleteRentalByAdmin({ actorUserId, rentalId, reason }) {
     await tx.auditLog.create({
       data: {
         actorUserId: actorId,
+        tenantId,
+        branchId,
         action: 'rental.delete',
         targetType: 'rental',
         targetId: rental.id,

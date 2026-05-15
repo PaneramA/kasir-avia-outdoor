@@ -9,6 +9,8 @@
     "build": "node -e \"console.log('API build step: no transpilation required yet')\"",
     "lint": "node scripts/check-syntax.mjs",
     "db:audit": "node --env-file=.env scripts/db-audit.mjs",
+    "db:backfill:tenant": "node --env-file=.env scripts/backfill-tenant-scope.mjs",
+    "test:tenant-access": "node --env-file=.env scripts/tenant-access-smoke.mjs",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:migrate": "prisma migrate dev",

@@ -64,15 +64,15 @@ Public:
 
 - `GET /health`
 - `GET /api/schema`
-- `GET /api/categories`
-- `GET /api/items`
 - `POST /api/auth/login`
 
 Protected (Bearer token):
 
 - `GET /api/auth/me`
+- `GET /api/categories`
 - `POST /api/categories`
 - `DELETE /api/categories/:name`
+- `GET /api/items`
 - `POST /api/items`
 - `PATCH /api/items/:id`
 - `DELETE /api/items/:id`
@@ -82,8 +82,43 @@ Protected (Bearer token):
 - `POST /api/returns`
 - `GET /api/users` (admin only)
 - `POST /api/users` (admin only)
+- `PATCH /api/users/:id` (admin only)
+- `DELETE /api/users/:id` (admin only)
 - `PATCH /api/users/me/password`
 - `PATCH /api/users/:id/password` (admin only)
+- `GET /api/tenants` (list tenant yang bisa diakses user)
+- `POST /api/tenants` (superuser only)
+- `PATCH /api/tenants/:tenantId` (superuser only)
+- `GET /api/branches?tenantId=<id|current>`
+- `POST /api/branches` (admin only)
+- `PATCH /api/branches/:branchId` (admin only)
+- `GET /api/branches/current/settings`
+- `PATCH /api/branches/current/settings` (admin only)
+- `GET /api/branches/:branchId/settings`
+- `PATCH /api/branches/:branchId/settings` (admin only)
+- `GET /api/tenant-memberships?tenantId=<id|current>` (admin only)
+- `POST /api/tenant-memberships` (admin only)
+- `PATCH /api/tenant-memberships/:membershipId` (admin only)
+- `GET /api/branch-access?tenantId=<id|current>` (admin only)
+- `POST /api/branch-access` (admin only)
+- `DELETE /api/branch-access/:accessId` (admin only)
+- `GET /api/tenants/current/settings`
+- `PATCH /api/tenants/current/settings` (admin only)
+- `GET /api/tenants/:tenantId/settings`
+- `PATCH /api/tenants/:tenantId/settings` (admin only)
+
+Catatan otorisasi tenant:
+
+- `superuser` dapat mengelola semua tenant.
+- `admin` dan `kasir` hanya dapat mengakses tenant yang punya membership aktif.
+- Aksi manajemen tenant (settings, cabang, membership, branch access) membutuhkan role membership tenant `owner/admin` atau `superuser`.
+- Perubahan membership role `owner` hanya boleh oleh `owner` tenant terkait atau `superuser`.
+
+Smoke test tenant guard:
+
+```bash
+npm run test:tenant-access --workspace @avia/api
+```
 
 ## API Contract
 

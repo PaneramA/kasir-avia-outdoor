@@ -39,7 +39,20 @@ function isRunningStandalone() {
     return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
 }
 
-const Header = ({ title, subtitle, onOpenSidebar, inventory = [], rentals = [], syncError = '' }) => {
+const Header = ({
+    title,
+    subtitle,
+    onOpenSidebar,
+    inventory = [],
+    rentals = [],
+    syncError = '',
+    tenantOptions = [],
+    branchOptions = [],
+    activeTenantId = '',
+    activeBranchId = '',
+    onTenantChange,
+    onBranchChange,
+}) => {
     const navigate = useNavigate()
     const containerRef = useRef(null)
     const [searchQuery, setSearchQuery] = useState('')
@@ -317,7 +330,73 @@ const Header = ({ title, subtitle, onOpenSidebar, inventory = [], rentals = [], 
                 </div>
             </div>
 
-            <div className="relative flex items-center gap-3 sm:gap-4 lg:gap-5">
+            <div className="relative flex flex-1 flex-col gap-3 sm:gap-4 lg:flex-row lg:items-center lg:gap-5 lg:flex-none">
+                <div className="grid grid-cols-1 gap-2 lg:hidden">
+                    <select
+                        className="h-10 w-full rounded-full border border-border bg-sidebar-bg px-4 text-[0.78rem] text-text-main outline-none focus:border-accent"
+                        value={activeTenantId}
+                        onChange={(event) => {
+                            if (typeof onTenantChange === 'function') {
+                                onTenantChange(event.target.value)
+                            }
+                        }}
+                    >
+                        {tenantOptions.map((tenant) => (
+                            <option key={tenant.id} value={tenant.id}>
+                                {tenant.name}
+                            </option>
+                        ))}
+                    </select>
+                    <select
+                        className="h-10 w-full rounded-full border border-border bg-sidebar-bg px-4 text-[0.78rem] text-text-main outline-none focus:border-accent"
+                        value={activeBranchId}
+                        onChange={(event) => {
+                            if (typeof onBranchChange === 'function') {
+                                onBranchChange(event.target.value)
+                            }
+                        }}
+                    >
+                        {branchOptions.map((branch) => (
+                            <option key={branch.id} value={branch.id}>
+                                {branch.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                <div className="hidden items-center gap-2 lg:flex">
+                    <select
+                        className="h-10 min-w-[170px] rounded-full border border-border bg-sidebar-bg px-4 text-[0.78rem] text-text-main outline-none focus:border-accent"
+                        value={activeTenantId}
+                        onChange={(event) => {
+                            if (typeof onTenantChange === 'function') {
+                                onTenantChange(event.target.value)
+                            }
+                        }}
+                    >
+                        {tenantOptions.map((tenant) => (
+                            <option key={tenant.id} value={tenant.id}>
+                                {tenant.name}
+                            </option>
+                        ))}
+                    </select>
+                    <select
+                        className="h-10 min-w-[150px] rounded-full border border-border bg-sidebar-bg px-4 text-[0.78rem] text-text-main outline-none focus:border-accent"
+                        value={activeBranchId}
+                        onChange={(event) => {
+                            if (typeof onBranchChange === 'function') {
+                                onBranchChange(event.target.value)
+                            }
+                        }}
+                    >
+                        {branchOptions.map((branch) => (
+                            <option key={branch.id} value={branch.id}>
+                                {branch.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
                 <div className="relative flex min-w-0 flex-1 items-center gap-3 rounded-[30px] border border-border bg-sidebar-bg px-4 py-[10px] lg:w-[320px] xl:w-[350px]">
                     <i className="fas fa-search text-text-muted"></i>
                     <input

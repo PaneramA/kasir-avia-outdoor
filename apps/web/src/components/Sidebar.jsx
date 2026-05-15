@@ -5,7 +5,8 @@ import { APP_ROUTES } from '../lib/routes'
 
 const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
-    const isAdmin = String(currentUser?.role || '').toLowerCase() === 'admin'
+    const normalizedRole = String(currentUser?.role || '').toLowerCase()
+    const isAdminLike = normalizedRole === 'admin' || normalizedRole === 'superuser'
 
     const menuItems = [
         { path: APP_ROUTES.dashboard, icon: 'fas fa-th-large', label: 'Dashboard' },
@@ -101,7 +102,7 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
                                     <i className="fas fa-user-cog mr-2"></i>
                                     Akun Saya
                                 </NavLink>
-                                {isAdmin && (
+                                {isAdminLike && (
                                     <NavLink
                                         to={APP_ROUTES.users}
                                         onClick={onCloseMobile}
@@ -112,6 +113,19 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
                                     >
                                         <i className="fas fa-users-cog mr-2"></i>
                                         Setting User
+                                    </NavLink>
+                                )}
+                                {isAdminLike && (
+                                    <NavLink
+                                        to={APP_ROUTES.branches}
+                                        onClick={onCloseMobile}
+                                        className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
+                                            ? 'bg-accent text-white'
+                                            : 'text-text-muted hover:text-text-main hover:bg-black/5 dark:hover:bg-white/5'
+                                        }`}
+                                    >
+                                        <i className="fas fa-code-branch mr-2"></i>
+                                        Cabang & Akses
                                     </NavLink>
                                 )}
                                 <button

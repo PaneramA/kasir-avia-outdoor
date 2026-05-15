@@ -9,16 +9,102 @@ datasource db {
 
 model Category {
   id        String   @id @default(cuid())
-  name      String   @unique
+  name      String
+  tenantId  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   items     Item[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model Tenant {
+  id             String           @id @default(cuid())
+  slug           String           @unique
+  name           String
+  status         String           @default("active")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  branches       Branch[]
+  settings       TenantSettings?
+  memberships    UserMembership[]
+}
+
+model Branch {
+  id         String          @id @default(cuid())
+  tenantId   String
+  code       String
+  name       String
+  status     String          @default("active")
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  settings   BranchSettings?
+  accesses   UserBranchAccess[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+}
+
+model TenantSettings {
+  tenantId         String   @id
+  storeName        String
+  addressLines     Json
+  phone            String?
+  legalFooterLines Json
+  timezone         String   @default("Asia/Jakarta")
+  currency         String   @default("IDR")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model BranchSettings {
+  branchId         String   @id
+  storeName        String?
+  addressLines     Json?
+  phone            String?
+  legalFooterLines Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  branch           Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+}
+
+model UserMembership {
+  id        String   @id @default(cuid())
+  userId    String
+  tenantId  String
+  role      String
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tenantId])
+  @@index([tenantId, role, status])
+}
+
+model UserBranchAccess {
+  id        String   @id @default(cuid())
+  userId    String
+  branchId  String
+  role      String   @default("kasir")
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, branchId])
+  @@index([branchId, role])
 }
 
 model Item {
   id          String       @id @default(cuid())
   name        String
   categoryId  String
+  tenantId    String
+  branchId    String?
   stock       Int
   price       Int
   image       String?
@@ -26,11 +112,15 @@ model Item {
   updatedAt   DateTime     @updatedAt
   category    Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   rentalItems RentalItem[]
+
+  @@index([tenantId, branchId])
 }
 
 model Rental {
   id             String        @id
   customerId     String?
+  tenantId       String
+  branchId       String
   deletedByUserId String?
   customerName   String
   customerPhone  String
@@ -55,6 +145,7 @@ model Rental {
   returnRecord   ReturnRecord?
 
   @@index([customerId])
+  @@index([tenantId, branchId])
   @@index([deletedAt])
   @@index([deletedByUserId])
 }
@@ -79,6 +170,8 @@ model RentalItem {
 model ReturnRecord {
   id            String   @id
   rentalId      String   @unique
+  tenantId      String
+  branchId      String
   customerName  String
   customerPhone String
   itemsJson     Json
@@ -88,6 +181,8 @@ model ReturnRecord {
   finalTotal    Int
   createdAt     DateTime @default(now())
   rental        Rental   @relation(fields: [rentalId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, branchId])
 }
 
 model User {
@@ -97,6 +192,8 @@ model User {
   role         String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  memberships  UserMembership[]
+  branchAccesses UserBranchAccess[]
   deletedRentals Rental[] @relation("RentalDeletedByUser")
   auditLogs    AuditLog[]
 }
@@ -104,7 +201,9 @@ model User {
 model Customer {
   id             String   @id @default(cuid())
   name           String
-  phone          String   @unique
+  phone          String
+  tenantId       String
+  branchId       String?
   address        String?
   guarantee      String   @default("KTP")
   guaranteeOther String?
@@ -112,11 +211,16 @@ model Customer {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   rentals        Rental[]
+
+  @@unique([tenantId, phone])
+  @@index([tenantId, branchId])
 }
 
 model AuditLog {
   id             String   @id @default(cuid())
   actorUserId    String
+  tenantId       String
+  branchId       String
   action         String
   targetType     String
   targetId       String
@@ -125,6 +229,7 @@ model AuditLog {
   actorUser      User     @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
 
   @@index([actorUserId])
+  @@index([tenantId, branchId])
   @@index([targetType, targetId])
   @@index([createdAt])
 }
