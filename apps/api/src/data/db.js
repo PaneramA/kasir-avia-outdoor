@@ -546,7 +546,7 @@ export async function deleteItem(id, context) {
   const usages = await prisma.rentalItem.findMany({
     where: {
       itemId: targetId,
-      rental: withTenantBranchScope({}, context),
+      rental: withTenantBranchScope({}, context, { includeBranchNull: false }),
     },
     select: {
       id: true,
@@ -588,7 +588,7 @@ export async function listRentals({ status } = {}, context) {
   const where = withTenantBranchScope({
     deletedAt: null,
     ...(status ? { status } : {}),
-  }, context);
+  }, context, { includeBranchNull: false });
 
   const rentals = await prisma.rental.findMany({
     where,
@@ -765,7 +765,7 @@ export async function createRental(payload, context) {
 
 export async function listReturns(context) {
   const records = await prisma.returnRecord.findMany({
-    where: withTenantBranchScope({}, context),
+    where: withTenantBranchScope({}, context, { includeBranchNull: false }),
     orderBy: { createdAt: 'asc' },
   });
 
@@ -856,7 +856,9 @@ function requireBranchId(context) {
   return branchId;
 }
 
-function withTenantBranchScope(where = {}, context) {
+function withTenantBranchScope(where = {}, context, options = {}) {
+  const includeBranchNull = options.includeBranchNull !== false;
+
   if (!context?.tenantId) {
     return where;
   }
@@ -865,16 +867,20 @@ function withTenantBranchScope(where = {}, context) {
     return withTenantScope(where, context);
   }
 
-  return {
-    AND: [
-      where,
-      { tenantId: context.tenantId },
-      {
+  const branchScope = includeBranchNull
+    ? {
         OR: [
           { branchId: context.branchId },
           { branchId: null },
         ],
-      },
+      }
+    : { branchId: context.branchId };
+
+  return {
+    AND: [
+      where,
+      { tenantId: context.tenantId },
+      branchScope,
     ],
   };
 }
