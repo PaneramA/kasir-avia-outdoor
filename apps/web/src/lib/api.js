@@ -1,8 +1,35 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
 const TOKEN_KEY = 'avia_api_token';
 const USER_KEY = 'avia_api_user';
+const TENANT_CONTEXT_KEY = 'avia_tenant_context_v1';
 
 let accessToken = localStorage.getItem(TOKEN_KEY) || '';
+let activeTenantId = '';
+let activeBranchId = '';
+
+function readStoredTenantContext() {
+  const raw = localStorage.getItem(TENANT_CONTEXT_KEY);
+  if (!raw) {
+    return { tenantId: '', branchId: '' };
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      tenantId: String(parsed?.tenantId || '').trim(),
+      branchId: String(parsed?.branchId || '').trim(),
+    };
+  } catch {
+    localStorage.removeItem(TENANT_CONTEXT_KEY);
+    return { tenantId: '', branchId: '' };
+  }
+}
+
+{
+  const initialContext = readStoredTenantContext();
+  activeTenantId = initialContext.tenantId;
+  activeBranchId = initialContext.branchId;
+}
 
 function normalizeRole(role) {
   return String(role || '').trim().toLowerCase();
@@ -59,6 +86,16 @@ function setSession(token, user) {
   }
 }
 
+function setTenantContext(context = {}) {
+  activeTenantId = String(context.tenantId || '').trim();
+  activeBranchId = String(context.branchId || '').trim();
+
+  localStorage.setItem(TENANT_CONTEXT_KEY, JSON.stringify({
+    tenantId: activeTenantId,
+    branchId: activeBranchId,
+  }));
+}
+
 async function request(path, options = {}, config = { auth: false }) {
   const headers = {
     'Content-Type': 'application/json',
@@ -71,6 +108,14 @@ async function request(path, options = {}, config = { auth: false }) {
     }
 
     headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  if (activeTenantId) {
+    headers['x-tenant-id'] = activeTenantId;
+  }
+
+  if (activeBranchId) {
+    headers['x-branch-id'] = activeBranchId;
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -125,8 +170,19 @@ export function logout() {
   setSession('', null);
 }
 
+export function getActiveTenantContext() {
+  return {
+    tenantId: activeTenantId,
+    branchId: activeBranchId,
+  };
+}
+
+export function setActiveTenantContext(context) {
+  setTenantContext(context || {});
+}
+
 export function fetchCategories() {
-  return request('/api/categories');
+  return request('/api/categories', {}, { auth: true });
 }
 
 export function fetchCustomers(query = '') {
@@ -169,7 +225,7 @@ export function removeCategory(name) {
 }
 
 export function fetchItems() {
-  return request('/api/items');
+  return request('/api/items', {}, { auth: true });
 }
 
 export function createItem(item) {
@@ -235,6 +291,102 @@ export function fetchCurrentUser() {
     ...user,
     role: normalizeRole(user?.role),
   }));
+}
+
+export function fetchCurrentTenantSettings() {
+  return request('/api/tenants/current/settings', {}, { auth: true });
+}
+
+export function fetchTenants() {
+  return request('/api/tenants', {}, { auth: true });
+}
+
+export function createTenant(payload) {
+  return request('/api/tenants', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
+export function updateTenant(tenantId, payload) {
+  return request(`/api/tenants/${encodeURIComponent(tenantId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
+export function fetchBranches(tenantId = 'current') {
+  const suffix = `?tenantId=${encodeURIComponent(tenantId)}`;
+  return request(`/api/branches${suffix}`, {}, { auth: true });
+}
+
+export function createBranch(payload) {
+  return request('/api/branches', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
+export function updateBranch(branchId, payload) {
+  return request(`/api/branches/${encodeURIComponent(branchId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
+export function fetchTenantMemberships(tenantId = 'current') {
+  const suffix = `?tenantId=${encodeURIComponent(tenantId)}`;
+  return request(`/api/tenant-memberships${suffix}`, {}, { auth: true });
+}
+
+export function createOrUpdateTenantMembership(payload) {
+  return request('/api/tenant-memberships', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
+export function updateTenantMembership(membershipId, payload) {
+  return request(`/api/tenant-memberships/${encodeURIComponent(membershipId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
+export function fetchBranchAccess(tenantId = 'current') {
+  const suffix = `?tenantId=${encodeURIComponent(tenantId)}`;
+  return request(`/api/branch-access${suffix}`, {}, { auth: true });
+}
+
+export function createOrUpdateBranchAccess(payload) {
+  return request('/api/branch-access', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
+export function removeBranchAccess(accessId) {
+  return request(`/api/branch-access/${encodeURIComponent(accessId)}`, {
+    method: 'DELETE',
+  }, { auth: true });
+}
+
+export function updateCurrentTenantSettings(payload) {
+  return request('/api/tenants/current/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
+export function fetchCurrentBranchSettings() {
+  return request('/api/branches/current/settings', {}, { auth: true });
+}
+
+export function updateCurrentBranchSettings(payload) {
+  return request('/api/branches/current/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, { auth: true });
 }
 
 export function fetchUsers() {

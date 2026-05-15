@@ -11,25 +11,35 @@ import Customers from './pages/Customers'
 import Login from './pages/Login'
 import Users from './pages/Users'
 import Account from './pages/Account'
+import Branches from './pages/Branches'
 import { APP_ROUTES, PAGE_INFO } from './lib/routes'
 import {
   createCategory,
   createItem,
   createRental,
+  fetchBranches,
+  fetchCurrentBranchSettings,
   fetchCategories,
+  fetchCurrentTenantSettings,
   fetchCurrentUser,
   fetchItems,
   fetchRentals,
+  fetchTenants,
+  getActiveTenantContext,
   getStoredSession,
   login,
   logout,
+  setActiveTenantContext,
   verifyRentalDelete,
   deleteRentalByAdmin as deleteRentalByAdminApi,
   processReturn,
   removeCategory,
   removeItem,
+  updateCurrentTenantSettings,
+  updateCurrentBranchSettings,
   updateItem,
 } from './lib/api'
+import { setReceiptProfile } from './lib/receipt'
 
 function NotFoundPage() {
   return (
@@ -39,6 +49,32 @@ function NotFoundPage() {
       <p>Periksa kembali URL yang kamu buka.</p>
     </div>
   )
+}
+
+function resolveEffectiveReceiptProfile(tenantSettings, branchSettings) {
+  const safeTenant = tenantSettings && typeof tenantSettings === 'object' ? tenantSettings : {}
+  const safeBranch = branchSettings && typeof branchSettings === 'object' ? branchSettings : {}
+
+  const resolveLines = (branchLines, tenantLines) => {
+    if (Array.isArray(branchLines) && branchLines.length > 0) {
+      return branchLines
+    }
+
+    if (Array.isArray(tenantLines)) {
+      return tenantLines
+    }
+
+    return []
+  }
+
+  return {
+    ...safeTenant,
+    ...safeBranch,
+    storeName: String(safeBranch.storeName || '').trim() || String(safeTenant.storeName || '').trim(),
+    phone: String(safeBranch.phone || '').trim() || String(safeTenant.phone || '').trim(),
+    addressLines: resolveLines(safeBranch.addressLines, safeTenant.addressLines),
+    legalFooterLines: resolveLines(safeBranch.legalFooterLines, safeTenant.legalFooterLines),
+  }
 }
 
 function App() {
@@ -53,25 +89,76 @@ function App() {
   const [errorMessage, setErrorMessage] = useState('')
   const [authErrorMessage, setAuthErrorMessage] = useState('')
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false)
+  const [tenantSettings, setTenantSettings] = useState(null)
+  const [branchSettings, setBranchSettings] = useState(null)
+  const [tenantOptions, setTenantOptions] = useState([])
+  const [branchOptions, setBranchOptions] = useState([])
+  const [activeTenantId, setActiveTenantId] = useState(() => getActiveTenantContext().tenantId)
+  const [activeBranchId, setActiveBranchId] = useState(() => getActiveTenantContext().branchId)
   const [isAuthInitializing, setIsAuthInitializing] = useState(
     () => Boolean(initialSession.token),
   )
   const [currentUser, setCurrentUser] = useState(() => initialSession.user)
   const isBackgroundSyncingRef = useRef(false)
 
+  const ensureTenantBranchContext = useCallback(async () => {
+    const tenants = await fetchTenants()
+    const safeTenants = Array.isArray(tenants) ? tenants : []
+    setTenantOptions(safeTenants)
+
+    if (safeTenants.length === 0) {
+      setBranchOptions([])
+      setActiveTenantId('')
+      setActiveBranchId('')
+      setActiveTenantContext({ tenantId: '', branchId: '' })
+      return { tenantId: '', branchId: '' }
+    }
+
+    const stored = getActiveTenantContext()
+    const preferredTenantId = safeTenants.some((tenant) => tenant.id === stored.tenantId)
+      ? stored.tenantId
+      : safeTenants[0].id
+
+    const branches = await fetchBranches(preferredTenantId)
+    const safeBranches = Array.isArray(branches) ? branches : []
+    setBranchOptions(safeBranches)
+
+    const preferredBranchId = safeBranches.some((branch) => branch.id === stored.branchId)
+      ? stored.branchId
+      : (safeBranches[0]?.id || '')
+
+    const nextContext = {
+      tenantId: preferredTenantId,
+      branchId: preferredBranchId,
+    }
+
+    setActiveTenantContext(nextContext)
+    setActiveTenantId(nextContext.tenantId)
+    setActiveBranchId(nextContext.branchId)
+
+    return nextContext
+  }, [])
+
   const loadInitialData = useCallback(async () => {
     setErrorMessage('')
 
-    const [itemsData, categoriesData, rentalsData] = await Promise.all([
+    await ensureTenantBranchContext()
+
+    const [itemsData, categoriesData, rentalsData, settings, currentBranchSettings] = await Promise.all([
       fetchItems(),
       fetchCategories(),
       fetchRentals(),
+      fetchCurrentTenantSettings().catch(() => null),
+      fetchCurrentBranchSettings().catch(() => null),
     ])
 
     setInventory(Array.isArray(itemsData) ? itemsData : [])
     setCategories(Array.isArray(categoriesData) ? categoriesData : [])
     setRentals(Array.isArray(rentalsData) ? rentalsData : [])
-  }, [])
+    setTenantSettings(settings || null)
+    setBranchSettings(currentBranchSettings || null)
+    setReceiptProfile(resolveEffectiveReceiptProfile(settings, currentBranchSettings))
+  }, [ensureTenantBranchContext])
 
   const refreshData = useCallback(async () => {
     await loadInitialData()
@@ -146,6 +233,14 @@ function App() {
       setCategories([])
       setRentals([])
       setCart([])
+      setTenantSettings(null)
+      setBranchSettings(null)
+      setTenantOptions([])
+      setBranchOptions([])
+      setActiveTenantId('')
+      setActiveBranchId('')
+      setActiveTenantContext({ tenantId: '', branchId: '' })
+      setReceiptProfile(null)
       setIsLoading(false)
       setErrorMessage('')
       return
@@ -353,6 +448,60 @@ function App() {
     [refreshData],
   )
 
+  const handleUpdateTenantSettings = useCallback(
+    async (payload) => {
+      const updated = await updateCurrentTenantSettings(payload)
+      setTenantSettings(updated || null)
+      setReceiptProfile(resolveEffectiveReceiptProfile(updated, branchSettings))
+      return updated
+    },
+    [branchSettings],
+  )
+
+  const handleUpdateBranchSettings = useCallback(
+    async (payload) => {
+      const updated = await updateCurrentBranchSettings(payload)
+      setBranchSettings(updated || null)
+      setReceiptProfile(resolveEffectiveReceiptProfile(tenantSettings, updated))
+      return updated
+    },
+    [tenantSettings],
+  )
+
+  const handleTenantChange = useCallback(async (nextTenantId) => {
+    const tenantId = String(nextTenantId || '').trim()
+    if (!tenantId) {
+      return
+    }
+
+    const branches = await fetchBranches(tenantId)
+    const safeBranches = Array.isArray(branches) ? branches : []
+    const nextBranchId = safeBranches[0]?.id || ''
+
+    setBranchOptions(safeBranches)
+    setActiveTenantId(tenantId)
+    setActiveBranchId(nextBranchId)
+    setActiveTenantContext({
+      tenantId,
+      branchId: nextBranchId,
+    })
+    await refreshData()
+  }, [refreshData])
+
+  const handleBranchChange = useCallback(async (nextBranchId) => {
+    const branchId = String(nextBranchId || '').trim()
+    if (!branchId) {
+      return
+    }
+
+    setActiveBranchId(branchId)
+    setActiveTenantContext({
+      tenantId: activeTenantId,
+      branchId,
+    })
+    await refreshData()
+  }, [activeTenantId, refreshData])
+
   const headerInfo = useMemo(
     () => PAGE_INFO[location.pathname] || PAGE_INFO[APP_ROUTES.dashboard],
     [location.pathname],
@@ -405,6 +554,12 @@ function App() {
           inventory={inventory}
           rentals={rentals}
           syncError={errorMessage}
+          tenantOptions={tenantOptions}
+          branchOptions={branchOptions}
+          activeTenantId={activeTenantId}
+          activeBranchId={activeBranchId}
+          onTenantChange={handleTenantChange}
+          onBranchChange={handleBranchChange}
         />
 
         <div id="content-view" className="flex-1 overflow-y-auto pb-6 sm:pb-10 lg:min-h-0">
@@ -446,6 +601,7 @@ function App() {
                   cart={cart}
                   setCart={setCart}
                   onCheckout={handleCheckout}
+                  currentUser={currentUser}
                 />
               }
             />
@@ -475,8 +631,20 @@ function App() {
               element={isAdminLikeUser ? <Users /> : <Navigate to={APP_ROUTES.dashboard} replace />}
             />
             <Route
+              path={APP_ROUTES.branches}
+              element={isAdminLikeUser ? <Branches /> : <Navigate to={APP_ROUTES.dashboard} replace />}
+            />
+            <Route
               path={APP_ROUTES.account}
-              element={<Account currentUser={currentUser} />}
+              element={(
+                <Account
+                  currentUser={currentUser}
+                  tenantSettings={tenantSettings}
+                  branchSettings={branchSettings}
+                  onUpdateTenantSettings={handleUpdateTenantSettings}
+                  onUpdateBranchSettings={handleUpdateBranchSettings}
+                />
+              )}
             />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>

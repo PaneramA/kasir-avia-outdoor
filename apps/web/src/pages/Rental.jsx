@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchCustomers } from '../lib/api';
 import ViewModeToggle from '../components/ViewModeToggle';
+import ReceiptModal from '../components/ReceiptModal';
+import { openReceiptWhatsApp, printReceipt } from '../lib/receipt';
 
 const INITIAL_CUSTOMER = {
     name: '',
@@ -53,6 +55,7 @@ const Rental = ({
     cart,
     setCart,
     onCheckout,
+    currentUser,
 }) => {
     const safeInventory = useMemo(() => (Array.isArray(inventory) ? inventory : []), [inventory]);
     const safeCategories = useMemo(() => (Array.isArray(categories) ? categories : []), [categories]);
@@ -70,6 +73,7 @@ const Rental = ({
     const [durationError, setDurationError] = useState('');
     const [mobileStepHint, setMobileStepHint] = useState('');
     const [inventoryViewMode, setInventoryViewMode] = useState(getInitialRentalInventoryView);
+    const [receiptRental, setReceiptRental] = useState(null);
     const latestSearchRequestRef = useRef(0);
     const focusTimeoutRef = useRef(null);
     const hasRestoredDraftRef = useRef(false);
@@ -594,7 +598,7 @@ const Rental = ({
 
         try {
             setIsSubmitting(true);
-            await onCheckout(payload);
+            const createdRental = await onCheckout(payload);
             setCart([]);
             setCustomer(INITIAL_CUSTOMER);
             setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
@@ -607,6 +611,7 @@ const Rental = ({
             setItemsError('');
             setMobileStepHint('');
             setMobileStep(1);
+            setReceiptRental(createdRental || null);
             alert('Transaksi berhasil disimpan!');
             scheduleFocusField('name');
         } catch (error) {
@@ -614,6 +619,41 @@ const Rental = ({
             alert(message);
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleCloseReceipt = () => {
+        setReceiptRental(null);
+    };
+
+    const handlePrintReceipt = (paperWidthMm = 80) => {
+        if (!receiptRental) {
+            return;
+        }
+
+        try {
+            printReceipt(receiptRental, {
+                cashierName: currentUser?.name || currentUser?.username || '',
+                paperWidthMm,
+            });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Gagal mencetak receipt.';
+            alert(message);
+        }
+    };
+
+    const handleShareReceiptWhatsApp = () => {
+        if (!receiptRental) {
+            return;
+        }
+
+        try {
+            openReceiptWhatsApp(receiptRental, {
+                cashierName: currentUser?.name || currentUser?.username || '',
+            });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Gagal membagikan receipt ke WhatsApp.';
+            alert(message);
         }
     };
 
@@ -1097,6 +1137,14 @@ const Rental = ({
                     </div>
                 </div>
             </div>
+
+            <ReceiptModal
+                isOpen={Boolean(receiptRental)}
+                rental={receiptRental}
+                onClose={handleCloseReceipt}
+                onPrint={handlePrintReceipt}
+                onShareWhatsApp={handleShareReceiptWhatsApp}
+            />
         </div>
     );
 };

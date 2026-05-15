@@ -7,6 +7,7 @@ export const APP_ROUTES = {
   history: '/history',
   customers: '/customers',
   users: '/users',
+  branches: '/branches',
   account: '/account',
 };
 
@@ -39,8 +40,12 @@ export const PAGE_INFO = {
     title: 'Manajemen User',
     subtitle: 'Kelola akun admin dan kasir.',
   },
+  [APP_ROUTES.branches]: {
+    title: 'Cabang & Akses',
+    subtitle: 'Kelola cabang toko dan hak akses user per cabang.',
+  },
   [APP_ROUTES.account]: {
     title: 'Akun Saya',
-    subtitle: 'Ubah password akun yang sedang login.',
+    subtitle: 'Ubah password dan pengaturan profil toko.',
   },
 };

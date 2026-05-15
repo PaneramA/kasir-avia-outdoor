@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import ReceiptModal from '../components/ReceiptModal';
+import { openReceiptWhatsApp, printReceipt } from '../lib/receipt';
 
 const History = ({
     rentals,
@@ -19,6 +21,7 @@ const History = ({
     const [isDeletingRental, setIsDeletingRental] = useState(false);
     const [deleteErrorMessage, setDeleteErrorMessage] = useState('');
     const [deleteSuccessMessage, setDeleteSuccessMessage] = useState('');
+    const [receiptRental, setReceiptRental] = useState(null);
 
     const isAdmin = useMemo(() => {
         const role = String(currentUser?.role || '').trim().toLowerCase();
@@ -103,6 +106,45 @@ const History = ({
             setDeleteErrorMessage(message);
         } finally {
             setIsDeletingRental(false);
+        }
+    };
+
+    const openReceiptModal = (rental) => {
+        setReceiptRental(rental);
+    };
+
+    const closeReceiptModal = () => {
+        setReceiptRental(null);
+    };
+
+    const handlePrintReceipt = (paperWidthMm = 80) => {
+        if (!receiptRental) {
+            return;
+        }
+
+        try {
+            printReceipt(receiptRental, {
+                cashierName: currentUser?.name || currentUser?.username || '',
+                paperWidthMm,
+            });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Gagal mencetak receipt.';
+            alert(message);
+        }
+    };
+
+    const handleShareReceiptWhatsApp = () => {
+        if (!receiptRental) {
+            return;
+        }
+
+        try {
+            openReceiptWhatsApp(receiptRental, {
+                cashierName: currentUser?.name || currentUser?.username || '',
+            });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Gagal membagikan receipt ke WhatsApp.';
+            alert(message);
         }
     };
 
@@ -278,15 +320,24 @@ const History = ({
                                             </p>
                                         )}
 
-                                        {isAdmin && (
+                                        <div className="mt-3 flex flex-wrap gap-2">
                                             <button
                                                 type="button"
-                                                className="mt-3 inline-flex items-center gap-2 rounded border border-[#e74c3c]/50 bg-[#e74c3c]/10 px-3 py-1.5 text-[0.75rem] font-semibold text-[#f3b2ad] hover:bg-[#e74c3c]/20"
-                                                onClick={() => openDeleteModal(rental)}
+                                                className="inline-flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-3 py-1.5 text-[0.75rem] font-semibold text-accent hover:bg-accent/20"
+                                                onClick={() => openReceiptModal(rental)}
                                             >
-                                                <i className="fas fa-trash"></i> Hapus Riwayat
+                                                <i className="fas fa-receipt"></i> Receipt
                                             </button>
-                                        )}
+                                            {isAdmin && (
+                                                <button
+                                                    type="button"
+                                                    className="inline-flex items-center gap-2 rounded border border-[#e74c3c]/50 bg-[#e74c3c]/10 px-3 py-1.5 text-[0.75rem] font-semibold text-[#f3b2ad] hover:bg-[#e74c3c]/20"
+                                                    onClick={() => openDeleteModal(rental)}
+                                                >
+                                                    <i className="fas fa-trash"></i> Hapus Riwayat
+                                                </button>
+                                            )}
+                                        </div>
                                     </article>
                                 ))}
                             </div>
@@ -299,9 +350,7 @@ const History = ({
                                         <th className="border-b border-border p-4 text-left text-[0.8rem] font-semibold uppercase tracking-wider text-text-muted">Detail Sewa</th>
                                         <th className="border-b border-border p-4 text-left text-[0.8rem] font-semibold uppercase tracking-wider text-text-muted">Status</th>
                                         <th className="border-b border-border p-4 text-right text-[0.8rem] font-semibold uppercase tracking-wider text-text-muted">Total</th>
-                                        {isAdmin && (
-                                            <th className="border-b border-border p-4 text-right text-[0.8rem] font-semibold uppercase tracking-wider text-text-muted">Aksi</th>
-                                        )}
+                                        <th className="border-b border-border p-4 text-right text-[0.8rem] font-semibold uppercase tracking-wider text-text-muted">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -373,17 +422,26 @@ const History = ({
                                                     </div>
                                                 )}
                                             </td>
-                                            {isAdmin && (
-                                                <td className="align-top border-b border-border/50 p-4 text-right">
+                                            <td className="align-top border-b border-border/50 p-4 text-right">
+                                                <div className="flex justify-end gap-2">
                                                     <button
                                                         type="button"
-                                                        className="inline-flex items-center gap-2 rounded border border-[#e74c3c]/50 bg-[#e74c3c]/10 px-3 py-1.5 text-[0.75rem] font-semibold text-[#f3b2ad] hover:bg-[#e74c3c]/20"
-                                                        onClick={() => openDeleteModal(rental)}
+                                                        className="inline-flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-3 py-1.5 text-[0.75rem] font-semibold text-accent hover:bg-accent/20"
+                                                        onClick={() => openReceiptModal(rental)}
                                                     >
-                                                        <i className="fas fa-trash"></i> Hapus
+                                                        <i className="fas fa-receipt"></i> Receipt
                                                     </button>
-                                                </td>
-                                            )}
+                                                    {isAdmin && (
+                                                        <button
+                                                            type="button"
+                                                            className="inline-flex items-center gap-2 rounded border border-[#e74c3c]/50 bg-[#e74c3c]/10 px-3 py-1.5 text-[0.75rem] font-semibold text-[#f3b2ad] hover:bg-[#e74c3c]/20"
+                                                            onClick={() => openDeleteModal(rental)}
+                                                        >
+                                                            <i className="fas fa-trash"></i> Hapus
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -475,6 +533,14 @@ const History = ({
                     </div>
                 </div>
             )}
+
+            <ReceiptModal
+                isOpen={Boolean(receiptRental)}
+                rental={receiptRental}
+                onClose={closeReceiptModal}
+                onPrint={handlePrintReceipt}
+                onShareWhatsApp={handleShareReceiptWhatsApp}
+            />
         </div>
     );
 };
