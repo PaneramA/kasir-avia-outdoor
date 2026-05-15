@@ -275,13 +275,59 @@ export function buildReceiptPrintHtml(rental, options = {}) {
 }
 
 export function printReceipt(rental, options = {}) {
-    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=420,height=760');
+    const html = buildReceiptPrintHtml(rental, options);
 
-    if (!printWindow) {
-        throw new Error('Popup cetak diblokir browser. Izinkan popup lalu coba lagi.');
+    // Prefer hidden iframe to avoid popup-blocker issues on Firefox.
+    if (typeof document !== 'undefined') {
+        const iframe = document.createElement('iframe');
+        iframe.setAttribute('aria-hidden', 'true');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        iframe.style.visibility = 'hidden';
+
+        const cleanup = () => {
+            window.setTimeout(() => {
+                iframe.remove();
+            }, 1500);
+        };
+
+        iframe.onload = () => {
+            try {
+                const frameWindow = iframe.contentWindow;
+                if (!frameWindow) {
+                    throw new Error('Print frame tidak tersedia.');
+                }
+
+                frameWindow.focus();
+                frameWindow.print();
+            } finally {
+                cleanup();
+            }
+        };
+
+        document.body.appendChild(iframe);
+
+        const frameDocument = iframe.contentDocument || iframe.contentWindow?.document;
+        if (!frameDocument) {
+            iframe.remove();
+            throw new Error('Gagal menyiapkan dokumen cetak.');
+        }
+
+        frameDocument.open();
+        frameDocument.write(html);
+        frameDocument.close();
+        return;
     }
 
-    const html = buildReceiptPrintHtml(rental, options);
+    const printWindow = window.open('', '_blank', 'width=420,height=760');
+    if (!printWindow) {
+        throw new Error('Gagal membuka jendela cetak. Coba izinkan popup browser.');
+    }
+
     printWindow.document.open();
     printWindow.document.write(html);
     printWindow.document.close();
