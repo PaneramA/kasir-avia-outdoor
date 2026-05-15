@@ -129,6 +129,9 @@ model Rental {
   idNumber       String?
   duration       Int
   total          Int
+  paymentStatus  String        @default("LUNAS")
+  paymentMethod  String        @default("TUNAI")
+  paidAmount     Int           @default(0)
   status         String        @default("Active")
   date           DateTime      @default(now())
   returnDate     DateTime?

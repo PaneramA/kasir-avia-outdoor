@@ -115,19 +115,17 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
                                         Setting User
                                     </NavLink>
                                 )}
-                                {isAdminLike && (
-                                    <NavLink
-                                        to={APP_ROUTES.branches}
-                                        onClick={onCloseMobile}
-                                        className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
-                                            ? 'bg-accent text-white'
-                                            : 'text-text-muted hover:text-text-main hover:bg-black/5 dark:hover:bg-white/5'
-                                        }`}
-                                    >
-                                        <i className="fas fa-code-branch mr-2"></i>
-                                        Cabang & Akses
-                                    </NavLink>
-                                )}
+                                <NavLink
+                                    to={APP_ROUTES.branches}
+                                    onClick={onCloseMobile}
+                                    className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
+                                        ? 'bg-accent text-white'
+                                        : 'text-text-muted hover:text-text-main hover:bg-black/5 dark:hover:bg-white/5'
+                                    }`}
+                                >
+                                    <i className="fas fa-code-branch mr-2"></i>
+                                    Cabang & Akses
+                                </NavLink>
                                 <button
                                     onClick={onLogout}
                                     className="rounded-lg px-3 py-2 text-left text-sm text-text-muted hover:bg-black/5 hover:text-[#e74c3c] dark:hover:bg-white/5"

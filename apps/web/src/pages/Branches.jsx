@@ -4,10 +4,12 @@ import {
   createBranch,
   createOrUpdateBranchAccess,
   createOrUpdateTenantMembership,
+  createTenantUserAccount,
   fetchBranchAccess,
   fetchBranches,
   fetchTenants,
   fetchTenantMemberships,
+  fetchTenantUsers,
   fetchUsers,
   removeBranchAccess,
   updateTenant,
@@ -43,6 +45,12 @@ const initialTenantForm = {
   initialBranchName: 'Toko Pusat',
 }
 
+const initialTenantUserForm = {
+  username: '',
+  password: '',
+  tenantRole: 'kasir',
+}
+
 const Branches = () => {
   const currentUser = getStoredSession().user
   const [branches, setBranches] = useState([])
@@ -55,25 +63,32 @@ const Branches = () => {
   const [membershipForm, setMembershipForm] = useState(initialMembershipForm)
   const [accessForm, setAccessForm] = useState(initialAccessForm)
   const [tenantForm, setTenantForm] = useState(initialTenantForm)
+  const [tenantUserForm, setTenantUserForm] = useState(initialTenantUserForm)
 
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmittingBranch, setIsSubmittingBranch] = useState(false)
   const [isSubmittingMembership, setIsSubmittingMembership] = useState(false)
   const [isSubmittingAccess, setIsSubmittingAccess] = useState(false)
   const [isSubmittingTenant, setIsSubmittingTenant] = useState(false)
+  const [isSubmittingTenantUser, setIsSubmittingTenantUser] = useState(false)
   const [message, setMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+
+  const normalizedCurrentRole = String(currentUser?.role || '').trim().toLowerCase()
+  const isCurrentSuperuser = normalizedCurrentRole === 'superuser'
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
     setErrorMessage('')
 
     try {
+      const usersRequest = isCurrentSuperuser ? fetchUsers() : fetchTenantUsers('current')
+
       const [branchesData, membershipsData, accessData, usersData, tenantsData] = await Promise.all([
         fetchBranches('current'),
         fetchTenantMemberships('current'),
         fetchBranchAccess('current'),
-        fetchUsers(),
+        usersRequest,
         fetchTenants(),
       ])
 
@@ -108,7 +123,7 @@ const Branches = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [isCurrentSuperuser])
 
   useEffect(() => {
     loadData()
@@ -122,8 +137,8 @@ const Branches = () => {
   const availableTenantOwners = useMemo(() => users, [users])
 
   const isSuperuser = useMemo(() => (
-    String(currentUser?.role || '').trim().toLowerCase() === 'superuser'
-  ), [currentUser?.role])
+    normalizedCurrentRole === 'superuser'
+  ), [normalizedCurrentRole])
 
   const currentMembership = useMemo(() => (
     memberships.find((membership) => membership.userId === currentUser?.id) || null
@@ -257,6 +272,30 @@ const Branches = () => {
     }
   }
 
+  const handleCreateTenantUser = async (event) => {
+    event.preventDefault()
+    setMessage('')
+    setErrorMessage('')
+
+    if (!canAdministerTenant) {
+      setErrorMessage('Hanya owner/admin tenant aktif yang bisa membuat user toko.')
+      return
+    }
+
+    try {
+      setIsSubmittingTenantUser(true)
+      await createTenantUserAccount(tenantUserForm)
+      setMessage('User toko baru berhasil dibuat dan langsung aktif di tenant ini.')
+      setTenantUserForm(initialTenantUserForm)
+      await loadData()
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'Gagal membuat user toko baru.'
+      setErrorMessage(messageText)
+    } finally {
+      setIsSubmittingTenantUser(false)
+    }
+  }
+
   const handleUpdateTenantStatus = async (tenant, nextStatus) => {
     setMessage('')
     setErrorMessage('')
@@ -352,6 +391,57 @@ const Branches = () => {
             Kamu belum punya role owner/admin aktif di tenant ini, jadi aksi manajemen tenant dibatasi.
           </p>
         )}
+      </section>
+
+      <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">
+        <h3 className="mb-1 text-[1.1rem] font-bold text-text-main">Buat User Toko</h3>
+        <p className="mb-5 text-sm text-text-muted">Owner/admin tenant bisa langsung membuat akun kasir/admin untuk toko ini.</p>
+
+        <form onSubmit={handleCreateTenantUser} className="grid grid-cols-1 items-end gap-4 md:grid-cols-4">
+          <div>
+            <label className="mb-1.5 block text-[0.85rem] text-text-muted">Username</label>
+            <input
+              className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+              placeholder="kasir.bandung"
+              value={tenantUserForm.username}
+              onChange={(event) => setTenantUserForm((prev) => ({ ...prev, username: event.target.value }))}
+              required
+              disabled={!canAdministerTenant}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[0.85rem] text-text-muted">Password Awal</label>
+            <input
+              type="password"
+              className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+              placeholder="Minimal 8 karakter"
+              value={tenantUserForm.password}
+              onChange={(event) => setTenantUserForm((prev) => ({ ...prev, password: event.target.value }))}
+              required
+              minLength={8}
+              disabled={!canAdministerTenant}
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[0.85rem] text-text-muted">Role Tenant</label>
+            <select
+              className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+              value={tenantUserForm.tenantRole}
+              onChange={(event) => setTenantUserForm((prev) => ({ ...prev, tenantRole: event.target.value }))}
+              disabled={!canAdministerTenant}
+            >
+              <option value="kasir">kasir</option>
+              <option value="admin">admin</option>
+            </select>
+          </div>
+          <button
+            type="submit"
+            disabled={isSubmittingTenantUser || !canAdministerTenant}
+            className="min-h-11 rounded-lg bg-accent px-5 py-2.5 font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
+          >
+            {isSubmittingTenantUser ? 'Menyimpan...' : 'Buat User Toko'}
+          </button>
+        </form>
       </section>
 
       {isSuperuser && (

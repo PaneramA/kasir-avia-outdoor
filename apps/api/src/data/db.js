@@ -7,6 +7,8 @@ const TENANT_MEMBERSHIP_ROLES = new Set(['owner', 'admin', 'kasir']);
 const TENANT_MEMBERSHIP_STATUSES = new Set(['active', 'inactive']);
 const BRANCH_ACCESS_ROLES = new Set(['admin', 'kasir']);
 const TENANT_STATUSES = new Set(['active', 'suspended']);
+const PAYMENT_STATUSES = new Set(['DP', 'LUNAS']);
+const PAYMENT_METHODS = new Set(['QRIS', 'BANK', 'TUNAI']);
 const RETURNED_RENTAL_STATUSES = new Set(['returned', 'selesai', 'completed', 'done']);
 const DEFAULT_TENANT_SLUG = 'default-avia';
 const DEFAULT_TENANT_NAME = 'AviaOutdoor';
@@ -74,6 +76,16 @@ function toItemDto(item) {
 }
 
 function toRentalDto(rental) {
+  const totalDue = Number(
+    rental.finalTotal == null ? rental.total : rental.finalTotal,
+  );
+  const paymentStatus = String(rental.paymentStatus || 'LUNAS').toUpperCase();
+  const rawPaidAmount = Math.max(0, Number(rental.paidAmount || 0));
+  const normalizedPaidAmount = paymentStatus === 'LUNAS'
+    ? (rawPaidAmount > 0 ? Math.min(rawPaidAmount, totalDue) : totalDue)
+    : Math.min(rawPaidAmount, totalDue);
+  const remainingAmount = Math.max(0, totalDue - normalizedPaidAmount);
+
   return {
     id: rental.id,
     customerId: rental.customerId || undefined,
@@ -94,6 +106,13 @@ function toRentalDto(rental) {
     })),
     duration: rental.duration,
     total: rental.total,
+    payment: {
+      status: paymentStatus,
+      method: rental.paymentMethod || 'TUNAI',
+      paidAmount: normalizedPaidAmount,
+      remainingAmount,
+      totalDue,
+    },
     status: rental.status,
     date: rental.date.toISOString(),
     returnDate: rental.returnDate ? rental.returnDate.toISOString() : undefined,
@@ -616,6 +635,9 @@ export async function createRental(payload, context) {
   const rentalIdNumber = hasExplicitIdNumber ? rawIdNumber : `RNDM-${Math.floor(100000 + Math.random() * 900000)}`;
   const items = Array.isArray(payload?.items) ? payload.items : [];
   const duration = Number(payload?.duration);
+  const rawPaymentStatus = String(payload?.payment?.status || 'LUNAS').trim().toUpperCase();
+  const rawPaymentMethod = String(payload?.payment?.method || 'TUNAI').trim().toUpperCase();
+  const rawPaidAmount = payload?.payment?.paidAmount;
 
   if (!customerName) {
     throw new Error('Customer name is required');
@@ -631,6 +653,22 @@ export async function createRental(payload, context) {
 
   if (items.length === 0) {
     throw new Error('Rental items are required');
+  }
+
+  if (!PAYMENT_STATUSES.has(rawPaymentStatus)) {
+    throw new Error('Payment status is invalid');
+  }
+
+  if (!PAYMENT_METHODS.has(rawPaymentMethod)) {
+    throw new Error('Payment method is invalid');
+  }
+
+  let paidAmountInput = null;
+  if (typeof rawPaidAmount !== 'undefined' && rawPaidAmount !== null && rawPaidAmount !== '') {
+    paidAmountInput = Number(rawPaidAmount);
+    if (!Number.isFinite(paidAmountInput) || paidAmountInput < 0) {
+      throw new Error('Paid amount must be a number >= 0');
+    }
   }
 
   const rental = await prisma.$transaction(async (tx) => {
@@ -735,6 +773,21 @@ export async function createRental(payload, context) {
     }
 
     const total = normalizedItems.reduce((sum, item) => sum + (item.price * item.qty * duration), 0);
+    let paymentStatus = rawPaymentStatus;
+    let paidAmount = paymentStatus === 'LUNAS'
+      ? total
+      : Number.isFinite(paidAmountInput) ? Number(paidAmountInput) : 0;
+
+    if (paymentStatus === 'DP') {
+      if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
+        throw new Error('Paid amount is required when payment status is DP');
+      }
+
+      if (paidAmount >= total) {
+        paymentStatus = 'LUNAS';
+        paidAmount = total;
+      }
+    }
 
     return tx.rental.create({
       data: {
@@ -749,6 +802,9 @@ export async function createRental(payload, context) {
         idNumber: rentalIdNumber,
         duration,
         total,
+        paymentStatus,
+        paymentMethod: rawPaymentMethod,
+        paidAmount,
         status: 'Active',
         items: {
           create: normalizedItems,
@@ -2405,6 +2461,15 @@ export async function verifyUserPasswordById(userId, plainPassword, passwordPepp
 }
 
 function toAuditRentalSnapshot(rental) {
+  const totalDue = Number(
+    rental.finalTotal == null ? rental.total : rental.finalTotal,
+  );
+  const paymentStatus = String(rental.paymentStatus || 'LUNAS').toUpperCase();
+  const rawPaidAmount = Math.max(0, Number(rental.paidAmount || 0));
+  const normalizedPaidAmount = paymentStatus === 'LUNAS'
+    ? (rawPaidAmount > 0 ? Math.min(rawPaidAmount, totalDue) : totalDue)
+    : Math.min(rawPaidAmount, totalDue);
+
   return {
     id: rental.id,
     customerId: rental.customerId || null,
@@ -2415,6 +2480,10 @@ function toAuditRentalSnapshot(rental) {
     idNumber: rental.idNumber || null,
     duration: rental.duration,
     total: rental.total,
+    paymentStatus,
+    paymentMethod: rental.paymentMethod || 'TUNAI',
+    paidAmount: normalizedPaidAmount,
+    remainingAmount: Math.max(0, totalDue - normalizedPaidAmount),
     status: rental.status,
     date: rental.date.toISOString(),
     returnDate: rental.returnDate ? rental.returnDate.toISOString() : null,
@@ -2564,6 +2633,41 @@ export async function listUsers() {
   return users.map(toUserDto);
 }
 
+export async function listTenantUsersForUser({
+  userId,
+  role,
+  tenantId,
+}) {
+  const tenant = await resolveTenantForUser({
+    userId,
+    role,
+    requestedTenantId: tenantId || 'current',
+  });
+
+  await ensureCanAdministerTenant({
+    actorUserId: userId,
+    actorRole: role,
+    tenantId: tenant.id,
+  });
+
+  const memberships = await prisma.userMembership.findMany({
+    where: {
+      tenantId: tenant.id,
+    },
+    include: {
+      user: true,
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return memberships.map((membership) => ({
+    ...toUserDto(membership.user),
+    tenantMembershipId: membership.id,
+    tenantRole: membership.role,
+    tenantStatus: membership.status,
+  }));
+}
+
 export async function createUser(payload, passwordPepper) {
   const normalizedUsername = String(payload.username || '').trim().toLowerCase();
   const role = normalizeRole(payload.role || 'kasir');
@@ -2598,6 +2702,85 @@ export async function createUser(payload, passwordPepper) {
   });
 
   return toUserDto(created);
+}
+
+export async function createTenantUserForUser({
+  actorUserId,
+  actorRole,
+  tenantId,
+  payload,
+  passwordPepper,
+}) {
+  const tenant = await resolveTenantForUser({
+    userId: actorUserId,
+    role: actorRole,
+    requestedTenantId: tenantId || 'current',
+  });
+
+  await ensureCanAdministerTenant({
+    actorUserId,
+    actorRole,
+    tenantId: tenant.id,
+  });
+
+  const normalizedUsername = String(payload?.username || '').trim().toLowerCase();
+  const password = String(payload?.password || '');
+  const membershipRole = String(payload?.tenantRole || 'kasir').trim().toLowerCase();
+
+  if (!normalizedUsername) {
+    throw new Error('Username is required');
+  }
+
+  if (!password) {
+    throw new Error('Password is required');
+  }
+
+  if (password.length < 8) {
+    throw new Error('Password must be at least 8 characters');
+  }
+
+  if (membershipRole !== 'admin' && membershipRole !== 'kasir') {
+    throw new Error('Tenant role is invalid');
+  }
+
+  const existingUser = await prisma.user.findUnique({
+    where: { username: normalizedUsername },
+  });
+
+  if (existingUser) {
+    throw new Error('Username already exists');
+  }
+
+  const created = await prisma.$transaction(async (tx) => {
+    const newUser = await tx.user.create({
+      data: {
+        username: normalizedUsername,
+        passwordHash: hashPassword(password, passwordPepper),
+        role: 'kasir',
+      },
+    });
+
+    const membership = await tx.userMembership.create({
+      data: {
+        userId: newUser.id,
+        tenantId: tenant.id,
+        role: membershipRole,
+        status: 'active',
+      },
+    });
+
+    return {
+      user: newUser,
+      membership,
+    };
+  });
+
+  return {
+    ...toUserDto(created.user),
+    tenantMembershipId: created.membership.id,
+    tenantRole: created.membership.role,
+    tenantStatus: created.membership.status,
+  };
 }
 
 export async function updateUserByAdmin(userId, payload) {

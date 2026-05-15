@@ -24,11 +24,15 @@ const ReceiptModal = ({
     const dueDate = getReceiptDueDate(rental);
     const duration = Number(rental.duration) || 0;
     const total = getReceiptTotal(rental);
+    const paymentStatus = String(rental?.payment?.status || 'LUNAS').toUpperCase();
+    const paymentMethod = String(rental?.payment?.method || 'TUNAI').toUpperCase();
+    const paidAmount = Number(rental?.payment?.paidAmount ?? total) || 0;
+    const remainingAmount = Number(rental?.payment?.remainingAmount ?? Math.max(0, total - paidAmount)) || 0;
 
     return (
-        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/80 p-4 backdrop-blur-[3px]">
-            <div className="w-full max-w-[760px] rounded-lg border border-border bg-sidebar-bg p-5 shadow-xl">
-                <div className="mb-4 flex items-start justify-between gap-4 border-b border-border pb-3">
+        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/80 p-3 backdrop-blur-[3px] sm:p-4">
+            <div className="flex max-h-[92vh] w-full max-w-[760px] flex-col overflow-hidden rounded-lg border border-border bg-sidebar-bg shadow-xl">
+                <div className="mb-0 flex items-start justify-between gap-4 border-b border-border px-4 pb-3 pt-4 sm:px-5">
                     <div>
                         <h4 className="text-[1.1rem] font-bold text-text-main">Receipt Transaksi</h4>
                         <p className="text-xs text-text-muted">{receiptProfile.storeName}</p>
@@ -47,6 +51,7 @@ const ReceiptModal = ({
                     </button>
                 </div>
 
+                <div className="custom-scrollbar flex-1 overflow-y-auto px-4 py-4 sm:px-5">
                 <div className="grid gap-4 md:grid-cols-2">
                     <div className="rounded-lg border border-border/60 bg-bg-main/40 p-3">
                         <p className="mb-1 text-xs uppercase tracking-wide text-text-muted">Penyewa</p>
@@ -62,6 +67,9 @@ const ReceiptModal = ({
                         <p className="text-sm text-text-main">Tanggal: {formatDateTime(rental.date)}</p>
                         <p className="text-sm text-text-main">Durasi: {duration} hari</p>
                         <p className="text-sm text-text-main">Jatuh tempo: {dueDate ? formatDate(dueDate) : '-'}</p>
+                        <p className="text-sm text-text-main">Pembayaran: {paymentStatus} • {paymentMethod}</p>
+                        <p className="text-sm text-text-main">Terbayar: {formatCurrency(paidAmount)}</p>
+                        <p className="text-sm text-text-main">Sisa: {formatCurrency(remainingAmount)}</p>
                         <p className="mt-2 text-xs text-text-muted">Status: {rental.status || '-'}</p>
                     </div>
                 </div>
@@ -104,8 +112,9 @@ const ReceiptModal = ({
                         ))}
                     </div>
                 )}
+                </div>
 
-                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <div className="mt-0 flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:justify-end sm:px-5">
                     <button
                         type="button"
                         className="rounded-lg border border-border bg-sidebar-bg px-4 py-2.5 text-sm font-semibold text-text-main hover:border-accent"

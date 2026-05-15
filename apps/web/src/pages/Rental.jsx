@@ -19,6 +19,12 @@ const INITIAL_CUSTOMER_ERRORS = {
     guaranteeOther: '',
 };
 
+const INITIAL_PAYMENT = {
+    status: 'LUNAS',
+    method: 'TUNAI',
+    paidAmount: '',
+};
+
 const MOBILE_FLOW_STEPS = [
     'Data Penyewa',
     'Pilih Barang',
@@ -67,10 +73,12 @@ const Rental = ({
     const [customerSearch, setCustomerSearch] = useState('');
     const [customerSuggestions, setCustomerSuggestions] = useState([]);
     const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
+    const [payment, setPayment] = useState(INITIAL_PAYMENT);
     const [mobileStep, setMobileStep] = useState(1);
     const [customerErrors, setCustomerErrors] = useState(INITIAL_CUSTOMER_ERRORS);
     const [itemsError, setItemsError] = useState('');
     const [durationError, setDurationError] = useState('');
+    const [paymentError, setPaymentError] = useState('');
     const [mobileStepHint, setMobileStepHint] = useState('');
     const [inventoryViewMode, setInventoryViewMode] = useState(getInitialRentalInventoryView);
     const [receiptRental, setReceiptRental] = useState(null);
@@ -228,6 +236,13 @@ const Rental = ({
         setCustomer(normalizedCustomer);
         setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
         setDuration(Number.isFinite(draftPayload.duration) ? Math.max(1, draftPayload.duration) : 1);
+        setPayment({
+            status: draftPayload?.payment?.status === 'DP' ? 'DP' : 'LUNAS',
+            method: ['QRIS', 'BANK', 'TUNAI'].includes(String(draftPayload?.payment?.method || '').toUpperCase())
+                ? String(draftPayload.payment.method).toUpperCase()
+                : 'TUNAI',
+            paidAmount: draftPayload?.payment?.paidAmount ? String(draftPayload.payment.paidAmount) : '',
+        });
         setCategoryFilter(
             draftPayload.categoryFilter === 'all' || safeCategories.includes(draftPayload.categoryFilter)
                 ? draftPayload.categoryFilter
@@ -237,6 +252,7 @@ const Rental = ({
         setInventoryViewMode(draftPayload.inventoryViewMode === 'list' ? 'list' : 'grid');
         setItemsError('');
         setDurationError('');
+        setPaymentError('');
         setMobileStepHint('Draft berhasil dimuat. Lanjutkan proses sewa.');
         setCart(restoredItems);
 
@@ -257,7 +273,14 @@ const Rental = ({
             }
 
             const parsedDraft = JSON.parse(rawDraft);
-            const hasExistingInput = cart.length > 0 || customer.name.trim() || customer.phone.trim() || duration !== 1;
+            const hasExistingInput = (
+                cart.length > 0
+                || customer.name.trim()
+                || customer.phone.trim()
+                || duration !== 1
+                || payment.status !== 'LUNAS'
+                || String(payment.paidAmount || '').trim()
+            );
             if (hasExistingInput) {
                 return;
             }
@@ -274,7 +297,16 @@ const Rental = ({
         } catch {
             clearSavedDraft();
         }
-    }, [cart.length, clearSavedDraft, customer.name, customer.phone, duration, restoreDraftFromStorage]);
+    }, [
+        cart.length,
+        clearSavedDraft,
+        customer.name,
+        customer.phone,
+        duration,
+        payment.status,
+        payment.paidAmount,
+        restoreDraftFromStorage,
+    ]);
 
     const addToCart = useCallback((item) => {
         if (item.stock <= 0) return;
@@ -408,6 +440,15 @@ const Rental = ({
     };
 
     const calculateTotal = () => cart.reduce((sum, item) => sum + (item.price * item.qty * duration), 0);
+    const parsePaidAmount = () => {
+        const parsed = Number.parseInt(String(payment.paidAmount || '0').replace(/\D/g, ''), 10);
+        return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+    };
+    const totalAmount = calculateTotal();
+    const computedPaidAmount = payment.status === 'LUNAS'
+        ? totalAmount
+        : Math.min(parsePaidAmount(), totalAmount);
+    const remainingAmount = Math.max(0, totalAmount - computedPaidAmount);
     const cartQuantity = cart.reduce((sum, item) => sum + item.qty, 0);
     const isCustomerStepComplete = Boolean(
         customer.name.trim()
@@ -476,6 +517,22 @@ const Rental = ({
         return true;
     };
 
+    const validatePaymentStep = ({ focusOnError = false } = {}) => {
+        if (payment.status === 'DP') {
+            const paidAmount = parsePaidAmount();
+            if (paidAmount <= 0) {
+                setPaymentError('Nominal DP wajib diisi jika status pembayaran DP.');
+                if (focusOnError) {
+                    scheduleFocusField('paymentAmount');
+                }
+                return false;
+            }
+        }
+
+        setPaymentError('');
+        return true;
+    };
+
     const goToNextMobileStep = () => {
         if (mobileStep === 1 && !validateCustomerStep({ focusOnError: true })) {
             setMobileStepHint('Lengkapi data penyewa dulu sebelum lanjut.');
@@ -489,6 +546,11 @@ const Rental = ({
 
         if (mobileStep === 3 && !validateDurationStep({ focusOnError: true })) {
             setMobileStepHint('Cek lagi durasi sewa yang dimasukkan.');
+            return;
+        }
+
+        if (mobileStep === 3 && !validatePaymentStep({ focusOnError: true })) {
+            setMobileStepHint('Lengkapi detail pembayaran sebelum lanjut.');
             return;
         }
 
@@ -562,6 +624,7 @@ const Rental = ({
         const isCustomerValid = validateCustomerStep({ focusOnError: true });
         const isItemsValid = validateItemsStep({ focusOnError: true });
         const isDurationValid = validateDurationStep({ focusOnError: true });
+        const isPaymentValid = validatePaymentStep({ focusOnError: true });
 
         if (!isCustomerValid) {
             setMobileStep(1);
@@ -584,6 +647,13 @@ const Rental = ({
             return;
         }
 
+        if (!isPaymentValid) {
+            setMobileStep(3);
+            setMobileStepHint('Periksa detail pembayaran sebelum menyimpan transaksi.');
+            alert('Detail pembayaran belum valid.');
+            return;
+        }
+
         const payload = {
             customer: {
                 ...customer,
@@ -594,6 +664,11 @@ const Rental = ({
                 notes: item.notes || '',
             })),
             duration,
+            payment: {
+                status: payment.status,
+                method: payment.method,
+                ...(payment.status === 'DP' ? { paidAmount: parsePaidAmount() } : {}),
+            },
         };
 
         try {
@@ -605,9 +680,11 @@ const Rental = ({
             setCustomerSearch('');
             setCustomerSuggestions([]);
             setDuration(1);
+            setPayment(INITIAL_PAYMENT);
             setInventorySearch('');
             setCategoryFilter('all');
             setDurationError('');
+            setPaymentError('');
             setItemsError('');
             setMobileStepHint('');
             setMobileStep(1);
@@ -722,6 +799,38 @@ const Rental = ({
 
         if (durationError) {
             setDurationError('');
+        }
+    };
+
+    const handlePaymentStatusChange = (value) => {
+        const status = value === 'DP' ? 'DP' : 'LUNAS';
+        setPayment((previous) => ({
+            ...previous,
+            status,
+            paidAmount: status === 'LUNAS' ? '' : previous.paidAmount,
+        }));
+        setMobileStepHint('');
+        if (paymentError) {
+            setPaymentError('');
+        }
+    };
+
+    const handlePaymentMethodChange = (value) => {
+        const normalizedMethod = ['QRIS', 'BANK', 'TUNAI'].includes(value) ? value : 'TUNAI';
+        setPayment((previous) => ({
+            ...previous,
+            method: normalizedMethod,
+        }));
+    };
+
+    const handlePaymentAmountChange = (value) => {
+        const sanitized = value.replace(/\D/g, '');
+        setPayment((previous) => ({
+            ...previous,
+            paidAmount: sanitized,
+        }));
+        if (paymentError) {
+            setPaymentError('');
         }
     };
 
@@ -1064,12 +1173,55 @@ const Rental = ({
                                         {durationError && <p id="mobile-duration-error" className="mt-1 text-xs text-[#e74c3c]">{durationError}</p>}
                                     </div>
 
+                                    <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                        <div>
+                                            <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Status Pembayaran</label>
+                                            <select
+                                                className="w-full rounded-lg border border-border bg-bg-main p-3 text-sm text-text-main outline-none focus:border-accent"
+                                                value={payment.status}
+                                                onChange={(e) => handlePaymentStatusChange(e.target.value)}
+                                            >
+                                                <option value="LUNAS">LUNAS</option>
+                                                <option value="DP">DP</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Metode</label>
+                                            <select
+                                                className="w-full rounded-lg border border-border bg-bg-main p-3 text-sm text-text-main outline-none focus:border-accent"
+                                                value={payment.method}
+                                                onChange={(e) => handlePaymentMethodChange(e.target.value)}
+                                            >
+                                                <option value="TUNAI">TUNAI</option>
+                                                <option value="QRIS">QRIS</option>
+                                                <option value="BANK">BANK</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {payment.status === 'DP' && (
+                                        <div className="mb-4">
+                                            <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Nominal DP</label>
+                                            <input
+                                                className={`w-full rounded-lg border bg-bg-main p-3 text-text-main outline-none ${paymentError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                                                type="text"
+                                                inputMode="numeric"
+                                                data-rental-field="mobile-paymentAmount"
+                                                value={payment.paidAmount}
+                                                onChange={(e) => handlePaymentAmountChange(e.target.value)}
+                                                placeholder="Contoh: 150000"
+                                            />
+                                            {paymentError && <p className="mt-1 text-xs text-[#e74c3c]">{paymentError}</p>}
+                                        </div>
+                                    )}
+
                                     <div className="rounded-lg border border-accent/20 bg-accent/10 p-4 sm:p-5">
                                         <div className="mb-1 flex items-center justify-between gap-3">
                                             <span className="text-text-muted text-[0.9rem]">Total Bayar</span>
                                             <span className="text-text-muted text-[0.7rem] uppercase tracking-tighter">({duration} Hari)</span>
                                         </div>
-                                        <h3 className="text-[1.5rem] font-bold text-accent sm:text-[1.8rem]">Rp {calculateTotal().toLocaleString()}</h3>
+                                        <h3 className="text-[1.5rem] font-bold text-accent sm:text-[1.8rem]">Rp {totalAmount.toLocaleString()}</h3>
+                                        <p className="mt-1 text-xs text-text-muted">Terbayar: Rp {computedPaidAmount.toLocaleString()} • Sisa: Rp {remainingAmount.toLocaleString()}</p>
                                         <div className="mt-4 grid grid-cols-2 gap-3">
                                             <button
                                                 type="button"
@@ -1116,6 +1268,48 @@ const Rental = ({
                                     />
                                     {durationError && <p id="desktop-duration-error" className="mt-1 text-xs text-[#e74c3c]">{durationError}</p>}
                                 </div>
+
+                                <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <div>
+                                        <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Status Pembayaran</label>
+                                        <select
+                                            className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-sm text-text-main outline-none focus:border-accent"
+                                            value={payment.status}
+                                            onChange={(e) => handlePaymentStatusChange(e.target.value)}
+                                        >
+                                            <option value="LUNAS">LUNAS</option>
+                                            <option value="DP">DP</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Metode</label>
+                                        <select
+                                            className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-sm text-text-main outline-none focus:border-accent"
+                                            value={payment.method}
+                                            onChange={(e) => handlePaymentMethodChange(e.target.value)}
+                                        >
+                                            <option value="TUNAI">TUNAI</option>
+                                            <option value="QRIS">QRIS</option>
+                                            <option value="BANK">BANK</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {payment.status === 'DP' && (
+                                    <div className="mb-4">
+                                        <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Nominal DP</label>
+                                        <input
+                                            className={`w-full rounded-lg border bg-bg-main p-2.5 text-text-main outline-none ${paymentError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                                            type="text"
+                                            inputMode="numeric"
+                                            data-rental-field="desktop-paymentAmount"
+                                            value={payment.paidAmount}
+                                            onChange={(e) => handlePaymentAmountChange(e.target.value)}
+                                            placeholder="Contoh: 150000"
+                                        />
+                                        {paymentError && <p className="mt-1 text-xs text-[#e74c3c]">{paymentError}</p>}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="mt-4 rounded-lg border border-accent/20 bg-accent/10 p-4 sm:p-5 lg:sticky lg:bottom-0 lg:z-10 lg:backdrop-blur">
@@ -1123,7 +1317,8 @@ const Rental = ({
                                     <span className="text-text-muted text-[0.9rem]">Total Bayar</span>
                                     <span className="text-text-muted text-[0.7rem] uppercase tracking-tighter">({duration} Hari)</span>
                                 </div>
-                                <h3 className="text-[1.5rem] font-bold text-accent sm:text-[1.8rem]">Rp {calculateTotal().toLocaleString()}</h3>
+                                <h3 className="text-[1.5rem] font-bold text-accent sm:text-[1.8rem]">Rp {totalAmount.toLocaleString()}</h3>
+                                <p className="mt-1 text-xs text-text-muted">Terbayar: Rp {computedPaidAmount.toLocaleString()} • Sisa: Rp {remainingAmount.toLocaleString()}</p>
                                 <button
                                     type="button"
                                     disabled={isSubmitting}

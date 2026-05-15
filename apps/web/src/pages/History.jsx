@@ -2,6 +2,14 @@ import React, { useMemo, useState } from 'react';
 import ReceiptModal from '../components/ReceiptModal';
 import { openReceiptWhatsApp, printReceipt } from '../lib/receipt';
 
+function formatPaymentSummary(rental) {
+    const status = String(rental?.payment?.status || 'LUNAS').toUpperCase();
+    const method = String(rental?.payment?.method || 'TUNAI').toUpperCase();
+    const paidAmount = Number(rental?.payment?.paidAmount ?? rental?.total ?? 0) || 0;
+    const remainingAmount = Number(rental?.payment?.remainingAmount ?? 0) || 0;
+    return { status, method, paidAmount, remainingAmount };
+}
+
 const History = ({
     rentals,
     currentUser,
@@ -286,7 +294,9 @@ const History = ({
                     ) : (
                         <>
                             <div className="space-y-3 p-3 sm:p-4 md:hidden">
-                                {[...filteredRentals].reverse().map((rental) => (
+                                {[...filteredRentals].reverse().map((rental) => {
+                                    const payment = formatPaymentSummary(rental);
+                                    return (
                                     <article key={rental.id} className="rounded-lg border border-border/60 bg-bg-main/40 p-4">
                                         <div className="mb-2 flex items-start justify-between gap-2">
                                             <div>
@@ -314,6 +324,9 @@ const History = ({
 
                                         <p className="text-xs text-text-muted">{rental.items.map((item) => `${item.name} (x${item.qty})`).join(', ')}</p>
                                         <p className="mt-2 text-sm font-bold text-text-main">Rp {(rental.finalTotal ?? rental.total ?? 0).toLocaleString()}</p>
+                                        <p className="mt-1 text-[0.72rem] text-text-muted">
+                                            {payment.status} • {payment.method} • Terbayar Rp {payment.paidAmount.toLocaleString()} • Sisa Rp {payment.remainingAmount.toLocaleString()}
+                                        </p>
                                         {rental.status === 'Returned' && rental.additionalFee > 0 && (
                                             <p className="mt-1 inline-block rounded bg-[#e74c3c]/10 px-2 py-0.5 text-[0.72rem] text-[#e74c3c]">
                                                 + Rp {rental.additionalFee.toLocaleString()} (Denda/Extra)
@@ -339,7 +352,8 @@ const History = ({
                                             )}
                                         </div>
                                     </article>
-                                ))}
+                                    );
+                                })}
                             </div>
 
                             <table className="hidden w-full min-w-[980px] border-collapse md:table">
@@ -354,7 +368,9 @@ const History = ({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {[...filteredRentals].reverse().map((rental) => (
+                                    {[...filteredRentals].reverse().map((rental) => {
+                                        const payment = formatPaymentSummary(rental);
+                                        return (
                                         <tr key={rental.id} className="group transition-colors hover:bg-white/5">
                                             <td className="align-top border-b border-border/50 p-4">
                                                 <div className="mb-1 font-mono text-[0.9rem] font-semibold text-text-main">{rental.id}</div>
@@ -421,6 +437,12 @@ const History = ({
                                                         "{rental.returnNotes}"
                                                     </div>
                                                 )}
+                                                <div className="mt-1 text-[0.72rem] text-text-muted">
+                                                    {payment.status} • {payment.method}
+                                                </div>
+                                                <div className="text-[0.72rem] text-text-muted">
+                                                    Terbayar Rp {payment.paidAmount.toLocaleString()} • Sisa Rp {payment.remainingAmount.toLocaleString()}
+                                                </div>
                                             </td>
                                             <td className="align-top border-b border-border/50 p-4 text-right">
                                                 <div className="flex justify-end gap-2">
@@ -443,7 +465,8 @@ const History = ({
                                                 </div>
                                             </td>
                                         </tr>
-                                    ))}
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </>

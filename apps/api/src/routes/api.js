@@ -6,6 +6,7 @@ import {
   upsertCustomer,
   createItem,
   createRental,
+  createTenantUserForUser,
   createUser,
   deleteRentalByAdmin,
   deleteCategory,
@@ -35,6 +36,7 @@ import {
   listRentals,
   listReturns,
   listUsers,
+  listTenantUsersForUser,
   processReturn,
   verifyUserPasswordById,
   rehashUserPassword,
@@ -54,6 +56,7 @@ import {
   updateCustomerSchema,
   createItemSchema,
   createUserSchema,
+  createTenantUserSchema,
   createTenantSchema,
   createRentalSchema,
   loginSchema,
@@ -460,7 +463,7 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'PATCH' && pathname === '/api/branches/current/settings') {
-      const user = await ensureAdmin();
+      const user = await ensureAuth();
       const context = await ensureRequestContext();
       const body = updateBranchSettingsSchema.parse(await readJsonBody(req));
       const updated = await updateBranchSettingsByIdForUser({
@@ -491,7 +494,7 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'PATCH' && pathname.startsWith('/api/branches/') && pathname.endsWith('/settings')) {
-      const user = await ensureAdmin();
+      const user = await ensureAuth();
       const branchId = getBranchIdFromSettingsPath(pathname);
       if (!branchId) {
         throw new Error('Branch id is required');
@@ -509,7 +512,7 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'POST' && pathname === '/api/branches') {
-      const user = await ensureAdmin();
+      const user = await ensureAuth();
       const body = createBranchSchema.parse(await readJsonBody(req));
       const created = await createBranchForUser({
         userId: user.id,
@@ -522,7 +525,7 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'PATCH' && pathname.startsWith('/api/branches/')) {
-      const user = await ensureAdmin();
+      const user = await ensureAuth();
       const branchId = decodeURIComponent(pathname.replace('/api/branches/', ''));
       const body = updateBranchSchema.parse(await readJsonBody(req));
       const updated = await updateBranchForUser({
@@ -536,7 +539,7 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'GET' && pathname === '/api/tenant-memberships') {
-      const user = await ensureAdmin();
+      const user = await ensureAuth();
       const requestedTenantId = (searchParams.get('tenantId') || '').trim() || 'current';
       const memberships = await listTenantMembershipsForUser({
         userId: user.id,
@@ -548,7 +551,7 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'POST' && pathname === '/api/tenant-memberships') {
-      const user = await ensureAdmin();
+      const user = await ensureAuth();
       const body = upsertTenantMembershipSchema.parse(await readJsonBody(req));
       const saved = await upsertTenantMembershipForUser({
         actorUserId: user.id,
@@ -561,7 +564,7 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'PATCH' && pathname.startsWith('/api/tenant-memberships/')) {
-      const user = await ensureAdmin();
+      const user = await ensureAuth();
       const membershipId = decodeURIComponent(pathname.replace('/api/tenant-memberships/', ''));
       const body = updateTenantMembershipSchema.parse(await readJsonBody(req));
       const updated = await updateTenantMembershipForUser({
@@ -575,7 +578,7 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'GET' && pathname === '/api/branch-access') {
-      const user = await ensureAdmin();
+      const user = await ensureAuth();
       const requestedTenantId = (searchParams.get('tenantId') || '').trim() || 'current';
       const accesses = await listBranchAccessForUser({
         userId: user.id,
@@ -587,7 +590,7 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'POST' && pathname === '/api/branch-access') {
-      const user = await ensureAdmin();
+      const user = await ensureAuth();
       const body = upsertBranchAccessSchema.parse(await readJsonBody(req));
       const saved = await upsertBranchAccessForUser({
         actorUserId: user.id,
@@ -600,7 +603,7 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'DELETE' && pathname.startsWith('/api/branch-access/')) {
-      const user = await ensureAdmin();
+      const user = await ensureAuth();
       const accessId = decodeURIComponent(pathname.replace('/api/branch-access/', ''));
       const removed = await removeBranchAccessForUser({
         actorUserId: user.id,
@@ -623,7 +626,6 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'PATCH' && pathname === '/api/tenants/current/settings') {
-      await ensureAdmin();
       const user = await ensureAuth();
       const currentSettings = await getTenantSettingsForUser({
         userId: user.id,
@@ -656,7 +658,6 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'PATCH' && pathname.startsWith('/api/tenants/') && pathname.endsWith('/settings')) {
-      await ensureAdmin();
       const user = await ensureAuth();
       const tenantId = getTenantIdFromSettingsPath(pathname);
       if (!tenantId) {
@@ -692,6 +693,32 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'GET' && pathname === '/api/users') {
       await ensureAdmin();
       sendSuccess(res, 200, await listUsers());
+      return true;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/users/tenant') {
+      const user = await ensureAuth();
+      const requestedTenantId = (searchParams.get('tenantId') || '').trim() || 'current';
+      const tenantUsers = await listTenantUsersForUser({
+        userId: user.id,
+        role: user.role,
+        tenantId: requestedTenantId,
+      });
+      sendSuccess(res, 200, tenantUsers);
+      return true;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/users/tenant') {
+      const user = await ensureAuth();
+      const body = createTenantUserSchema.parse(await readJsonBody(req));
+      const created = await createTenantUserForUser({
+        actorUserId: user.id,
+        actorRole: user.role,
+        tenantId: body.tenantId || 'current',
+        payload: body,
+        passwordPepper: env.passwordPepper,
+      });
+      sendSuccess(res, 201, created);
       return true;
     }
 
