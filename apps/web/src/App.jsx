@@ -632,7 +632,7 @@ function App() {
             />
             <Route
               path={APP_ROUTES.branches}
-              element={isAdminLikeUser ? <Branches /> : <Navigate to={APP_ROUTES.dashboard} replace />}
+              element={<Branches />}
             />
             <Route
               path={APP_ROUTES.account}

@@ -15,6 +15,12 @@ const rentalItemSchema = z.object({
   notes: z.string().trim().optional().default(''),
 });
 
+const rentalPaymentSchema = z.object({
+  status: z.enum(['DP', 'LUNAS']).default('LUNAS'),
+  method: z.enum(['QRIS', 'BANK', 'TUNAI']).default('TUNAI'),
+  paidAmount: z.coerce.number().int().min(0).optional(),
+});
+
 export const loginSchema = z.object({
   username: z.string().trim().min(1),
   password: z.string().min(1),
@@ -115,6 +121,7 @@ export const createRentalSchema = z.object({
   customer: customerSchema,
   items: z.array(rentalItemSchema).min(1),
   duration: z.coerce.number().int().min(1),
+  payment: rentalPaymentSchema.optional(),
   id: z.string().trim().min(1).optional(),
 });
 
@@ -147,6 +154,13 @@ export const createUserSchema = z.object({
 export const updateUserSchema = z.object({
   username: z.string().trim().min(3).max(50),
   role: userRoleSchema,
+});
+
+export const createTenantUserSchema = z.object({
+  username: z.string().trim().min(3).max(50),
+  password: z.string().min(8).max(128),
+  tenantRole: z.enum(['admin', 'kasir']).default('kasir'),
+  tenantId: z.string().trim().min(1).optional(),
 });
 
 export const adminChangePasswordSchema = z.object({

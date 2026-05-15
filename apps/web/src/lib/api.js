@@ -393,6 +393,18 @@ export function fetchUsers() {
   return request('/api/users', {}, { auth: true });
 }
 
+export function fetchTenantUsers(tenantId = 'current') {
+  const suffix = `?tenantId=${encodeURIComponent(tenantId)}`;
+  return request(`/api/users/tenant${suffix}`, {}, { auth: true });
+}
+
+export function createTenantUserAccount(payload) {
+  return request('/api/users/tenant', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
 export function createUserAccount(payload) {
   return request('/api/users', {
     method: 'POST',

@@ -112,6 +112,10 @@ export function buildReceiptWhatsAppText(rental, options = {}) {
     const duration = toNumber(rental?.duration);
     const dueDate = getReceiptDueDate(rental);
     const total = getReceiptTotal(rental);
+    const paymentStatus = String(rental?.payment?.status || 'LUNAS').toUpperCase();
+    const paymentMethod = String(rental?.payment?.method || 'TUNAI').toUpperCase();
+    const paidAmount = toNumber(rental?.payment?.paidAmount ?? total);
+    const remainingAmount = toNumber(rental?.payment?.remainingAmount ?? Math.max(0, total - paidAmount));
 
     const itemLines = items.map((item) => {
         const itemSubtotal = toNumber(item?.price) * toNumber(item?.qty) * duration;
@@ -135,6 +139,9 @@ export function buildReceiptWhatsAppText(rental, options = {}) {
         ...itemLines,
         '',
         `*TOTAL: ${formatCurrency(total)}*`,
+        `Pembayaran: ${paymentStatus} (${paymentMethod})`,
+        `Terbayar: ${formatCurrency(paidAmount)}`,
+        `Sisa: ${formatCurrency(remainingAmount)}`,
         ...profile.legalFooterLines,
         'Terima kasih.',
     ].join('\n');
@@ -162,6 +169,10 @@ export function buildReceiptPrintHtml(rental, options = {}) {
     const dueDate = getReceiptDueDate(rental);
     const duration = toNumber(rental?.duration);
     const total = getReceiptTotal(rental);
+    const paymentStatus = String(rental?.payment?.status || 'LUNAS').toUpperCase();
+    const paymentMethod = String(rental?.payment?.method || 'TUNAI').toUpperCase();
+    const paidAmount = toNumber(rental?.payment?.paidAmount ?? total);
+    const remainingAmount = toNumber(rental?.payment?.remainingAmount ?? Math.max(0, total - paidAmount));
 
     const rows = items.map((item) => {
         const qty = toNumber(item?.qty);
@@ -252,6 +263,9 @@ export function buildReceiptPrintHtml(rental, options = {}) {
   </div>
 
   <p class="summary"><strong>Total: ${escapeHtml(formatCurrency(total))}</strong></p>
+  <p class="muted">Pembayaran: ${escapeHtml(paymentStatus)} (${escapeHtml(paymentMethod)})</p>
+  <p class="muted">Terbayar: ${escapeHtml(formatCurrency(paidAmount))}</p>
+  <p class="muted">Sisa: ${escapeHtml(formatCurrency(remainingAmount))}</p>
   <div class="divider"></div>
   ${profile.legalFooterLines.map((line) => `<p class="footer">${escapeHtml(line)}</p>`).join('')}
   <p class="footer">Terima kasih sudah sewa di ${escapeHtml(storeName)}</p>

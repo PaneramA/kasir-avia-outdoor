@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { changeMyPassword } from '../lib/api'
 
 const Account = ({
@@ -33,11 +33,6 @@ const Account = ({
     const [isSubmittingBranchStore, setIsSubmittingBranchStore] = useState(false)
     const [branchStoreMessage, setBranchStoreMessage] = useState('')
     const [branchStoreErrorMessage, setBranchStoreErrorMessage] = useState('')
-
-    const isAdminLike = useMemo(() => {
-        const role = String(currentUser?.role || '').trim().toLowerCase()
-        return role === 'admin' || role === 'superuser'
-    }, [currentUser?.role])
 
     useEffect(() => {
         setStoreForm({
@@ -95,11 +90,6 @@ const Account = ({
         setStoreMessage('')
         setStoreErrorMessage('')
 
-        if (!isAdminLike) {
-            setStoreErrorMessage('Hanya admin/superuser yang bisa mengubah pengaturan toko.')
-            return
-        }
-
         if (typeof onUpdateTenantSettings !== 'function') {
             setStoreErrorMessage('Fitur pengaturan toko belum tersedia.')
             return
@@ -136,11 +126,6 @@ const Account = ({
         event.preventDefault()
         setBranchStoreMessage('')
         setBranchStoreErrorMessage('')
-
-        if (!isAdminLike) {
-            setBranchStoreErrorMessage('Hanya admin/superuser yang bisa mengubah pengaturan cabang.')
-            return
-        }
 
         if (typeof onUpdateBranchSettings !== 'function') {
             setBranchStoreErrorMessage('Fitur pengaturan cabang belum tersedia.')
@@ -203,7 +188,6 @@ const Account = ({
                             value={storeForm.storeName}
                             onChange={(event) => setStoreForm((prev) => ({ ...prev, storeName: event.target.value }))}
                             required
-                            disabled={!isAdminLike}
                         />
                     </div>
                     <div>
@@ -213,7 +197,6 @@ const Account = ({
                             value={storeForm.address}
                             onChange={(event) => setStoreForm((prev) => ({ ...prev, address: event.target.value }))}
                             placeholder="Satu baris per alamat"
-                            disabled={!isAdminLike}
                         ></textarea>
                     </div>
                     <div>
@@ -223,13 +206,12 @@ const Account = ({
                             className="w-full bg-bg-main border border-border p-2.5 rounded-lg text-text-main outline-none focus:border-accent"
                             value={storeForm.phone}
                             onChange={(event) => setStoreForm((prev) => ({ ...prev, phone: event.target.value }))}
-                            disabled={!isAdminLike}
                         />
                     </div>
 
                     <button
                         type="submit"
-                        disabled={isSubmittingStore || !isAdminLike}
+                        disabled={isSubmittingStore}
                         className="bg-accent px-5 py-2.5 rounded-lg text-white font-semibold hover:bg-accent-hover disabled:opacity-60"
                     >
                         {isSubmittingStore ? 'Menyimpan...' : 'Simpan Pengaturan Toko'}
@@ -260,7 +242,6 @@ const Account = ({
                             value={branchForm.storeName}
                             onChange={(event) => setBranchForm((prev) => ({ ...prev, storeName: event.target.value }))}
                             placeholder="Opsional, kosongkan jika ikut tenant"
-                            disabled={!isAdminLike}
                         />
                     </div>
                     <div>
@@ -270,7 +251,6 @@ const Account = ({
                             value={branchForm.address}
                             onChange={(event) => setBranchForm((prev) => ({ ...prev, address: event.target.value }))}
                             placeholder="Satu baris per alamat, kosongkan jika ikut tenant"
-                            disabled={!isAdminLike}
                         ></textarea>
                     </div>
                     <div>
@@ -281,7 +261,6 @@ const Account = ({
                             value={branchForm.phone}
                             onChange={(event) => setBranchForm((prev) => ({ ...prev, phone: event.target.value }))}
                             placeholder="Kosongkan jika ikut tenant"
-                            disabled={!isAdminLike}
                         />
                     </div>
                     <div>
@@ -291,13 +270,12 @@ const Account = ({
                             value={branchForm.legalFooter}
                             onChange={(event) => setBranchForm((prev) => ({ ...prev, legalFooter: event.target.value }))}
                             placeholder="Satu baris per catatan, kosongkan jika ikut tenant"
-                            disabled={!isAdminLike}
                         ></textarea>
                     </div>
 
                     <button
                         type="submit"
-                        disabled={isSubmittingBranchStore || !isAdminLike}
+                        disabled={isSubmittingBranchStore}
                         className="bg-accent px-5 py-2.5 rounded-lg text-white font-semibold hover:bg-accent-hover disabled:opacity-60"
                     >
                         {isSubmittingBranchStore ? 'Menyimpan...' : 'Simpan Pengaturan Cabang'}
