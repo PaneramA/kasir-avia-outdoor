@@ -26,6 +26,15 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+export const selfRegisterSchema = z.object({
+  username: z.string().trim().min(3).max(50),
+  password: z.string().min(8).max(128),
+  storeName: z.string().trim().min(2).max(120),
+  storeSlug: z.string().trim().min(2).max(80).optional(),
+  initialBranchCode: z.string().trim().min(2).max(40).optional(),
+  initialBranchName: z.string().trim().min(2).max(120).optional(),
+});
+
 export const createCategorySchema = z.object({
   name: z.string().trim().min(1),
 });

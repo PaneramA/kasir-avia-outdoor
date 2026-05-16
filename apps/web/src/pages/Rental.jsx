@@ -191,6 +191,13 @@ const Rental = ({
         const category = String(item.category || '').toLowerCase();
         return name.includes(normalizedInventorySearch) || category.includes(normalizedInventorySearch);
     });
+    const cartQtyByItemId = useMemo(() => {
+        const nextMap = new Map();
+        cart.forEach((cartItem) => {
+            nextMap.set(cartItem.id, Number(cartItem.qty) || 0);
+        });
+        return nextMap;
+    }, [cart]);
 
     const clearSavedDraft = useCallback(() => {
         if (typeof window === 'undefined') {
@@ -327,32 +334,48 @@ const Rental = ({
         }
     }, [cart, setCart]);
 
-    const renderInventoryGridItem = (item) => (
-        <div
-            key={item.id}
-            className={`bg-card-bg border border-border rounded-lg p-4 cursor-pointer transition-all hover:border-accent hover:transform hover:-translate-y-1 group ${item.stock <= 0 ? 'opacity-50 grayscale cursor-not-allowed' : ''}`}
-            onClick={() => addToCart(item)}
-        >
+    const renderInventoryGridItem = (item) => {
+        const isOutOfStock = item.stock <= 0;
+        const qtyInCart = cartQtyByItemId.get(item.id) || 0;
+
+        return (
+            <button
+                key={item.id}
+                type="button"
+                className={`group relative w-full rounded-lg border p-4 text-left transition-all duration-150 ${isOutOfStock ? 'cursor-not-allowed border-border bg-card-bg opacity-50 grayscale' : qtyInCart > 0 ? 'border-accent/70 bg-accent/5 shadow-[0_8px_20px_rgba(230,126,34,0.14)] active:scale-[0.98] active:border-accent' : 'border-border bg-card-bg hover:-translate-y-1 hover:border-accent active:scale-[0.98] active:border-accent active:bg-accent/10'}`}
+                onClick={() => addToCart(item)}
+                disabled={isOutOfStock}
+            >
             <div className="relative mb-3 h-[130px] overflow-hidden rounded-lg bg-[#1A2222] sm:mb-4 sm:h-[150px]">
                 <img className="w-full h-full object-cover transition-transform group-hover:scale-105" src={item.image || 'https://via.placeholder.com/150'} alt={item.name} />
-                {item.stock <= 0 && <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[0.8rem] font-bold uppercase">Habis</div>}
+                {isOutOfStock && <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[0.8rem] font-bold uppercase">Habis</div>}
+                {!isOutOfStock && qtyInCart > 0 && (
+                    <span className="absolute left-2 top-2 rounded-full bg-accent px-2 py-1 text-[0.62rem] font-semibold uppercase tracking-wide text-white">
+                        x{qtyInCart} di keranjang
+                    </span>
+                )}
             </div>
             <div className="rc-info">
                 <h5 className="text-text-main font-semibold mb-1 line-clamp-1">{item.name}</h5>
                 <span className="text-accent font-bold text-[0.95rem] block">Rp {parseInt(item.price, 10).toLocaleString()} <small className="text-[0.7em] font-normal text-text-muted">/hari</small></span>
                 <span className="text-text-muted text-[0.75rem] block mt-1">Tersedia: {item.stock}</span>
             </div>
-        </div>
-    );
+            </button>
+        );
+    };
 
-    const renderInventoryListItem = (item) => (
-        <button
-            key={item.id}
-            type="button"
-            className={`w-full rounded-lg border border-border bg-card-bg p-3 text-left transition-all hover:border-accent ${item.stock <= 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-            onClick={() => addToCart(item)}
-            disabled={item.stock <= 0}
-        >
+    const renderInventoryListItem = (item) => {
+        const isOutOfStock = item.stock <= 0;
+        const qtyInCart = cartQtyByItemId.get(item.id) || 0;
+
+        return (
+            <button
+                key={item.id}
+                type="button"
+                className={`w-full rounded-lg border bg-card-bg p-3 text-left transition-all duration-150 ${isOutOfStock ? 'opacity-50 cursor-not-allowed border-border' : qtyInCart > 0 ? 'border-accent/70 bg-accent/5 shadow-[0_6px_16px_rgba(230,126,34,0.12)] active:scale-[0.99] active:border-accent' : 'border-border hover:border-accent active:scale-[0.99] active:border-accent active:bg-accent/10'}`}
+                onClick={() => addToCart(item)}
+                disabled={isOutOfStock}
+            >
             <div className="flex items-center gap-3">
                 <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-[#1A2222] sm:h-16 sm:w-16">
                     <img className="h-full w-full object-cover" src={item.image || 'https://via.placeholder.com/120'} alt={item.name} />
@@ -362,14 +385,20 @@ const Rental = ({
                     <p className="mt-0.5 text-xs text-text-muted">Tersedia: {item.stock}</p>
                     <p className="mt-1 text-xs font-bold text-accent sm:text-sm">Rp {parseInt(item.price, 10).toLocaleString()} /hari</p>
                 </div>
-                {item.stock <= 0 && (
+                {isOutOfStock && (
                     <span className="shrink-0 rounded-full bg-[#e74c3c]/20 px-2 py-1 text-[0.65rem] font-semibold uppercase text-[#e74c3c]">
                         Habis
                     </span>
                 )}
+                {!isOutOfStock && qtyInCart > 0 && (
+                    <span className="shrink-0 rounded-full bg-accent px-2.5 py-1 text-[0.64rem] font-semibold uppercase text-white">
+                        x{qtyInCart}
+                    </span>
+                )}
             </div>
         </button>
-    );
+        );
+    };
 
     useEffect(() => {
         if (typeof window === 'undefined') {
@@ -1032,9 +1061,11 @@ const Rental = ({
 
             <div className="flex flex-col gap-6 lg:h-full lg:min-h-0 lg:flex-row lg:gap-[30px]">
                 <div className={`${mobileStep === 2 ? 'flex' : 'hidden'} flex-1 flex-col lg:flex lg:min-h-0`}>
-                    <div className="mb-5 flex flex-col gap-3 sm:mb-[30px] sm:flex-row sm:items-center sm:justify-between">
-                        <h3 className="text-[1.1rem] font-bold text-text-main sm:text-[1.2rem]">Pilih Barang</h3>
-                        <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[260px] sm:items-end">
+                    <div className="mb-5 sm:mb-[30px]">
+                        <div className="sticky top-2 z-20 rounded-xl border border-border/80 bg-bg-main/95 p-3 shadow-lg backdrop-blur lg:static lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <h3 className="text-[1.1rem] font-bold text-text-main sm:text-[1.2rem]">Pilih Barang</h3>
+                                <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[260px] sm:items-end">
                             <div className="w-full rounded-lg border border-border bg-sidebar-bg px-4 py-2">
                                 <input
                                     className="w-full border-none bg-transparent text-sm text-text-main outline-none placeholder:text-text-muted"
@@ -1045,7 +1076,7 @@ const Rental = ({
                                     onChange={(e) => setInventorySearch(e.target.value)}
                                 />
                             </div>
-                            <p className="text-[0.68rem] text-text-muted">
+                            <p className="hidden text-[0.68rem] text-text-muted lg:block">
                                 Shortcut desktop: `/` fokus pencarian, `Enter` tambah hasil teratas.
                             </p>
                             <div className="w-full rounded-lg border border-border bg-sidebar-bg px-4 py-2 sm:w-auto">
@@ -1067,6 +1098,8 @@ const Rental = ({
                                 containerClassName="w-full sm:w-auto"
                                 buttonClassName="px-3 py-1.5 text-[0.72rem]"
                             />
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div className="custom-scrollbar lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-2">

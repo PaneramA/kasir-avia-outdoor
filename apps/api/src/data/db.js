@@ -971,6 +971,10 @@ async function resolveTenantForUser({ userId, role, requestedTenantId }) {
       throw new Error('Forbidden');
     }
 
+    if (tenant.status !== 'active') {
+      throw new Error('Tenant is not active');
+    }
+
     return tenant;
   }
 
@@ -978,6 +982,9 @@ async function resolveTenantForUser({ userId, role, requestedTenantId }) {
     where: {
       userId,
       status: 'active',
+      tenant: {
+        status: 'active',
+      },
     },
     include: {
       tenant: true,
@@ -991,6 +998,30 @@ async function resolveTenantForUser({ userId, role, requestedTenantId }) {
 
   if (isSuperuser) {
     return ensureDefaultTenant();
+  }
+
+  const hasActiveButSuspendedMembership = await prisma.userMembership.findFirst({
+    where: {
+      userId,
+      status: 'active',
+      tenant: {
+        status: 'suspended',
+      },
+    },
+    select: { id: true },
+  });
+
+  if (hasActiveButSuspendedMembership) {
+    throw new Error('Tenant is not active');
+  }
+
+  const hasAnyMembership = await prisma.userMembership.findFirst({
+    where: { userId },
+    select: { id: true },
+  });
+
+  if (hasAnyMembership) {
+    throw new Error('Tenant membership is inactive');
   }
 
   // Backward compatibility: existing kasir accounts without membership
@@ -1060,6 +1091,9 @@ export async function listTenantsForUser({ userId, role }) {
     where: {
       userId,
       status: 'active',
+      tenant: {
+        status: 'active',
+      },
     },
     include: {
       tenant: true,
@@ -1068,11 +1102,33 @@ export async function listTenantsForUser({ userId, role }) {
   });
 
   if (memberships.length === 0) {
+    const hasAnyMembership = await prisma.userMembership.findFirst({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (hasAnyMembership) {
+      return [];
+    }
+
     const fallbackTenant = await ensureDefaultTenant();
     return [toTenantDto(fallbackTenant)];
   }
 
   return memberships.map(({ tenant }) => toTenantDto(tenant));
+}
+
+export async function listPublicActiveTenants() {
+  const tenants = await prisma.tenant.findMany({
+    where: { status: 'active' },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return tenants.map((tenant) => ({
+    id: tenant.id,
+    slug: tenant.slug,
+    name: tenant.name,
+  }));
 }
 
 export async function createTenantForSuperuser(payload) {
@@ -2595,6 +2651,36 @@ export async function findUserByUsername(username) {
   });
 }
 
+export async function getUserTenantMembershipSummary(userId) {
+  const actorId = String(userId || '').trim();
+  if (!actorId) {
+    return { total: 0, active: 0, activeOnActiveTenant: 0 };
+  }
+
+  const [total, active, activeOnActiveTenant] = await prisma.$transaction([
+    prisma.userMembership.count({
+      where: { userId: actorId },
+    }),
+    prisma.userMembership.count({
+      where: {
+        userId: actorId,
+        status: 'active',
+      },
+    }),
+    prisma.userMembership.count({
+      where: {
+        userId: actorId,
+        status: 'active',
+        tenant: {
+          status: 'active',
+        },
+      },
+    }),
+  ]);
+
+  return { total, active, activeOnActiveTenant };
+}
+
 export async function findUserById(id) {
   return prisma.user.findUnique({
     where: { id },
@@ -2777,6 +2863,126 @@ export async function createTenantUserForUser({
 
   return {
     ...toUserDto(created.user),
+    tenantMembershipId: created.membership.id,
+    tenantRole: created.membership.role,
+    tenantStatus: created.membership.status,
+  };
+}
+
+export async function createSelfRegisteredTenantUser({
+  payload,
+  passwordPepper,
+}) {
+  const normalizedUsername = String(payload?.username || '').trim().toLowerCase();
+  const password = String(payload?.password || '');
+  const storeName = String(payload?.storeName || '').trim();
+  const storeSlugInput = String(payload?.storeSlug || '').trim().toLowerCase();
+  const initialBranchCode = String(payload?.initialBranchCode || DEFAULT_BRANCH_CODE).trim().toLowerCase();
+  const initialBranchName = String(payload?.initialBranchName || DEFAULT_BRANCH_NAME).trim();
+  const tenantSlug = slugifyTenant(storeSlugInput || storeName);
+
+  if (!normalizedUsername) {
+    throw new Error('Username is required');
+  }
+
+  if (!password) {
+    throw new Error('Password is required');
+  }
+
+  if (password.length < 8) {
+    throw new Error('Password must be at least 8 characters');
+  }
+
+  if (!storeName) {
+    throw new Error('Store name is required');
+  }
+
+  if (!tenantSlug) {
+    throw new Error('Store slug is invalid');
+  }
+
+  if (!initialBranchCode) {
+    throw new Error('Initial branch code is required');
+  }
+
+  if (!initialBranchName) {
+    throw new Error('Initial branch name is required');
+  }
+
+  const existingUser = await prisma.user.findUnique({
+    where: { username: normalizedUsername },
+  });
+
+  if (existingUser) {
+    throw new Error('Username already exists');
+  }
+
+  const existingTenant = await prisma.tenant.findUnique({
+    where: { slug: tenantSlug },
+  });
+
+  if (existingTenant) {
+    throw new Error('Store slug already exists');
+  }
+
+  const created = await prisma.$transaction(async (tx) => {
+    const tenant = await tx.tenant.create({
+      data: {
+        slug: tenantSlug,
+        name: storeName,
+        status: 'suspended',
+      },
+    });
+
+    const branch = await tx.branch.create({
+      data: {
+        tenantId: tenant.id,
+        code: initialBranchCode,
+        name: initialBranchName,
+        status: 'active',
+      },
+    });
+
+    await tx.tenantSettings.create({
+      data: {
+        tenantId: tenant.id,
+        storeName,
+        addressLines: DEFAULT_TENANT_SETTINGS.addressLines,
+        phone: DEFAULT_TENANT_SETTINGS.phone,
+        legalFooterLines: DEFAULT_TENANT_SETTINGS.legalFooterLines,
+        timezone: DEFAULT_TENANT_SETTINGS.timezone,
+        currency: DEFAULT_TENANT_SETTINGS.currency,
+      },
+    });
+
+    const user = await tx.user.create({
+      data: {
+        username: normalizedUsername,
+        passwordHash: hashPassword(password, passwordPepper),
+        role: 'kasir',
+      },
+    });
+
+    const membership = await tx.userMembership.create({
+      data: {
+        userId: user.id,
+        tenantId: tenant.id,
+        role: 'owner',
+        status: 'active',
+      },
+    });
+
+    return { user, membership, tenant, branch };
+  });
+
+  return {
+    ...toUserDto(created.user),
+    tenantId: created.tenant.id,
+    tenantSlug: created.tenant.slug,
+    tenantName: created.tenant.name,
+    initialBranchId: created.branch.id,
+    initialBranchCode: created.branch.code,
+    initialBranchName: created.branch.name,
     tenantMembershipId: created.membership.id,
     tenantRole: created.membership.role,
     tenantStatus: created.membership.status,
