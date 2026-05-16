@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';
+import { getSeedUsers } from './seed.users.js';
 
 const prisma = new PrismaClient();
 
@@ -11,6 +12,20 @@ async function main() {
   const adminUsername = process.env.ADMIN_USERNAME || 'admin';
   const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
   const pepper = process.env.PASSWORD_PEPPER || 'change-me-pepper';
+  const seedUsers = getSeedUsers({ adminUsername, adminPassword });
+  const duplicateUsernames = seedUsers.reduce((accumulator, user) => {
+    const next = accumulator;
+    if (next.seen.has(user.username)) {
+      next.duplicates.add(user.username);
+    }
+    next.seen.add(user.username);
+    return next;
+  }, { seen: new Set(), duplicates: new Set() });
+
+  if (duplicateUsernames.duplicates.size > 0) {
+    const duplicateList = [...duplicateUsernames.duplicates].join(', ');
+    throw new Error(`Duplikat username pada seed.users.js: ${duplicateList}`);
+  }
 
   const categories = ['Tenda', 'Carrier', 'Alat Masak', 'Lainnya'];
 
@@ -56,37 +71,39 @@ async function main() {
     });
   }
 
-  const adminUser = await prisma.user.upsert({
-    where: { username: adminUsername },
-    update: {
-      passwordHash: hashPassword(adminPassword, pepper),
-      role: 'admin',
-    },
-    create: {
-      username: adminUsername,
-      passwordHash: hashPassword(adminPassword, pepper),
-      role: 'admin',
-    },
-  });
-
-  await prisma.userMembership.upsert({
-    where: {
-      userId_tenantId: {
-        userId: adminUser.id,
-        tenantId: tenant.id,
+  for (const seedUser of seedUsers) {
+    const user = await prisma.user.upsert({
+      where: { username: seedUser.username },
+      update: {
+        passwordHash: hashPassword(seedUser.password, pepper),
+        role: seedUser.role,
       },
-    },
-    update: {
-      role: 'owner',
-      status: 'active',
-    },
-    create: {
-      userId: adminUser.id,
-      tenantId: tenant.id,
-      role: 'owner',
-      status: 'active',
-    },
-  });
+      create: {
+        username: seedUser.username,
+        passwordHash: hashPassword(seedUser.password, pepper),
+        role: seedUser.role,
+      },
+    });
+
+    await prisma.userMembership.upsert({
+      where: {
+        userId_tenantId: {
+          userId: user.id,
+          tenantId: tenant.id,
+        },
+      },
+      update: {
+        role: seedUser.membershipRole,
+        status: 'active',
+      },
+      create: {
+        userId: user.id,
+        tenantId: tenant.id,
+        role: seedUser.membershipRole,
+        status: 'active',
+      },
+    });
+  }
 
   await prisma.tenantSettings.upsert({
     where: { tenantId: tenant.id },
@@ -105,7 +122,7 @@ async function main() {
     },
   });
 
-  console.log(`[seed] admin user ready: ${adminUsername}`);
+  console.log(`[seed] users ready: ${seedUsers.map((user) => user.username).join(', ')}`);
   console.log(`[seed] tenant ready: ${tenant.name} (${tenant.id})`);
   console.log(`[seed] branch ready: ${branch.name} (${branch.id})`);
 }

@@ -276,37 +276,48 @@ export function buildReceiptPrintHtml(rental, options = {}) {
 
 export function printReceipt(rental, options = {}) {
     const html = buildReceiptPrintHtml(rental, options);
+    const paperWidthMm = Number(options.paperWidthMm) === 58 ? 58 : 80;
 
-    // Prefer hidden iframe to avoid popup-blocker issues on Firefox.
+    // Use an off-screen iframe (still renderable) to keep print stable on desktop/mobile.
     if (typeof document !== 'undefined') {
         const iframe = document.createElement('iframe');
         iframe.setAttribute('aria-hidden', 'true');
         iframe.style.position = 'fixed';
         iframe.style.right = '0';
         iframe.style.bottom = '0';
-        iframe.style.width = '0';
-        iframe.style.height = '0';
+        iframe.style.width = `${paperWidthMm}mm`;
+        iframe.style.height = '180mm';
         iframe.style.border = '0';
-        iframe.style.visibility = 'hidden';
+        iframe.style.opacity = '0';
+        iframe.style.pointerEvents = 'none';
+        iframe.style.zIndex = '-1';
 
+        let hasPrinted = false;
         const cleanup = () => {
             window.setTimeout(() => {
                 iframe.remove();
             }, 1500);
         };
 
-        iframe.onload = () => {
-            try {
-                const frameWindow = iframe.contentWindow;
-                if (!frameWindow) {
-                    throw new Error('Print frame tidak tersedia.');
-                }
-
-                frameWindow.focus();
-                frameWindow.print();
-            } finally {
-                cleanup();
+        const printFrame = () => {
+            if (hasPrinted) {
+                return;
             }
+
+            const frameWindow = iframe.contentWindow;
+            if (!frameWindow) {
+                cleanup();
+                return;
+            }
+
+            hasPrinted = true;
+            frameWindow.focus();
+            frameWindow.print();
+            cleanup();
+        };
+
+        iframe.onload = () => {
+            window.setTimeout(printFrame, 160);
         };
 
         document.body.appendChild(iframe);
@@ -320,6 +331,16 @@ export function printReceipt(rental, options = {}) {
         frameDocument.open();
         frameDocument.write(html);
         frameDocument.close();
+
+        // Wait a tick so layout/fonts are committed before triggering print.
+        if (frameDocument.fonts && typeof frameDocument.fonts.ready?.then === 'function') {
+            frameDocument.fonts.ready.finally(() => {
+                window.setTimeout(printFrame, 180);
+            });
+        } else {
+            window.setTimeout(printFrame, 180);
+        }
+
         return;
     }
 

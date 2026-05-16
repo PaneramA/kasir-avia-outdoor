@@ -166,6 +166,17 @@ export async function login(username, password) {
   return normalizedUser;
 }
 
+export function fetchPublicTenants() {
+  return request('/api/public/tenants');
+}
+
+export function registerSelfUser(payload) {
+  return request('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function logout() {
   setSession('', null);
 }

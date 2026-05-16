@@ -447,7 +447,8 @@ const Branches = () => {
       {isSuperuser && (
         <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">
           <h3 className="mb-1 text-[1.1rem] font-bold text-text-main">Onboarding Tenant Baru</h3>
-          <p className="mb-5 text-sm text-text-muted">Buat toko/tenant baru lengkap dengan cabang awal dan owner.</p>
+          <p className="mb-2 text-sm text-text-muted">Buat toko/tenant baru lengkap dengan cabang awal dan owner.</p>
+          <p className="mb-5 text-xs text-text-muted">Catatan: tenant hasil self-register akan masuk status <span className="font-semibold text-text-main">suspended</span>. Ubah ke <span className="font-semibold text-text-main">active</span> setelah pembayaran terkonfirmasi.</p>
 
           <form onSubmit={handleCreateTenant} className="grid grid-cols-1 items-end gap-4 md:grid-cols-3">
             <div>

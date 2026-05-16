@@ -546,7 +546,7 @@ function App() {
         onCloseMobile={() => setIsSidebarOpen(false)}
       />
 
-      <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden px-4 sm:px-6 lg:min-h-0 lg:px-10">
+      <main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto px-4 sm:px-6 lg:min-h-0 lg:overflow-hidden lg:px-10">
         <Header
           title={headerInfo.title}
           subtitle={headerInfo.subtitle}
@@ -562,7 +562,7 @@ function App() {
           onBranchChange={handleBranchChange}
         />
 
-        <div id="content-view" className="flex-1 overflow-y-auto pb-6 sm:pb-10 lg:min-h-0">
+        <div id="content-view" className="pb-6 sm:pb-10 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
           {isLoading && (
             <div className="mb-4 rounded-lg border border-border bg-sidebar-bg p-4 text-sm text-text-muted">
               Memuat data dari backend...

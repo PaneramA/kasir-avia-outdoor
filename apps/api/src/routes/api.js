@@ -6,6 +6,7 @@ import {
   upsertCustomer,
   createItem,
   createRental,
+  createSelfRegisteredTenantUser,
   createTenantUserForUser,
   createUser,
   deleteRentalByAdmin,
@@ -18,6 +19,7 @@ import {
   getBranchSettingsForUser,
   updateBranchSettingsByIdForUser,
   getSchemaSummary,
+  getUserTenantMembershipSummary,
   createBranchForUser,
   createTenantForSuperuser,
   updateBranchForUser,
@@ -30,6 +32,7 @@ import {
   updateTenantMembershipForUser,
   listBranchesForUser,
   listTenantsForUser,
+  listPublicActiveTenants,
   listCategories,
   listCustomers,
   listItems,
@@ -61,6 +64,7 @@ import {
   createRentalSchema,
   loginSchema,
   processReturnSchema,
+  selfRegisterSchema,
   deleteRentalByAdminSchema,
   verifyRentalDeleteSchema,
   selfChangePasswordSchema,
@@ -221,7 +225,7 @@ function isWriteMethod(method) {
 }
 
 function shouldSkipAuth(pathname) {
-  return pathname === '/api/auth/login';
+  return pathname === '/api/auth/login' || pathname === '/api/auth/register';
 }
 
 function getTenantIdFromSettingsPath(pathname) {
@@ -380,6 +384,20 @@ export async function apiRoute(req, res, env) {
       }
 
       clearLoginFailures(loginUserKey);
+
+      const membershipSummary = await getUserTenantMembershipSummary(user.id);
+      if (
+        membershipSummary.total > 0
+        && membershipSummary.activeOnActiveTenant === 0
+        && normalizeRole(user.role) !== 'superuser'
+      ) {
+        sendError(
+          res,
+          403,
+          'Akun kamu masih menunggu approval developer. Silakan selesaikan pembayaran lalu tunggu aktivasi toko.',
+        );
+        return true;
+      }
 
       if (needsPasswordRehash(user.passwordHash)) {
         try {
@@ -696,6 +714,25 @@ export async function apiRoute(req, res, env) {
       return true;
     }
 
+    if (req.method === 'POST' && pathname === '/api/auth/register') {
+      const body = selfRegisterSchema.parse(await readJsonBody(req));
+      const created = await createSelfRegisteredTenantUser({
+        payload: body,
+        passwordPepper: env.passwordPepper,
+      });
+
+      sendSuccess(res, 201, {
+        ...created,
+        message: 'Pendaftaran berhasil. Toko baru kamu berstatus pending dan menunggu approval developer.',
+      });
+      return true;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/public/tenants') {
+      sendSuccess(res, 200, await listPublicActiveTenants());
+      return true;
+    }
+
     if (req.method === 'GET' && pathname === '/api/users/tenant') {
       const user = await ensureAuth();
       const requestedTenantId = (searchParams.get('tenantId') || '').trim() || 'current';
@@ -960,6 +997,11 @@ export async function apiRoute(req, res, env) {
 
     if (message === 'Forbidden') {
       sendError(res, 403, 'Forbidden');
+      return true;
+    }
+
+    if (message === 'Tenant is not active') {
+      sendError(res, 403, 'Tenant belum aktif. Menunggu approval developer.');
       return true;
     }
 
