@@ -3,6 +3,12 @@ import { fetchCustomers } from '../lib/api';
 import ViewModeToggle from '../components/ViewModeToggle';
 import ReceiptModal from '../components/ReceiptModal';
 import { openReceiptWhatsApp, printReceipt } from '../lib/receipt';
+import {
+    calculateRentalDurationDays,
+    formatDateTimeLocalInput,
+    resolveRentalDayPolicy,
+    toDate,
+} from '../lib/rentalTime';
 
 const INITIAL_CUSTOMER = {
     name: '',
@@ -45,6 +51,17 @@ const isEditableTarget = (target) => (
 const STOCK_WARNING_MESSAGE = 'Stok item tidak mencukupi.';
 const RENTAL_VIEW_STORAGE_KEY = 'avia_rental_inventory_view_mode';
 const RENTAL_DRAFT_STORAGE_KEY = 'avia_rental_draft_v1';
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const getDefaultRentalTimeRange = () => {
+    const startAt = new Date();
+    startAt.setSeconds(0, 0);
+    const endAt = new Date(startAt.getTime() + DAY_MS);
+    return {
+        startInput: formatDateTimeLocalInput(startAt),
+        endInput: formatDateTimeLocalInput(endAt),
+    };
+};
 
 const getInitialRentalInventoryView = () => {
     if (typeof window === 'undefined') {
@@ -62,6 +79,7 @@ const Rental = ({
     setCart,
     onCheckout,
     currentUser,
+    tenantSettings,
 }) => {
     const safeInventory = useMemo(() => (Array.isArray(inventory) ? inventory : []), [inventory]);
     const safeCategories = useMemo(() => (Array.isArray(categories) ? categories : []), [categories]);
@@ -70,6 +88,7 @@ const Rental = ({
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [customer, setCustomer] = useState(INITIAL_CUSTOMER);
     const [duration, setDuration] = useState(1);
+    const [rentalTimeRange, setRentalTimeRange] = useState(() => getDefaultRentalTimeRange());
     const [customerSearch, setCustomerSearch] = useState('');
     const [customerSuggestions, setCustomerSuggestions] = useState([]);
     const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
@@ -198,6 +217,12 @@ const Rental = ({
         });
         return nextMap;
     }, [cart]);
+    const rentalDayPolicy = useMemo(
+        () => resolveRentalDayPolicy(tenantSettings),
+        [tenantSettings],
+    );
+    const rentalStartAt = useMemo(() => toDate(rentalTimeRange.startInput), [rentalTimeRange.startInput]);
+    const rentalEndAt = useMemo(() => toDate(rentalTimeRange.endInput), [rentalTimeRange.endInput]);
 
     const clearSavedDraft = useCallback(() => {
         if (typeof window === 'undefined') {
@@ -242,6 +267,23 @@ const Rental = ({
 
         setCustomer(normalizedCustomer);
         setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
+        const draftStartAt = toDate(draftPayload.rentalStartAt || draftPayload.date);
+        const draftEndAt = toDate(draftPayload.rentalEndAt);
+        if (draftStartAt && draftEndAt) {
+            setRentalTimeRange({
+                startInput: formatDateTimeLocalInput(draftStartAt),
+                endInput: formatDateTimeLocalInput(draftEndAt),
+            });
+        } else {
+            const fallbackDuration = Number.isFinite(draftPayload.duration) ? Math.max(1, draftPayload.duration) : 1;
+            const fallbackStart = draftStartAt || new Date();
+            fallbackStart.setSeconds(0, 0);
+            const fallbackEnd = new Date(fallbackStart.getTime() + (fallbackDuration * DAY_MS));
+            setRentalTimeRange({
+                startInput: formatDateTimeLocalInput(fallbackStart),
+                endInput: formatDateTimeLocalInput(fallbackEnd),
+            });
+        }
         setDuration(Number.isFinite(draftPayload.duration) ? Math.max(1, draftPayload.duration) : 1);
         setPayment({
             status: draftPayload?.payment?.status === 'DP' ? 'DP' : 'LUNAS',
@@ -314,6 +356,16 @@ const Rental = ({
         payment.paidAmount,
         restoreDraftFromStorage,
     ]);
+
+    useEffect(() => {
+        const computedDuration = calculateRentalDurationDays(rentalStartAt, rentalEndAt, rentalDayPolicy);
+        if (computedDuration > 0) {
+            setDuration(computedDuration);
+            if (durationError) {
+                setDurationError('');
+            }
+        }
+    }, [rentalStartAt, rentalEndAt, rentalDayPolicy, durationError]);
 
     const addToCart = useCallback((item) => {
         if (item.stock <= 0) return;
@@ -468,7 +520,9 @@ const Rental = ({
         setCart(cart.map((c) => (c.id === id ? { ...c, notes: note } : c)));
     };
 
-    const calculateTotal = () => cart.reduce((sum, item) => sum + (item.price * item.qty * duration), 0);
+    const calculatedDuration = calculateRentalDurationDays(rentalStartAt, rentalEndAt, rentalDayPolicy);
+    const effectiveDuration = calculatedDuration > 0 ? calculatedDuration : 0;
+    const calculateTotal = () => cart.reduce((sum, item) => sum + (item.price * item.qty * effectiveDuration), 0);
     const parsePaidAmount = () => {
         const parsed = Number.parseInt(String(payment.paidAmount || '0').replace(/\D/g, ''), 10);
         return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
@@ -534,10 +588,26 @@ const Rental = ({
     };
 
     const validateDurationStep = ({ focusOnError = false } = {}) => {
-        if (!Number.isFinite(duration) || duration < 1) {
+        if (!rentalStartAt || !rentalEndAt) {
+            setDurationError('Tanggal mulai dan selesai wajib diisi.');
+            if (focusOnError) {
+                scheduleFocusField('rentalStartAt');
+            }
+            return false;
+        }
+
+        if (rentalEndAt.getTime() <= rentalStartAt.getTime()) {
+            setDurationError('Tanggal selesai harus setelah tanggal mulai.');
+            if (focusOnError) {
+                scheduleFocusField('rentalEndAt');
+            }
+            return false;
+        }
+
+        if (!Number.isFinite(calculatedDuration) || calculatedDuration < 1) {
             setDurationError('Durasi sewa minimal 1 hari.');
             if (focusOnError) {
-                scheduleFocusField('duration');
+                scheduleFocusField('rentalStartAt');
             }
             return false;
         }
@@ -692,7 +762,9 @@ const Rental = ({
                 qty: item.qty,
                 notes: item.notes || '',
             })),
-            duration,
+            duration: effectiveDuration,
+            rentalStartAt: rentalStartAt ? rentalStartAt.toISOString() : undefined,
+            rentalEndAt: rentalEndAt ? rentalEndAt.toISOString() : undefined,
             payment: {
                 status: payment.status,
                 method: payment.method,
@@ -709,6 +781,7 @@ const Rental = ({
             setCustomerSearch('');
             setCustomerSuggestions([]);
             setDuration(1);
+            setRentalTimeRange(getDefaultRentalTimeRange());
             setPayment(INITIAL_PAYMENT);
             setInventorySearch('');
             setCategoryFilter('all');
@@ -820,10 +893,17 @@ const Rental = ({
         setMobileStepHint('');
     };
 
-    const handleDurationChange = (value) => {
-        const nextValue = Number.parseInt(value, 10);
-        const safeValue = Number.isFinite(nextValue) ? Math.max(1, nextValue) : 1;
-        setDuration(safeValue);
+    const handleRentalStartAtChange = (value) => {
+        setRentalTimeRange((previous) => ({ ...previous, startInput: value }));
+        setMobileStepHint('');
+
+        if (durationError) {
+            setDurationError('');
+        }
+    };
+
+    const handleRentalEndAtChange = (value) => {
+        setRentalTimeRange((previous) => ({ ...previous, endInput: value }));
         setMobileStepHint('');
 
         if (durationError) {
@@ -1191,18 +1271,36 @@ const Rental = ({
                                         </div>
                                     </div>
 
-                                    <div className="mb-4">
-                                        <label className="block mb-1.5 text-[0.85rem] text-text-muted font-semibold">Durasi Sewa (Hari)</label>
-                                        <input
-                                            className={`w-full bg-bg-main border p-3 rounded-lg text-text-main text-center text-lg font-bold outline-none ${durationError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
-                                            type="number"
-                                            data-rental-field="mobile-duration"
-                                            aria-invalid={Boolean(durationError)}
-                                            aria-describedby={durationError ? 'mobile-duration-error' : undefined}
-                                            min="1"
-                                            value={duration}
-                                            onChange={(e) => handleDurationChange(e.target.value)}
-                                        />
+                                    <div className="mb-4 rounded-lg border border-border bg-bg-main/40 p-3">
+                                        <label className="block mb-1.5 text-[0.85rem] text-text-muted font-semibold">Rentang Waktu Sewa</label>
+                                        <div className="grid grid-cols-1 gap-3">
+                                            <div>
+                                                <label className="mb-1 block text-[0.78rem] text-text-muted">Mulai Sewa</label>
+                                                <input
+                                                    className={`w-full rounded-lg border bg-bg-main p-2.5 text-text-main outline-none ${durationError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                                                    type="datetime-local"
+                                                    data-rental-field="mobile-rentalStartAt"
+                                                    value={rentalTimeRange.startInput}
+                                                    onChange={(e) => handleRentalStartAtChange(e.target.value)}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="mb-1 block text-[0.78rem] text-text-muted">Rencana Kembali</label>
+                                                <input
+                                                    className={`w-full rounded-lg border bg-bg-main p-2.5 text-text-main outline-none ${durationError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                                                    type="datetime-local"
+                                                    data-rental-field="mobile-rentalEndAt"
+                                                    value={rentalTimeRange.endInput}
+                                                    onChange={(e) => handleRentalEndAtChange(e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                        <p className="mt-2 text-xs text-text-muted">
+                                            Sistem: {rentalDayPolicy.mode === 'DAILY_CUTOFF'
+                                                ? `Cut-off ${String(rentalDayPolicy.cutoffHour).padStart(2, '0')}:${String(rentalDayPolicy.cutoffMinute).padStart(2, '0')}`
+                                                : 'Per 24 jam'}
+                                        </p>
+                                        <p className="mt-1 text-sm font-semibold text-text-main">Durasi terhitung: {effectiveDuration} hari</p>
                                         {durationError && <p id="mobile-duration-error" className="mt-1 text-xs text-[#e74c3c]">{durationError}</p>}
                                     </div>
 
@@ -1251,7 +1349,7 @@ const Rental = ({
                                     <div className="rounded-lg border border-accent/20 bg-accent/10 p-4 sm:p-5">
                                         <div className="mb-1 flex items-center justify-between gap-3">
                                             <span className="text-text-muted text-[0.9rem]">Total Bayar</span>
-                                            <span className="text-text-muted text-[0.7rem] uppercase tracking-tighter">({duration} Hari)</span>
+                                            <span className="text-text-muted text-[0.7rem] uppercase tracking-tighter">({effectiveDuration} Hari)</span>
                                         </div>
                                         <h3 className="text-[1.5rem] font-bold text-accent sm:text-[1.8rem]">Rp {totalAmount.toLocaleString()}</h3>
                                         <p className="mt-1 text-xs text-text-muted">Terbayar: Rp {computedPaidAmount.toLocaleString()} • Sisa: Rp {remainingAmount.toLocaleString()}</p>
@@ -1287,18 +1385,36 @@ const Rental = ({
                                 <h4 className="mb-3 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.1rem]">Keranjang Sewa</h4>
                                 {renderCartItems()}
 
-                                <div className="mb-4">
-                                    <label className="block mb-1.5 text-[0.85rem] text-text-muted font-semibold">Durasi Sewa (Hari)</label>
-                                    <input
-                                        className={`w-full bg-bg-main border p-3 rounded-lg text-text-main text-center text-lg font-bold outline-none ${durationError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
-                                        type="number"
-                                        data-rental-field="desktop-duration"
-                                        aria-invalid={Boolean(durationError)}
-                                        aria-describedby={durationError ? 'desktop-duration-error' : undefined}
-                                        min="1"
-                                        value={duration}
-                                        onChange={(e) => handleDurationChange(e.target.value)}
-                                    />
+                                <div className="mb-4 rounded-lg border border-border bg-bg-main/40 p-3">
+                                    <label className="block mb-1.5 text-[0.85rem] text-text-muted font-semibold">Rentang Waktu Sewa</label>
+                                    <div className="grid grid-cols-1 gap-3">
+                                        <div>
+                                            <label className="mb-1 block text-[0.78rem] text-text-muted">Mulai Sewa</label>
+                                            <input
+                                                className={`w-full rounded-lg border bg-bg-main p-2.5 text-text-main outline-none ${durationError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                                                type="datetime-local"
+                                                data-rental-field="desktop-rentalStartAt"
+                                                value={rentalTimeRange.startInput}
+                                                onChange={(e) => handleRentalStartAtChange(e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="mb-1 block text-[0.78rem] text-text-muted">Rencana Kembali</label>
+                                            <input
+                                                className={`w-full rounded-lg border bg-bg-main p-2.5 text-text-main outline-none ${durationError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                                                type="datetime-local"
+                                                data-rental-field="desktop-rentalEndAt"
+                                                value={rentalTimeRange.endInput}
+                                                onChange={(e) => handleRentalEndAtChange(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className="mt-2 text-xs text-text-muted">
+                                        Sistem: {rentalDayPolicy.mode === 'DAILY_CUTOFF'
+                                            ? `Cut-off ${String(rentalDayPolicy.cutoffHour).padStart(2, '0')}:${String(rentalDayPolicy.cutoffMinute).padStart(2, '0')}`
+                                            : 'Per 24 jam'}
+                                    </p>
+                                    <p className="mt-1 text-sm font-semibold text-text-main">Durasi terhitung: {effectiveDuration} hari</p>
                                     {durationError && <p id="desktop-duration-error" className="mt-1 text-xs text-[#e74c3c]">{durationError}</p>}
                                 </div>
 
@@ -1348,7 +1464,7 @@ const Rental = ({
                             <div className="mt-4 rounded-lg border border-accent/20 bg-accent/10 p-4 sm:p-5 lg:sticky lg:bottom-0 lg:z-10 lg:backdrop-blur">
                                 <div className="mb-1 flex items-center justify-between gap-3">
                                     <span className="text-text-muted text-[0.9rem]">Total Bayar</span>
-                                    <span className="text-text-muted text-[0.7rem] uppercase tracking-tighter">({duration} Hari)</span>
+                                    <span className="text-text-muted text-[0.7rem] uppercase tracking-tighter">({effectiveDuration} Hari)</span>
                                 </div>
                                 <h3 className="text-[1.5rem] font-bold text-accent sm:text-[1.8rem]">Rp {totalAmount.toLocaleString()}</h3>
                                 <p className="mt-1 text-xs text-text-muted">Terbayar: Rp {computedPaidAmount.toLocaleString()} • Sisa: Rp {remainingAmount.toLocaleString()}</p>

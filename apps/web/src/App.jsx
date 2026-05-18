@@ -602,6 +602,7 @@ function App() {
                   setCart={setCart}
                   onCheckout={handleCheckout}
                   currentUser={currentUser}
+                  tenantSettings={tenantSettings}
                 />
               }
             />

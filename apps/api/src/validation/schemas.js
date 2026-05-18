@@ -63,6 +63,9 @@ export const updateTenantSettingsSchema = z.object({
   legalFooterLines: z.array(z.string().trim().min(1).max(160)).max(8).optional(),
   timezone: z.string().trim().min(1).max(80).optional(),
   currency: z.string().trim().min(1).max(8).optional(),
+  rentalDayCountMode: z.enum(['ROLLING_24H', 'DAILY_CUTOFF']).optional(),
+  rentalCutoffHour: z.coerce.number().int().min(0).max(23).optional(),
+  rentalCutoffMinute: z.coerce.number().int().min(0).max(59).optional(),
 });
 
 export const createTenantSchema = z.object({
@@ -129,7 +132,9 @@ export const upsertBranchAccessSchema = z.object({
 export const createRentalSchema = z.object({
   customer: customerSchema,
   items: z.array(rentalItemSchema).min(1),
-  duration: z.coerce.number().int().min(1),
+  duration: z.coerce.number().int().min(1).optional(),
+  rentalStartAt: z.string().datetime().optional(),
+  rentalEndAt: z.string().datetime().optional(),
   payment: rentalPaymentSchema.optional(),
   id: z.string().trim().min(1).optional(),
 });
@@ -141,6 +146,7 @@ export const processReturnSchema = z.object({
   rentalId: z.string().trim().min(1),
   additionalFee: z.coerce.number().int().min(0).default(0),
   returnNotes: z.string().trim().optional().default(''),
+  settleRemainingPayment: z.coerce.boolean().optional().default(false),
 });
 
 export const verifyRentalDeleteSchema = z.object({

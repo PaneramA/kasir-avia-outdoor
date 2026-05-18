@@ -57,6 +57,11 @@ export const formatDateTime = (value) => new Date(value).toLocaleString('id-ID',
 export const getReceiptTotal = (rental) => toNumber(rental?.finalTotal ?? rental?.total);
 
 export const getReceiptDueDate = (rental) => {
+    const explicitDueDate = new Date(rental?.plannedReturnDate || '');
+    if (!Number.isNaN(explicitDueDate.getTime())) {
+        return explicitDueDate;
+    }
+
     const startDate = new Date(rental?.date || '');
     const duration = toNumber(rental?.duration);
     if (Number.isNaN(startDate.getTime()) || duration < 1) {
