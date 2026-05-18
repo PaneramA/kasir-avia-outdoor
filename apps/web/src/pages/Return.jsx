@@ -1,4 +1,22 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { formatLateDuration, getDailyRate, getLateDurationMs, getPlannedReturnDate } from '../lib/rentalTime';
+
+const formatCurrency = (value) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
+
+const getPaymentInfo = (rental) => {
+    const status = String(rental?.payment?.status || 'LUNAS').toUpperCase();
+    const paidAmount = Number(rental?.payment?.paidAmount ?? rental?.total ?? 0) || 0;
+    const totalDue = Number(rental?.payment?.totalDue ?? rental?.total ?? 0) || 0;
+    const remainingAmount = Number(rental?.payment?.remainingAmount ?? Math.max(0, totalDue - paidAmount)) || 0;
+
+    return {
+        status,
+        paidAmount,
+        totalDue,
+        remainingAmount,
+        isUnpaid: remainingAmount > 0,
+    };
+};
 
 const Return = ({ rentals, onProcessReturn }) => {
     const [searchQuery, setSearchQuery] = useState('');
@@ -6,27 +24,77 @@ const Return = ({ rentals, onProcessReturn }) => {
     const [returnNotes, setReturnNotes] = useState('');
     const [additionalFeeInput, setAdditionalFeeInput] = useState('0');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [applyLateFee, setApplyLateFee] = useState(false);
+    const [settleRemainingPayment, setSettleRemainingPayment] = useState(false);
     const additionalFeeValue = Number.isFinite(Number(additionalFeeInput))
         ? Math.max(0, Number(additionalFeeInput))
         : 0;
 
-    const activeRentals = rentals.filter(r => r.status === 'Active');
+    const activeRentals = rentals.filter((r) => r.status === 'Active');
 
-    const filteredRentals = activeRentals.filter(r =>
-        (r.customer?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        String(r.id || '').toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredRentals = activeRentals.filter((r) => (
+        (r.customer?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+        || String(r.id || '').toLowerCase().includes(searchQuery.toLowerCase())
+    ));
+
+    const selectedPayment = useMemo(
+        () => getPaymentInfo(selectedRental),
+        [selectedRental],
+    );
+    const selectedLateMs = useMemo(
+        () => getLateDurationMs(selectedRental),
+        [selectedRental],
+    );
+    const isLate = selectedLateMs > 0;
+    const lateDurationLabel = formatLateDuration(selectedLateMs);
+    const selectedDailyRate = useMemo(
+        () => getDailyRate(selectedRental),
+        [selectedRental],
     );
 
     const handleSelectRental = (rental) => {
+        const payment = getPaymentInfo(rental);
+        const lateMs = getLateDurationMs(rental);
+        const shouldApplyLateFee = lateMs > 0;
+        const defaultLateFee = shouldApplyLateFee ? getDailyRate(rental) : 0;
+
         setSelectedRental(rental);
         setReturnNotes('');
-        setAdditionalFeeInput('0');
+        setApplyLateFee(shouldApplyLateFee);
+        setAdditionalFeeInput(String(defaultLateFee));
+        setSettleRemainingPayment(!payment.isUnpaid);
+    };
+
+    const handleToggleLateFee = (checked) => {
+        setApplyLateFee(checked);
+        if (!checked) {
+            setAdditionalFeeInput('0');
+            return;
+        }
+
+        if (selectedDailyRate > 0) {
+            setAdditionalFeeInput(String(selectedDailyRate));
+        }
     };
 
     const processRentalReturn = async () => {
         if (!selectedRental) return;
 
-        if (!window.confirm(`Proses pengembalian untuk transaksi ${selectedRental.id} atas nama ${selectedRental.customer.name}?`)) {
+        if (selectedPayment.isUnpaid && !settleRemainingPayment) {
+            alert(`Transaksi ini masih punya sisa pembayaran ${formatCurrency(selectedPayment.remainingAmount)}. Pilih opsi lunas terlebih dulu.`);
+            return;
+        }
+
+        const confirmLines = [
+            `Proses pengembalian untuk transaksi ${selectedRental.id} atas nama ${selectedRental.customer.name}?`,
+        ];
+
+        if (selectedPayment.isUnpaid) {
+            confirmLines.push(`Sisa pembayaran yang wajib dilunasi: ${formatCurrency(selectedPayment.remainingAmount + additionalFeeValue)}.`);
+            confirmLines.push('Apakah customer sudah melunasi sisa pembayarannya?');
+        }
+
+        if (!window.confirm(confirmLines.join('\n'))) {
             return;
         }
 
@@ -36,6 +104,7 @@ const Return = ({ rentals, onProcessReturn }) => {
                 rentalId: selectedRental.id,
                 additionalFee: additionalFeeValue,
                 returnNotes,
+                settleRemainingPayment,
             });
 
             alert('Pengembalian berhasil diproses! Stok barang telah kembali.');
@@ -73,34 +142,42 @@ const Return = ({ rentals, onProcessReturn }) => {
                             Tidak ada data penyewaan aktif yang ditemukan.
                         </div>
                     ) : (
-                        filteredRentals.map(rental => (
-                            <div
-                                key={rental.id}
-                                className={`cursor-pointer rounded-lg border bg-card-bg p-4 transition-all hover:border-accent ${selectedRental?.id === rental.id ? 'border-accent bg-accent/5' : 'border-border'}`}
-                                onClick={() => handleSelectRental(rental)}
-                            >
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                    <div className="min-w-0">
-                                        <div className="mb-1 flex flex-wrap items-center gap-2 sm:gap-3">
-                                            <h4 className="font-bold text-text-main">{rental.customer.name}</h4>
-                                            <span className="rounded border border-border bg-sidebar-bg px-2 py-0.5 text-xs text-text-muted">{rental.id}</span>
+                        filteredRentals.map((rental) => {
+                            const payment = getPaymentInfo(rental);
+                            return (
+                                <div
+                                    key={rental.id}
+                                    className={`cursor-pointer rounded-lg border bg-card-bg p-4 transition-all hover:border-accent ${selectedRental?.id === rental.id ? 'border-accent bg-accent/5' : 'border-border'}`}
+                                    onClick={() => handleSelectRental(rental)}
+                                >
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                        <div className="min-w-0">
+                                            <div className="mb-1 flex flex-wrap items-center gap-2 sm:gap-3">
+                                                <h4 className="font-bold text-text-main">{rental.customer.name}</h4>
+                                                <span className="rounded border border-border bg-sidebar-bg px-2 py-0.5 text-xs text-text-muted">{rental.id}</span>
+                                                {payment.isUnpaid && (
+                                                    <span className="rounded border border-[#f39c12]/40 bg-[#f39c12]/10 px-2 py-0.5 text-xs font-semibold text-[#f39c12]">
+                                                        Belum Lunas
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="text-[0.85rem] text-text-muted">
+                                                {rental.items.length} Barang &bull; {rental.duration} Hari
+                                            </div>
+                                            <div className="mt-1 text-[0.8rem] text-text-muted sm:max-w-[400px]">
+                                                {rental.items.map((i) => `${i.name} (${i.qty})`).join(', ')}
+                                            </div>
                                         </div>
-                                        <div className="text-[0.85rem] text-text-muted">
-                                            {rental.items.length} Barang &bull; {rental.duration} Hari
-                                        </div>
-                                        <div className="mt-1 text-[0.8rem] text-text-muted sm:max-w-[400px]">
-                                            {rental.items.map(i => `${i.name} (${i.qty})`).join(', ')}
-                                        </div>
-                                    </div>
-                                    <div className="text-left sm:text-right">
-                                        <div className="mb-1 font-bold text-accent">Rp {rental.total.toLocaleString()}</div>
-                                        <div className="text-[0.75rem] text-text-muted">
-                                            {new Date(rental.date).toLocaleDateString('id-ID')}
+                                        <div className="text-left sm:text-right">
+                                            <div className="mb-1 font-bold text-accent">{formatCurrency(rental.total)}</div>
+                                            <div className="text-[0.75rem] text-text-muted">
+                                                {new Date(rental.date).toLocaleDateString('id-ID')}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
             </div>
@@ -118,6 +195,12 @@ const Return = ({ rentals, onProcessReturn }) => {
                         </div>
                     ) : (
                         <div className="flex flex-1 flex-col space-y-5">
+                            {selectedPayment.isUnpaid && (
+                                <div className="rounded-lg border border-[#f39c12]/50 bg-[#f39c12]/10 p-3 text-sm text-[#f4bf68]">
+                                    Customer ini belum lunas. Sisa pembayaran saat ini: <strong>{formatCurrency(selectedPayment.remainingAmount + additionalFeeValue)}</strong>
+                                </div>
+                            )}
+
                             <div className="rounded-lg border border-border bg-bg-main p-4">
                                 <div className="mb-2 flex justify-between gap-3">
                                     <span className="text-[0.85rem] text-text-muted">ID Transaksi</span>
@@ -130,6 +213,12 @@ const Return = ({ rentals, onProcessReturn }) => {
                                 <div className="mb-2 flex justify-between gap-3">
                                     <span className="text-[0.85rem] text-text-muted">No. HP</span>
                                     <span className="text-right text-[0.85rem] text-text-main">{selectedRental.customer.phone}</span>
+                                </div>
+                                <div className="mb-2 flex justify-between gap-3">
+                                    <span className="text-[0.85rem] text-text-muted">Rencana Kembali</span>
+                                    <span className="text-right text-[0.85rem] text-text-main">
+                                        {getPlannedReturnDate(selectedRental)?.toLocaleString('id-ID') || '-'}
+                                    </span>
                                 </div>
                                 <div className="flex justify-between gap-3">
                                     <span className="text-[0.85rem] text-text-muted">Durasi Sewa</span>
@@ -157,8 +246,23 @@ const Return = ({ rentals, onProcessReturn }) => {
                             <div className="my-2 h-[1px] bg-border"></div>
 
                             <div className="space-y-4">
+                                {isLate && (
+                                    <div className="rounded-lg border border-[#e67e22]/50 bg-[#e67e22]/10 p-3 text-sm text-[#f0bc82]">
+                                        Terlambat <strong>{lateDurationLabel}</strong>. Default denda 1 hari: <strong>{formatCurrency(selectedDailyRate)}</strong>
+                                    </div>
+                                )}
+
                                 <div>
-                                    <label className="mb-1.5 block text-[0.85rem] text-text-muted">Biaya Tambahan / Denda (Opsional)</label>
+                                    <label className="mb-2 flex items-start gap-2 text-[0.85rem] text-text-muted">
+                                        <input
+                                            type="checkbox"
+                                            className="mt-0.5"
+                                            checked={applyLateFee}
+                                            onChange={(event) => handleToggleLateFee(event.target.checked)}
+                                            disabled={!isLate}
+                                        />
+                                        Terapkan denda keterlambatan 1 hari (bisa diubah manual di kolom nominal)
+                                    </label>
                                     <div className="relative">
                                         <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[0.9rem] font-bold text-text-muted">Rp</span>
                                         <input
@@ -171,6 +275,21 @@ const Return = ({ rentals, onProcessReturn }) => {
                                         />
                                     </div>
                                 </div>
+
+                                {selectedPayment.isUnpaid && (
+                                    <label className="flex items-start gap-2 rounded-lg border border-[#f39c12]/40 bg-[#f39c12]/10 p-3 text-[0.85rem] text-[#f4bf68]">
+                                        <input
+                                            type="checkbox"
+                                            className="mt-0.5"
+                                            checked={settleRemainingPayment}
+                                            onChange={(event) => setSettleRemainingPayment(event.target.checked)}
+                                        />
+                                        <span>
+                                            Saya konfirmasi customer sudah melunasi sisa pembayaran sebesar <strong>{formatCurrency(selectedPayment.remainingAmount + additionalFeeValue)}</strong>.
+                                        </span>
+                                    </label>
+                                )}
+
                                 <div>
                                     <label className="mb-1.5 block text-[0.85rem] text-text-muted">Catatan Pengembalian (Opsional)</label>
                                     <textarea
@@ -186,7 +305,7 @@ const Return = ({ rentals, onProcessReturn }) => {
                                 <div className="mb-4 flex items-center justify-between gap-3">
                                     <span className="text-[0.9rem] text-text-muted sm:text-[0.95rem]">Total Pembayaran Akhir</span>
                                     <span className="text-[1.2rem] font-bold text-accent sm:text-[1.4rem]">
-                                        Rp {(selectedRental.total + additionalFeeValue).toLocaleString()}
+                                        {formatCurrency(selectedRental.total + additionalFeeValue)}
                                     </span>
                                 </div>
                                 <button

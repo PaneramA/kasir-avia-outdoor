@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { APP_ROUTES } from '../lib/routes'
+import { getPlannedReturnDate } from '../lib/rentalTime'
 
 function formatDateLabel(dateValue) {
     if (!dateValue) {
@@ -20,15 +21,7 @@ function formatDateLabel(dateValue) {
 }
 
 function getRentalDueDate(rental) {
-    const startDate = new Date(rental?.date || '')
-    if (Number.isNaN(startDate.getTime())) {
-        return null
-    }
-
-    const dueDate = new Date(startDate)
-    dueDate.setDate(dueDate.getDate() + Number(rental?.duration || 0))
-    dueDate.setHours(23, 59, 59, 999)
-    return dueDate
+    return getPlannedReturnDate(rental)
 }
 
 function isRunningStandalone() {

@@ -17,6 +17,9 @@ const Account = ({
         storeName: '',
         address: '',
         phone: '',
+        rentalDayCountMode: 'ROLLING_24H',
+        rentalCutoffHour: 8,
+        rentalCutoffMinute: 0,
     })
     const [branchForm, setBranchForm] = useState({
         storeName: '',
@@ -41,6 +44,15 @@ const Account = ({
                 ? tenantSettings.addressLines.join('\n')
                 : '',
             phone: tenantSettings?.phone || '',
+            rentalDayCountMode: String(tenantSettings?.rentalDayCountMode || 'ROLLING_24H').toUpperCase() === 'DAILY_CUTOFF'
+                ? 'DAILY_CUTOFF'
+                : 'ROLLING_24H',
+            rentalCutoffHour: Number.isFinite(Number(tenantSettings?.rentalCutoffHour))
+                ? Math.min(23, Math.max(0, Number(tenantSettings.rentalCutoffHour)))
+                : 8,
+            rentalCutoffMinute: Number.isFinite(Number(tenantSettings?.rentalCutoffMinute))
+                ? Math.min(59, Math.max(0, Number(tenantSettings.rentalCutoffMinute)))
+                : 0,
         })
     }, [tenantSettings])
 
@@ -112,6 +124,9 @@ const Account = ({
                 storeName: trimmedStoreName,
                 addressLines,
                 phone: storeForm.phone.trim(),
+                rentalDayCountMode: storeForm.rentalDayCountMode,
+                rentalCutoffHour: Number(storeForm.rentalCutoffHour),
+                rentalCutoffMinute: Number(storeForm.rentalCutoffMinute),
             })
             setStoreMessage('Pengaturan toko berhasil diperbarui.')
         } catch (error) {
@@ -207,6 +222,58 @@ const Account = ({
                             value={storeForm.phone}
                             onChange={(event) => setStoreForm((prev) => ({ ...prev, phone: event.target.value }))}
                         />
+                    </div>
+                    <div className="rounded-lg border border-border bg-bg-main/40 p-4">
+                        <h4 className="mb-2 text-sm font-semibold text-text-main">Perhitungan Hari Sewa</h4>
+                        <p className="mb-3 text-xs text-text-muted">
+                            Default: hitung per 24 jam (jam sekarang ke besok jam sama = 1 hari). Bisa ganti ke cut-off harian.
+                        </p>
+                        <div className="mb-3">
+                            <label className="mb-1.5 block text-[0.85rem] text-text-muted">Mode Hitung Hari</label>
+                            <select
+                                className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                                value={storeForm.rentalDayCountMode}
+                                onChange={(event) => setStoreForm((prev) => ({
+                                    ...prev,
+                                    rentalDayCountMode: event.target.value === 'DAILY_CUTOFF' ? 'DAILY_CUTOFF' : 'ROLLING_24H',
+                                }))}
+                            >
+                                <option value="ROLLING_24H">Per 24 Jam (Default)</option>
+                                <option value="DAILY_CUTOFF">Cut-off Harian</option>
+                            </select>
+                        </div>
+                        {storeForm.rentalDayCountMode === 'DAILY_CUTOFF' && (
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="mb-1.5 block text-[0.8rem] text-text-muted">Jam Mulai Hari</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="23"
+                                        className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                                        value={storeForm.rentalCutoffHour}
+                                        onChange={(event) => setStoreForm((prev) => ({
+                                            ...prev,
+                                            rentalCutoffHour: Math.min(23, Math.max(0, Number(event.target.value || 0))),
+                                        }))}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-1.5 block text-[0.8rem] text-text-muted">Menit Mulai Hari</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="59"
+                                        className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                                        value={storeForm.rentalCutoffMinute}
+                                        onChange={(event) => setStoreForm((prev) => ({
+                                            ...prev,
+                                            rentalCutoffMinute: Math.min(59, Math.max(0, Number(event.target.value || 0))),
+                                        }))}
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <button

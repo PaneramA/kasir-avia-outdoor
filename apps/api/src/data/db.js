@@ -9,6 +9,7 @@ const BRANCH_ACCESS_ROLES = new Set(['admin', 'kasir']);
 const TENANT_STATUSES = new Set(['active', 'suspended']);
 const PAYMENT_STATUSES = new Set(['DP', 'LUNAS']);
 const PAYMENT_METHODS = new Set(['QRIS', 'BANK', 'TUNAI']);
+const RENTAL_DAY_COUNT_MODES = new Set(['ROLLING_24H', 'DAILY_CUTOFF']);
 const RETURNED_RENTAL_STATUSES = new Set(['returned', 'selesai', 'completed', 'done']);
 const DEFAULT_TENANT_SLUG = 'default-avia';
 const DEFAULT_TENANT_NAME = 'AviaOutdoor';
@@ -24,6 +25,9 @@ const DEFAULT_TENANT_SETTINGS = {
   ],
   timezone: 'Asia/Jakarta',
   currency: 'IDR',
+  rentalDayCountMode: 'ROLLING_24H',
+  rentalCutoffHour: 8,
+  rentalCutoffMinute: 0,
 };
 
 function createId(prefix) {
@@ -115,6 +119,7 @@ function toRentalDto(rental) {
     },
     status: rental.status,
     date: rental.date.toISOString(),
+    plannedReturnDate: rental.plannedReturnDate ? rental.plannedReturnDate.toISOString() : undefined,
     returnDate: rental.returnDate ? rental.returnDate.toISOString() : undefined,
     returnNotes: rental.returnNotes || '',
     additionalFee: rental.additionalFee,
@@ -163,6 +168,19 @@ function normalizeLines(value) {
 }
 
 function toTenantSettingsDto(settings) {
+  const rentalDayCountMode = String(settings.rentalDayCountMode || DEFAULT_TENANT_SETTINGS.rentalDayCountMode)
+    .trim()
+    .toUpperCase();
+  const normalizedMode = RENTAL_DAY_COUNT_MODES.has(rentalDayCountMode)
+    ? rentalDayCountMode
+    : DEFAULT_TENANT_SETTINGS.rentalDayCountMode;
+  const rentalCutoffHour = Number.isInteger(settings.rentalCutoffHour)
+    ? Math.min(23, Math.max(0, settings.rentalCutoffHour))
+    : DEFAULT_TENANT_SETTINGS.rentalCutoffHour;
+  const rentalCutoffMinute = Number.isInteger(settings.rentalCutoffMinute)
+    ? Math.min(59, Math.max(0, settings.rentalCutoffMinute))
+    : DEFAULT_TENANT_SETTINGS.rentalCutoffMinute;
+
   return {
     tenantId: settings.tenantId,
     storeName: settings.storeName,
@@ -171,9 +189,95 @@ function toTenantSettingsDto(settings) {
     legalFooterLines: normalizeLines(settings.legalFooterLines),
     timezone: settings.timezone || DEFAULT_TENANT_SETTINGS.timezone,
     currency: settings.currency || DEFAULT_TENANT_SETTINGS.currency,
+    rentalDayCountMode: normalizedMode,
+    rentalCutoffHour,
+    rentalCutoffMinute,
     createdAt: settings.createdAt.toISOString(),
     updatedAt: settings.updatedAt.toISOString(),
   };
+}
+
+function parseIsoDate(value, fieldName) {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return null;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`${fieldName} is invalid`);
+  }
+
+  return parsed;
+}
+
+function normalizeRentalDayCountMode(rawMode) {
+  const mode = String(rawMode || DEFAULT_TENANT_SETTINGS.rentalDayCountMode)
+    .trim()
+    .toUpperCase();
+  return RENTAL_DAY_COUNT_MODES.has(mode)
+    ? mode
+    : DEFAULT_TENANT_SETTINGS.rentalDayCountMode;
+}
+
+function normalizeCutoffHour(rawHour) {
+  const parsed = Number(rawHour);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_TENANT_SETTINGS.rentalCutoffHour;
+  }
+
+  return Math.min(23, Math.max(0, Math.trunc(parsed)));
+}
+
+function normalizeCutoffMinute(rawMinute) {
+  const parsed = Number(rawMinute);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_TENANT_SETTINGS.rentalCutoffMinute;
+  }
+
+  return Math.min(59, Math.max(0, Math.trunc(parsed)));
+}
+
+function resolveRentalDayPolicy(settings) {
+  return {
+    mode: normalizeRentalDayCountMode(settings?.rentalDayCountMode),
+    cutoffHour: normalizeCutoffHour(settings?.rentalCutoffHour),
+    cutoffMinute: normalizeCutoffMinute(settings?.rentalCutoffMinute),
+  };
+}
+
+function toCutoffBucketIndex(targetDate, cutoffHour, cutoffMinute) {
+  const boundary = new Date(targetDate);
+  boundary.setHours(cutoffHour, cutoffMinute, 0, 0);
+  if (targetDate < boundary) {
+    boundary.setDate(boundary.getDate() - 1);
+  }
+
+  return Math.floor(boundary.getTime() / (24 * 60 * 60 * 1000));
+}
+
+function calculateRentalDurationFromRange(startDate, endDate, rentalPolicy) {
+  if (!(startDate instanceof Date) || Number.isNaN(startDate.getTime())) {
+    throw new Error('rentalStartAt is invalid');
+  }
+
+  if (!(endDate instanceof Date) || Number.isNaN(endDate.getTime())) {
+    throw new Error('rentalEndAt is invalid');
+  }
+
+  const diffMs = endDate.getTime() - startDate.getTime();
+  if (diffMs <= 0) {
+    throw new Error('rentalEndAt must be after rentalStartAt');
+  }
+
+  if (rentalPolicy.mode === 'DAILY_CUTOFF') {
+    const startBucket = toCutoffBucketIndex(startDate, rentalPolicy.cutoffHour, rentalPolicy.cutoffMinute);
+    const endBucket = toCutoffBucketIndex(endDate, rentalPolicy.cutoffHour, rentalPolicy.cutoffMinute);
+    return Math.max(1, (endBucket - startBucket) + 1);
+  }
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Math.max(1, Math.ceil(diffMs / dayMs));
 }
 
 function toBranchSettingsDto(settings) {
@@ -275,6 +379,9 @@ async function ensureDefaultTenantAndBranch(tx) {
       legalFooterLines: DEFAULT_TENANT_SETTINGS.legalFooterLines,
       timezone: DEFAULT_TENANT_SETTINGS.timezone,
       currency: DEFAULT_TENANT_SETTINGS.currency,
+      rentalDayCountMode: DEFAULT_TENANT_SETTINGS.rentalDayCountMode,
+      rentalCutoffHour: DEFAULT_TENANT_SETTINGS.rentalCutoffHour,
+      rentalCutoffMinute: DEFAULT_TENANT_SETTINGS.rentalCutoffMinute,
     },
   });
 
@@ -634,7 +741,9 @@ export async function createRental(payload, context) {
   const customerIdNumber = hasExplicitIdNumber ? rawIdNumber : null;
   const rentalIdNumber = hasExplicitIdNumber ? rawIdNumber : `RNDM-${Math.floor(100000 + Math.random() * 900000)}`;
   const items = Array.isArray(payload?.items) ? payload.items : [];
-  const duration = Number(payload?.duration);
+  const startAtInput = parseIsoDate(payload?.rentalStartAt, 'rentalStartAt');
+  const endAtInput = parseIsoDate(payload?.rentalEndAt, 'rentalEndAt');
+  const legacyDurationInput = Number(payload?.duration);
   const rawPaymentStatus = String(payload?.payment?.status || 'LUNAS').trim().toUpperCase();
   const rawPaymentMethod = String(payload?.payment?.method || 'TUNAI').trim().toUpperCase();
   const rawPaidAmount = payload?.payment?.paidAmount;
@@ -645,10 +754,6 @@ export async function createRental(payload, context) {
 
   if (!customerPhone) {
     throw new Error('Customer phone is required');
-  }
-
-  if (!Number.isFinite(duration) || duration < 1) {
-    throw new Error('Duration must be a number >= 1');
   }
 
   if (items.length === 0) {
@@ -672,6 +777,37 @@ export async function createRental(payload, context) {
   }
 
   const rental = await prisma.$transaction(async (tx) => {
+    const tenantSettings = await tx.tenantSettings.upsert({
+      where: { tenantId },
+      update: {},
+      create: {
+        tenantId,
+        storeName: DEFAULT_TENANT_SETTINGS.storeName,
+        addressLines: DEFAULT_TENANT_SETTINGS.addressLines,
+        phone: DEFAULT_TENANT_SETTINGS.phone,
+        legalFooterLines: DEFAULT_TENANT_SETTINGS.legalFooterLines,
+        timezone: DEFAULT_TENANT_SETTINGS.timezone,
+        currency: DEFAULT_TENANT_SETTINGS.currency,
+        rentalDayCountMode: DEFAULT_TENANT_SETTINGS.rentalDayCountMode,
+        rentalCutoffHour: DEFAULT_TENANT_SETTINGS.rentalCutoffHour,
+        rentalCutoffMinute: DEFAULT_TENANT_SETTINGS.rentalCutoffMinute,
+      },
+    });
+    const rentalDayPolicy = resolveRentalDayPolicy(tenantSettings);
+    const rentalStartAt = startAtInput || new Date();
+    const rentalEndAt = endAtInput || null;
+    let duration = 0;
+
+    if (rentalEndAt) {
+      duration = calculateRentalDurationFromRange(rentalStartAt, rentalEndAt, rentalDayPolicy);
+    } else if (Number.isFinite(legacyDurationInput) && legacyDurationInput >= 1) {
+      duration = Math.max(1, Math.trunc(legacyDurationInput));
+    } else {
+      throw new Error('Rental duration or rental end time is required');
+    }
+
+    const plannedReturnDate = rentalEndAt || new Date(rentalStartAt.getTime() + (duration * 24 * 60 * 60 * 1000));
+
     const existingCustomer = await tx.customer.findFirst({
       where: withTenantBranchScope({
         phone: customerPhone,
@@ -806,6 +942,8 @@ export async function createRental(payload, context) {
         paymentMethod: rawPaymentMethod,
         paidAmount,
         status: 'Active',
+        date: rentalStartAt,
+        plannedReturnDate,
         items: {
           create: normalizedItems,
         },
@@ -1205,6 +1343,9 @@ export async function createTenantForSuperuser(payload) {
         legalFooterLines: DEFAULT_TENANT_SETTINGS.legalFooterLines,
         timezone: DEFAULT_TENANT_SETTINGS.timezone,
         currency: DEFAULT_TENANT_SETTINGS.currency,
+        rentalDayCountMode: DEFAULT_TENANT_SETTINGS.rentalDayCountMode,
+        rentalCutoffHour: DEFAULT_TENANT_SETTINGS.rentalCutoffHour,
+        rentalCutoffMinute: DEFAULT_TENANT_SETTINGS.rentalCutoffMinute,
       },
     });
 
@@ -1919,6 +2060,9 @@ export async function getTenantSettingsForUser({ userId, role, requestedTenantId
       legalFooterLines: DEFAULT_TENANT_SETTINGS.legalFooterLines,
       timezone: DEFAULT_TENANT_SETTINGS.timezone,
       currency: DEFAULT_TENANT_SETTINGS.currency,
+      rentalDayCountMode: DEFAULT_TENANT_SETTINGS.rentalDayCountMode,
+      rentalCutoffHour: DEFAULT_TENANT_SETTINGS.rentalCutoffHour,
+      rentalCutoffMinute: DEFAULT_TENANT_SETTINGS.rentalCutoffMinute,
     },
   });
 
@@ -2061,6 +2205,15 @@ export async function updateTenantSettingsByTenantId(tenantId, payload, actor = 
   const nextCurrency = typeof payload?.currency === 'string'
     ? payload.currency.trim().toUpperCase()
     : undefined;
+  const nextRentalDayCountMode = typeof payload?.rentalDayCountMode === 'string'
+    ? normalizeRentalDayCountMode(payload.rentalDayCountMode)
+    : undefined;
+  const nextRentalCutoffHour = typeof payload?.rentalCutoffHour !== 'undefined'
+    ? normalizeCutoffHour(payload.rentalCutoffHour)
+    : undefined;
+  const nextRentalCutoffMinute = typeof payload?.rentalCutoffMinute !== 'undefined'
+    ? normalizeCutoffMinute(payload.rentalCutoffMinute)
+    : undefined;
 
   const updated = await prisma.tenantSettings.upsert({
     where: { tenantId: tenant.id },
@@ -2071,6 +2224,9 @@ export async function updateTenantSettingsByTenantId(tenantId, payload, actor = 
       ...(typeof nextPhone === 'string' ? { phone: nextPhone || null } : {}),
       ...(typeof nextTimezone === 'string' ? { timezone: nextTimezone || DEFAULT_TENANT_SETTINGS.timezone } : {}),
       ...(typeof nextCurrency === 'string' ? { currency: nextCurrency || DEFAULT_TENANT_SETTINGS.currency } : {}),
+      ...(typeof nextRentalDayCountMode === 'string' ? { rentalDayCountMode: nextRentalDayCountMode } : {}),
+      ...(typeof nextRentalCutoffHour === 'number' ? { rentalCutoffHour: nextRentalCutoffHour } : {}),
+      ...(typeof nextRentalCutoffMinute === 'number' ? { rentalCutoffMinute: nextRentalCutoffMinute } : {}),
     },
     create: {
       tenantId: tenant.id,
@@ -2080,6 +2236,13 @@ export async function updateTenantSettingsByTenantId(tenantId, payload, actor = 
       legalFooterLines: nextLegalFooterLines || DEFAULT_TENANT_SETTINGS.legalFooterLines,
       timezone: nextTimezone || DEFAULT_TENANT_SETTINGS.timezone,
       currency: nextCurrency || DEFAULT_TENANT_SETTINGS.currency,
+      rentalDayCountMode: nextRentalDayCountMode || DEFAULT_TENANT_SETTINGS.rentalDayCountMode,
+      rentalCutoffHour: typeof nextRentalCutoffHour === 'number'
+        ? nextRentalCutoffHour
+        : DEFAULT_TENANT_SETTINGS.rentalCutoffHour,
+      rentalCutoffMinute: typeof nextRentalCutoffMinute === 'number'
+        ? nextRentalCutoffMinute
+        : DEFAULT_TENANT_SETTINGS.rentalCutoffMinute,
     },
   });
 
@@ -2312,6 +2475,7 @@ export async function processReturn(payload, context) {
   const branchId = requireBranchId(context);
   const rentalId = String(payload?.rentalId || '').trim();
   const additionalFee = Number(payload?.additionalFee || 0);
+  const settleRemainingPayment = Boolean(payload?.settleRemainingPayment);
 
   if (!rentalId) {
     throw new Error('rentalId is required');
@@ -2407,6 +2571,12 @@ export async function processReturn(payload, context) {
     const returnDate = new Date();
     const returnNotes = payload?.returnNotes || '';
     const finalTotal = rental.total + additionalFee;
+    const paidAmount = Math.max(0, Number(rental.paidAmount || 0));
+    const remainingAmount = Math.max(0, finalTotal - paidAmount);
+
+    if (remainingAmount > 0 && !settleRemainingPayment) {
+      throw new Error(`Transaksi belum lunas. Sisa pembayaran Rp ${remainingAmount.toLocaleString('id-ID')}`);
+    }
 
     const updatedCount = await tx.rental.updateMany({
       where: {
@@ -2445,6 +2615,8 @@ export async function processReturn(payload, context) {
         returnNotes,
         additionalFee,
         finalTotal,
+        paymentStatus: remainingAmount > 0 ? 'LUNAS' : rental.paymentStatus,
+        paidAmount: remainingAmount > 0 ? finalTotal : rental.paidAmount,
       },
     });
 
@@ -2542,6 +2714,7 @@ function toAuditRentalSnapshot(rental) {
     remainingAmount: Math.max(0, totalDue - normalizedPaidAmount),
     status: rental.status,
     date: rental.date.toISOString(),
+    plannedReturnDate: rental.plannedReturnDate ? rental.plannedReturnDate.toISOString() : null,
     returnDate: rental.returnDate ? rental.returnDate.toISOString() : null,
     returnNotes: rental.returnNotes || null,
     additionalFee: rental.additionalFee,
@@ -2952,6 +3125,9 @@ export async function createSelfRegisteredTenantUser({
         legalFooterLines: DEFAULT_TENANT_SETTINGS.legalFooterLines,
         timezone: DEFAULT_TENANT_SETTINGS.timezone,
         currency: DEFAULT_TENANT_SETTINGS.currency,
+        rentalDayCountMode: DEFAULT_TENANT_SETTINGS.rentalDayCountMode,
+        rentalCutoffHour: DEFAULT_TENANT_SETTINGS.rentalCutoffHour,
+        rentalCutoffMinute: DEFAULT_TENANT_SETTINGS.rentalCutoffMinute,
       },
     });
 

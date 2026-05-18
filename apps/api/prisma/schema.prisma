@@ -55,6 +55,9 @@ model TenantSettings {
   legalFooterLines Json
   timezone         String   @default("Asia/Jakarta")
   currency         String   @default("IDR")
+  rentalDayCountMode String @default("ROLLING_24H")
+  rentalCutoffHour Int      @default(8)
+  rentalCutoffMinute Int    @default(0)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -134,6 +137,7 @@ model Rental {
   paidAmount     Int           @default(0)
   status         String        @default("Active")
   date           DateTime      @default(now())
+  plannedReturnDate DateTime?
   returnDate     DateTime?
   deletedAt      DateTime?
   returnNotes    String?
