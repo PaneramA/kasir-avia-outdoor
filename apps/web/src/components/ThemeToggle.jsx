@@ -1,9 +1,7 @@
-import React, { useEffect, useState } from 'react'
-import { getTheme, saveTheme } from '../lib/storage'
+import React, { useEffect } from 'react'
+import { saveTheme } from '../lib/storage'
 
 const ThemeToggle = () => {
-    const [theme, setTheme] = useState(getTheme)
-
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme)
         saveTheme(theme)
