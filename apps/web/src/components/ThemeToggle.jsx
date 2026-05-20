@@ -2,9 +2,24 @@ import React, { useEffect } from 'react'
 import { saveTheme } from '../lib/storage'
 
 const ThemeToggle = () => {
+<<<<<<< HEAD
+=======
+    const [theme, setTheme] = useState(() => {
+        try {
+            return getTheme()
+        } catch {
+            return 'light'
+        }
+    })
+
+>>>>>>> ff1fdd1 (fix(web): prevent theme init crash and harden toggle/storage flow to avoid blank screen on cached builds)
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme)
-        saveTheme(theme)
+        try {
+            saveTheme(theme)
+        } catch {
+            // ignore storage write errors
+        }
     }, [theme])
 
     const isLight = theme === 'light'

@@ -6,7 +6,13 @@ import App from './App.jsx'
 import { getTheme } from './lib/storage'
 
 if (typeof window !== 'undefined') {
-  document.documentElement.setAttribute('data-theme', getTheme())
+  let initialTheme = 'light'
+  try {
+    initialTheme = getTheme()
+  } catch {
+    initialTheme = 'light'
+  }
+  document.documentElement.setAttribute('data-theme', initialTheme)
   window.__aviaDeferredInstallPrompt = null
 
   window.addEventListener('beforeinstallprompt', (event) => {
