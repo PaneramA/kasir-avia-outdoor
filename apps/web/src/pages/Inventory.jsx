@@ -67,7 +67,7 @@ const Inventory = ({ inventory, categories, onSaveItem, onDeleteItem, onAddCateg
                         containerClassName="min-h-11 rounded-DEFAULT"
                         buttonClassName="px-3 py-2 text-xs"
                     />
-                    <button className="flex min-h-11 w-full items-center justify-center gap-2 rounded-DEFAULT border border-border bg-sidebar-bg px-5 py-2.5 font-semibold text-text-main transition hover:bg-white/5 sm:w-auto" onClick={() => setIsCategoryModalOpen(true)}>
+                    <button className="flex min-h-11 w-full items-center justify-center gap-2 rounded-DEFAULT border border-border bg-sidebar-bg px-5 py-2.5 font-semibold text-text-main transition hover:bg-surface-hover sm:w-auto" onClick={() => setIsCategoryModalOpen(true)}>
                         <i className="fas fa-tags"></i> Kategori
                     </button>
                     <button className="flex min-h-11 w-full items-center justify-center gap-2 rounded-DEFAULT bg-accent px-5 py-2.5 font-semibold text-white transition hover:bg-accent-hover shadow-[0_4px_15px_rgba(230,126,34,0.3)] sm:w-auto" onClick={handleAddItem}>

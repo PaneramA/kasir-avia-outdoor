@@ -5,6 +5,7 @@ export const APP_ROUTES = {
   return: '/return',
   inventory: '/inventory',
   history: '/history',
+  financial: '/financial',
   customers: '/customers',
   users: '/users',
   branches: '/branches',
@@ -31,6 +32,10 @@ export const PAGE_INFO = {
   [APP_ROUTES.history]: {
     title: 'Riwayat',
     subtitle: 'Data transaksi penyewaan sebelumnya.',
+  },
+  [APP_ROUTES.financial]: {
+    title: 'Recap Keuangan',
+    subtitle: 'Ringkasan pendapatan bulanan dan rentang tanggal transaksi.',
   },
   [APP_ROUTES.customers]: {
     title: 'Data Customer',

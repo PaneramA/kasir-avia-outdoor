@@ -415,7 +415,7 @@ const Header = ({
                                     <button
                                         key={result.id}
                                         type="button"
-                                        className="w-full rounded-lg px-3 py-2 text-left transition hover:bg-black/5 dark:hover:bg-white/5"
+                                        className="w-full rounded-lg px-3 py-2 text-left transition hover:bg-surface-hover"
                                         onClick={() => handleOpenResult(result.route)}
                                     >
                                         <span className="mb-0.5 block text-[0.72rem] uppercase tracking-wide text-accent">{result.group}</span>
@@ -455,7 +455,7 @@ const Header = ({
                 <div className="relative">
                     <button
                         type="button"
-                        className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-sidebar-bg text-text-muted transition-all hover:bg-white/5"
+                        className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-sidebar-bg text-text-muted transition-all hover:bg-surface-hover"
                         onClick={() => setIsNotificationsOpen((prev) => !prev)}
                     >
                         <i className="fas fa-bell"></i>

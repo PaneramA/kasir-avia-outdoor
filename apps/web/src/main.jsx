@@ -5,6 +5,7 @@ import './index.css'
 import App from './App.jsx'
 
 if (typeof window !== 'undefined') {
+  document.documentElement.setAttribute('data-theme', 'light')
   window.__aviaDeferredInstallPrompt = null
 
   window.addEventListener('beforeinstallprompt', (event) => {

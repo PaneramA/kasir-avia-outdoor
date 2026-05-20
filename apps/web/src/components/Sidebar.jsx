@@ -14,6 +14,7 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
         { path: APP_ROUTES.return, icon: 'fas fa-undo', label: 'Pengembalian' },
         { path: APP_ROUTES.inventory, icon: 'fas fa-boxes-stacked', label: 'Inventaris' },
         { path: APP_ROUTES.customers, icon: 'fas fa-address-book', label: 'Customer' },
+        { path: APP_ROUTES.financial, icon: 'fas fa-chart-line', label: 'Keuangan' },
         { path: APP_ROUTES.history, icon: 'fas fa-history', label: 'Riwayat' },
     ]
 
@@ -54,7 +55,7 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
                                     onClick={onCloseMobile}
                                     className={({ isActive }) => `flex items-center gap-[15px] rounded-DEFAULT p-[14px_18px] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${isActive
                                         ? 'bg-accent text-white shadow-[0_4px_15px_rgba(230,126,34,0.3)]'
-                                        : 'text-text-muted hover:bg-black/5 dark:hover:bg-white/5 hover:text-text-main'
+                                        : 'text-text-muted hover:bg-surface-hover hover:text-text-main'
                                     }`}
                                 >
                                     <i className={`${item.icon} w-6 text-center text-[1.1rem]`}></i>
@@ -74,7 +75,7 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
                         <p className="mb-2 px-1 text-[0.68rem] uppercase tracking-[0.16em] text-text-muted">Profile</p>
                         <button
                             onClick={() => setIsProfileMenuOpen((prev) => !prev)}
-                            className="w-full flex items-center justify-between gap-3 rounded-xl border border-border bg-sidebar-bg p-3 text-left transition hover:border-accent hover:bg-black/5 dark:hover:bg-white/5"
+                            className="w-full flex items-center justify-between gap-3 rounded-xl border border-border bg-sidebar-bg p-3 text-left transition hover:border-accent hover:bg-surface-hover"
                         >
                             <div className="flex min-w-0 items-center gap-3">
                                 <img className="h-10 w-10 rounded-full border-2 border-accent object-cover" src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=E67E22&color=fff`} alt="User" />
@@ -96,7 +97,7 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
                                     onClick={onCloseMobile}
                                     className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
                                         ? 'bg-accent text-white'
-                                        : 'text-text-muted hover:text-text-main hover:bg-black/5 dark:hover:bg-white/5'
+                                        : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
                                     }`}
                                 >
                                     <i className="fas fa-user-cog mr-2"></i>
@@ -108,7 +109,7 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
                                         onClick={onCloseMobile}
                                         className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
                                             ? 'bg-accent text-white'
-                                            : 'text-text-muted hover:text-text-main hover:bg-black/5 dark:hover:bg-white/5'
+                                            : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
                                         }`}
                                     >
                                         <i className="fas fa-users-cog mr-2"></i>
@@ -120,7 +121,7 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
                                     onClick={onCloseMobile}
                                     className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
                                         ? 'bg-accent text-white'
-                                        : 'text-text-muted hover:text-text-main hover:bg-black/5 dark:hover:bg-white/5'
+                                        : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
                                     }`}
                                 >
                                     <i className="fas fa-code-branch mr-2"></i>
@@ -128,7 +129,7 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
                                 </NavLink>
                                 <button
                                     onClick={onLogout}
-                                    className="rounded-lg px-3 py-2 text-left text-sm text-text-muted hover:bg-black/5 hover:text-[#e74c3c] dark:hover:bg-white/5"
+                                    className="rounded-lg px-3 py-2 text-left text-sm text-text-muted hover:bg-surface-hover hover:text-[#e74c3c]"
                                     title="Logout"
                                 >
                                     <i className="fas fa-sign-out-alt mr-2"></i>

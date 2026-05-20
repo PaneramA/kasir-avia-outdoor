@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import ReceiptModal from '../components/ReceiptModal';
 import { openReceiptWhatsApp, printReceipt } from '../lib/receipt';
+import { formatCurrency, getCurrentMonthRangeDateKeys, getFinancialRecap, toJakartaDateKey } from '../lib/financial';
 
 function formatPaymentSummary(rental) {
     const status = String(rental?.payment?.status || 'LUNAS').toUpperCase();
@@ -16,10 +17,11 @@ const History = ({
     onVerifyRentalDelete,
     onDeleteRentalByAdmin,
 }) => {
+    const currentMonthRange = useMemo(() => getCurrentMonthRangeDateKeys(), []);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
+    const [startDate, setStartDate] = useState(currentMonthRange.startDate);
+    const [endDate, setEndDate] = useState(currentMonthRange.endDate);
     const [selectedRental, setSelectedRental] = useState(null);
     const [deletePassword, setDeletePassword] = useState('');
     const [deleteReason, setDeleteReason] = useState('');
@@ -169,33 +171,31 @@ const History = ({
         }
 
         if (startDate || endDate) {
-            const rentalDate = new Date(rental.date);
-            rentalDate.setHours(0, 0, 0, 0);
-
-            if (startDate) {
-                const start = new Date(startDate);
-                start.setHours(0, 0, 0, 0);
-                if (rentalDate < start) {
-                    return false;
-                }
+            const transactionDateKey = toJakartaDateKey(rental.date);
+            if (!transactionDateKey) {
+                return false;
             }
 
-            if (endDate) {
-                const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999);
-                if (rentalDate > end) {
-                    return false;
-                }
+            if (startDate && transactionDateKey < startDate) {
+                return false;
+            }
+
+            if (endDate && transactionDateKey > endDate) {
+                return false;
             }
         }
 
         return true;
     });
 
+    const periodRecap = useMemo(
+        () => getFinancialRecap(rentals, { startDate, endDate }),
+        [endDate, rentals, startDate],
+    );
     const totalTransactions = filteredRentals.length;
     const activeTransactions = filteredRentals.filter(r => r.status === 'Active').length;
     const returnedTransactions = filteredRentals.filter(r => r.status === 'Returned').length;
-    const totalRevenue = filteredRentals.reduce((sum, r) => sum + (r.finalTotal ?? r.total ?? 0), 0);
+    const totalRevenue = periodRecap.totalRevenue;
 
     return (
         <div className="flex h-full flex-col py-4 sm:py-5">
@@ -226,8 +226,8 @@ const History = ({
                         <span className="font-bold text-[#2ecc71]">{returnedTransactions}</span>
                     </div>
                     <div className="px-4 py-2 text-center bg-accent/5">
-                        <span className="block text-[0.7rem] uppercase font-bold text-text-muted mb-0.5">Pendapatan</span>
-                        <span className="font-bold text-accent">Rp {totalRevenue.toLocaleString()}</span>
+                        <span className="block text-[0.7rem] uppercase font-bold text-text-muted mb-0.5">Pendapatan Periode</span>
+                        <span className="font-bold text-accent">{formatCurrency(totalRevenue)}</span>
                     </div>
                 </div>
                 </div>
@@ -276,9 +276,12 @@ const History = ({
                     {(startDate || endDate) && (
                         <button
                             className="text-[#e74c3c] bg-[#e74c3c]/10 hover:bg-[#e74c3c]/20 px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
-                            onClick={() => { setStartDate(''); setEndDate(''); }}
+                            onClick={() => {
+                                setStartDate(currentMonthRange.startDate);
+                                setEndDate(currentMonthRange.endDate);
+                            }}
                         >
-                            Reset Tanggal
+                            Reset ke Bulan Ini
                         </button>
                     )}
                 </div>
@@ -371,7 +374,7 @@ const History = ({
                                     {[...filteredRentals].reverse().map((rental) => {
                                         const payment = formatPaymentSummary(rental);
                                         return (
-                                        <tr key={rental.id} className="group transition-colors hover:bg-white/5">
+                                        <tr key={rental.id} className="group transition-colors hover:bg-surface-hover">
                                             <td className="align-top border-b border-border/50 p-4">
                                                 <div className="mb-1 font-mono text-[0.9rem] font-semibold text-text-main">{rental.id}</div>
                                                 <div className="text-[0.8rem] text-text-muted">

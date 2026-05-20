@@ -1,33 +1,37 @@
 @import "tailwindcss";
 
 @layer base {
-  /* Default Dark Theme (or explicitly set to dark) */
+  /* Default Light Theme */
   :root,
-  [data-theme="dark"] {
-    --primary: #2d3a3a;
-    --secondary: #1e2727;
-    --accent: #e67e22;
-    --accent-hover: #d35400;
-    --text-main: #f2f4f3;
-    --text-muted: #a0a5a3;
-    --bg-main: #141a1a;
-    --sidebar-bg: #1a2222;
-    --border: rgba(255, 255, 255, 0.1);
+  [data-theme="light"] {
+    --primary: #ffffff;
+    --secondary: #f7f9fa;
+    --accent: #dc5f00;
+    --accent-hover: #b84d00;
+    --text-main: #1f2933;
+    --text-muted: #5f6b76;
+    --bg-main: #f5f7f9;
+    --sidebar-bg: #ffffff;
+    --card-bg: #ffffff;
+    --surface-hover: #eef2f5;
+    --border: rgba(15, 23, 42, 0.14);
     --radius: 12px;
     --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Light Theme */
-  [data-theme="light"] {
-    --primary: #F0F4F4;
-    --secondary: #E4EBEB;
-    --accent: #E67E22;
-    --accent-hover: #D35400;
-    --text-main: #141A1A;
-    --text-muted: #5C6767;
-    --bg-main: #F4F7F6;
-    --sidebar-bg: #FFFFFF;
-    --border: rgba(0, 0, 0, 0.1);
+  /* Keep dark alias mapped to light palette for consistent default UX */
+  [data-theme="dark"] {
+    --primary: #ffffff;
+    --secondary: #f7f9fa;
+    --accent: #dc5f00;
+    --accent-hover: #b84d00;
+    --text-main: #1f2933;
+    --text-muted: #5f6b76;
+    --bg-main: #f5f7f9;
+    --sidebar-bg: #ffffff;
+    --card-bg: #ffffff;
+    --surface-hover: #eef2f5;
+    --border: rgba(15, 23, 42, 0.14);
   }
 
   body {
@@ -52,6 +56,8 @@
   --color-text-muted: var(--text-muted);
   --color-bg-main: var(--bg-main);
   --color-sidebar-bg: var(--sidebar-bg);
+  --color-card-bg: var(--card-bg);
+  --color-surface-hover: var(--surface-hover);
   --color-border: var(--border);
   --radius-DEFAULT: var(--radius);
   --font-sans: "Inter", sans-serif;
@@ -71,5 +77,5 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-white/10 rounded-full hover:bg-text-muted;
+  @apply rounded-full bg-text-muted/35 hover:bg-text-muted/60;
 }

@@ -266,7 +266,7 @@ const Customers = () => {
                                         </thead>
                                         <tbody>
                                             {customers.map((customer) => (
-                                                <tr key={customer.id} className="hover:bg-white/5">
+                                                <tr key={customer.id} className="hover:bg-surface-hover">
                                                     <td className="border-b border-border/40 p-3 font-medium text-text-main">{customer.name}</td>
                                                     <td className="border-b border-border/40 p-3 text-text-main">{customer.phone}</td>
                                                     <td className="border-b border-border/40 p-3 text-text-muted">{customer.address || '-'}</td>

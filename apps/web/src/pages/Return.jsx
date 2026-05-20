@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { formatJakartaDateLabel, getCurrentJakartaDateKey, toJakartaDateKey } from '../lib/financial';
 import { formatLateDuration, getDailyRate, getLateDurationMs, getPlannedReturnDate } from '../lib/rentalTime';
 
 const formatCurrency = (value) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
@@ -29,13 +30,74 @@ const Return = ({ rentals, onProcessReturn }) => {
     const additionalFeeValue = Number.isFinite(Number(additionalFeeInput))
         ? Math.max(0, Number(additionalFeeInput))
         : 0;
+    const todayDateKey = getCurrentJakartaDateKey();
 
     const activeRentals = rentals.filter((r) => r.status === 'Active');
 
-    const filteredRentals = activeRentals.filter((r) => (
-        (r.customer?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
-        || String(r.id || '').toLowerCase().includes(searchQuery.toLowerCase())
-    ));
+    const rentalDueMetaById = useMemo(() => {
+        const map = new Map();
+        activeRentals.forEach((rental) => {
+            const dueDate = getPlannedReturnDate(rental);
+            const dueDateKey = toJakartaDateKey(dueDate);
+            let dueStatus = 'unknown';
+            if (dueDateKey) {
+                if (dueDateKey < todayDateKey) {
+                    dueStatus = 'overdue';
+                } else if (dueDateKey === todayDateKey) {
+                    dueStatus = 'dueToday';
+                } else {
+                    dueStatus = 'upcoming';
+                }
+            }
+
+            map.set(rental.id, {
+                dueDate,
+                dueDateKey,
+                dueStatus,
+            });
+        });
+
+        return map;
+    }, [activeRentals, todayDateKey]);
+
+    const filteredRentals = useMemo(() => activeRentals
+        .filter((r) => (
+            (r.customer?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+            || String(r.id || '').toLowerCase().includes(searchQuery.toLowerCase())
+        ))
+        .sort((a, b) => {
+            const aMeta = rentalDueMetaById.get(a.id);
+            const bMeta = rentalDueMetaById.get(b.id);
+            const priorityRank = {
+                overdue: 0,
+                dueToday: 1,
+                upcoming: 2,
+                unknown: 3,
+            };
+
+            const priorityDiff = (priorityRank[aMeta?.dueStatus || 'unknown'] || 99)
+                - (priorityRank[bMeta?.dueStatus || 'unknown'] || 99);
+            if (priorityDiff !== 0) {
+                return priorityDiff;
+            }
+
+            const aDueKey = aMeta?.dueDateKey || '9999-99-99';
+            const bDueKey = bMeta?.dueDateKey || '9999-99-99';
+            if (aDueKey !== bDueKey) {
+                return aDueKey.localeCompare(bDueKey);
+            }
+
+            return new Date(a.date).getTime() - new Date(b.date).getTime();
+        }), [activeRentals, rentalDueMetaById, searchQuery]);
+
+    const overdueCount = useMemo(
+        () => filteredRentals.filter((rental) => rentalDueMetaById.get(rental.id)?.dueStatus === 'overdue').length,
+        [filteredRentals, rentalDueMetaById],
+    );
+    const dueTodayCount = useMemo(
+        () => filteredRentals.filter((rental) => rentalDueMetaById.get(rental.id)?.dueStatus === 'dueToday').length,
+        [filteredRentals, rentalDueMetaById],
+    );
 
     const selectedPayment = useMemo(
         () => getPaymentInfo(selectedRental),
@@ -136,6 +198,23 @@ const Return = ({ rentals, onProcessReturn }) => {
                     </div>
                 </div>
 
+                {(overdueCount > 0 || dueTodayCount > 0) && (
+                    <div className="mb-4 space-y-2">
+                        {overdueCount > 0 && (
+                            <div className="rounded-lg border border-[#dc2626]/30 bg-[#fee2e2] px-3 py-2 text-sm text-[#991b1b]">
+                                <i className="fas fa-triangle-exclamation mr-2"></i>
+                                Ada <strong>{overdueCount}</strong> transaksi terlambat yang harus diprioritaskan.
+                            </div>
+                        )}
+                        {dueTodayCount > 0 && (
+                            <div className="rounded-lg border border-[#d97706]/30 bg-[#ffedd5] px-3 py-2 text-sm text-[#9a4a00]">
+                                <i className="fas fa-clock mr-2"></i>
+                                Ada <strong>{dueTodayCount}</strong> transaksi jatuh tempo hari ini.
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto pr-1 sm:pr-2">
                     {filteredRentals.length === 0 ? (
                         <div className="rounded-lg border border-dashed border-border bg-sidebar-bg/30 py-10 text-center text-text-muted">
@@ -144,6 +223,8 @@ const Return = ({ rentals, onProcessReturn }) => {
                     ) : (
                         filteredRentals.map((rental) => {
                             const payment = getPaymentInfo(rental);
+                            const dueMeta = rentalDueMetaById.get(rental.id);
+                            const dueStatus = dueMeta?.dueStatus || 'unknown';
                             return (
                                 <div
                                     key={rental.id}
@@ -155,8 +236,18 @@ const Return = ({ rentals, onProcessReturn }) => {
                                             <div className="mb-1 flex flex-wrap items-center gap-2 sm:gap-3">
                                                 <h4 className="font-bold text-text-main">{rental.customer.name}</h4>
                                                 <span className="rounded border border-border bg-sidebar-bg px-2 py-0.5 text-xs text-text-muted">{rental.id}</span>
+                                                {dueStatus === 'overdue' && (
+                                                    <span className="rounded border border-[#dc2626]/35 bg-[#fee2e2] px-2 py-0.5 text-xs font-semibold text-[#991b1b]">
+                                                        Terlambat
+                                                    </span>
+                                                )}
+                                                {dueStatus === 'dueToday' && (
+                                                    <span className="rounded border border-[#d97706]/35 bg-[#ffedd5] px-2 py-0.5 text-xs font-semibold text-[#9a4a00]">
+                                                        Kembali Hari Ini
+                                                    </span>
+                                                )}
                                                 {payment.isUnpaid && (
-                                                    <span className="rounded border border-[#f39c12]/40 bg-[#f39c12]/10 px-2 py-0.5 text-xs font-semibold text-[#f39c12]">
+                                                    <span className="rounded border border-[#d97706]/35 bg-[#fff3e6] px-2 py-0.5 text-xs font-semibold text-[#9a4a00]">
                                                         Belum Lunas
                                                     </span>
                                                 )}
@@ -166,6 +257,9 @@ const Return = ({ rentals, onProcessReturn }) => {
                                             </div>
                                             <div className="mt-1 text-[0.8rem] text-text-muted sm:max-w-[400px]">
                                                 {rental.items.map((i) => `${i.name} (${i.qty})`).join(', ')}
+                                            </div>
+                                            <div className="mt-1 text-[0.78rem] text-text-muted">
+                                                Rencana Kembali: {dueMeta?.dueDate ? formatJakartaDateLabel(dueMeta.dueDate, true) : '-'}
                                             </div>
                                         </div>
                                         <div className="text-left sm:text-right">
@@ -196,7 +290,7 @@ const Return = ({ rentals, onProcessReturn }) => {
                     ) : (
                         <div className="flex flex-1 flex-col space-y-5">
                             {selectedPayment.isUnpaid && (
-                                <div className="rounded-lg border border-[#f39c12]/50 bg-[#f39c12]/10 p-3 text-sm text-[#f4bf68]">
+                                <div className="rounded-lg border border-[#d97706]/35 bg-[#fff3e6] p-3 text-sm text-[#9a4a00]">
                                     Customer ini belum lunas. Sisa pembayaran saat ini: <strong>{formatCurrency(selectedPayment.remainingAmount + additionalFeeValue)}</strong>
                                 </div>
                             )}
@@ -230,7 +324,7 @@ const Return = ({ rentals, onProcessReturn }) => {
                                 <h5 className="mb-3 text-[0.9rem] font-bold text-text-main">Barang yang Dikembalikan</h5>
                                 <div className="max-h-[200px] space-y-2 overflow-y-auto pr-1 sm:pr-2">
                                     {selectedRental.items.map((item, idx) => (
-                                        <div key={idx} className="flex items-start justify-between gap-2 rounded border border-white/5 bg-bg-main/50 p-3">
+                                        <div key={idx} className="flex items-start justify-between gap-2 rounded border border-border/60 bg-bg-main/50 p-3">
                                             <div className="flex min-w-0 flex-col">
                                                 <span className="text-[0.9rem] text-text-main">{item.name}</span>
                                                 {item.notes && <span className="mt-0.5 text-[0.75rem] italic text-text-muted"><i className="fas fa-info-circle mr-1"></i>{item.notes}</span>}
@@ -247,7 +341,7 @@ const Return = ({ rentals, onProcessReturn }) => {
 
                             <div className="space-y-4">
                                 {isLate && (
-                                    <div className="rounded-lg border border-[#e67e22]/50 bg-[#e67e22]/10 p-3 text-sm text-[#f0bc82]">
+                                    <div className="rounded-lg border border-[#c76410]/35 bg-[#fff1e5] p-3 text-sm text-[#8f4100]">
                                         Terlambat <strong>{lateDurationLabel}</strong>. Default denda 1 hari: <strong>{formatCurrency(selectedDailyRate)}</strong>
                                     </div>
                                 )}
@@ -277,7 +371,7 @@ const Return = ({ rentals, onProcessReturn }) => {
                                 </div>
 
                                 {selectedPayment.isUnpaid && (
-                                    <label className="flex items-start gap-2 rounded-lg border border-[#f39c12]/40 bg-[#f39c12]/10 p-3 text-[0.85rem] text-[#f4bf68]">
+                                    <label className="flex items-start gap-2 rounded-lg border border-[#d97706]/35 bg-[#fff3e6] p-3 text-[0.85rem] text-[#9a4a00]">
                                         <input
                                             type="checkbox"
                                             className="mt-0.5"
@@ -316,7 +410,7 @@ const Return = ({ rentals, onProcessReturn }) => {
                                     <i className="fas fa-check-circle"></i> {isSubmitting ? 'Memproses...' : 'Selesaikan Pengembalian'}
                                 </button>
                                 <button
-                                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-transparent py-2.5 font-semibold text-text-muted transition hover:bg-white/5 hover:text-text-main"
+                                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-transparent py-2.5 font-semibold text-text-muted transition hover:bg-surface-hover hover:text-text-main"
                                     onClick={() => setSelectedRental(null)}
                                 >
                                     Batal
