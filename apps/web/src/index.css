@@ -19,19 +19,19 @@
     --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Keep dark alias mapped to light palette for consistent default UX */
+  /* Dark Theme */
   [data-theme="dark"] {
-    --primary: #ffffff;
-    --secondary: #f7f9fa;
+    --primary: #2d3a3a;
+    --secondary: #1e2727;
     --accent: #dc5f00;
     --accent-hover: #b84d00;
-    --text-main: #1f2933;
-    --text-muted: #5f6b76;
-    --bg-main: #f5f7f9;
-    --sidebar-bg: #ffffff;
-    --card-bg: #ffffff;
-    --surface-hover: #eef2f5;
-    --border: rgba(15, 23, 42, 0.14);
+    --text-main: #f2f4f3;
+    --text-muted: #a0a5a3;
+    --bg-main: #141a1a;
+    --sidebar-bg: #1a2222;
+    --card-bg: #1d2626;
+    --surface-hover: #243030;
+    --border: rgba(255, 255, 255, 0.12);
   }
 
   body {

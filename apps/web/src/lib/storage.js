@@ -50,9 +50,11 @@ export function saveRentals(rentals) {
 }
 
 export function getTheme() {
-  return 'light';
+  const saved = localStorage.getItem(STORAGE_KEYS.theme);
+  return saved === 'dark' ? 'dark' : 'light';
 }
 
 export function saveTheme(theme) {
-  localStorage.setItem(STORAGE_KEYS.theme, theme === 'dark' ? 'light' : 'light');
+  const normalized = theme === 'dark' ? 'dark' : 'light';
+  localStorage.setItem(STORAGE_KEYS.theme, normalized);
 }

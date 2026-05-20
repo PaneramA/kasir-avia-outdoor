@@ -1201,8 +1201,8 @@ const Rental = ({
                     </div>
                 </div>
 
-                <div className="w-full lg:h-full lg:min-h-0 lg:w-[400px]">
-                    <div className="rounded-lg border border-border bg-sidebar-bg p-4 sm:p-6">
+                <div className="w-full lg:sticky lg:top-6 lg:self-start lg:w-[400px] lg:max-h-[calc(100vh-7.5rem)]">
+                    <div className="rounded-xl border border-border bg-sidebar-bg p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] sm:p-6 lg:flex lg:h-[calc(100vh-7.5rem)] lg:flex-col">
                         <div className="lg:hidden">
                             {mobileStep === 1 && (
                                 <>
