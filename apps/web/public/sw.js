@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aviaoutdoor-shell-v2'
+const CACHE_NAME = 'aviaoutdoor-shell-v3'
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -48,6 +48,26 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (url.origin === self.location.origin) {
+    const isStaticAsset = url.pathname.startsWith('/assets/')
+      || request.destination === 'script'
+      || request.destination === 'style'
+
+    if (isStaticAsset) {
+      // Prefer network for hashed bundles to avoid stale JS/CSS causing blank screens.
+      event.respondWith(
+        fetch(request)
+          .then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200 && request.url.startsWith('http')) {
+              const responseClone = networkResponse.clone()
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone))
+            }
+            return networkResponse
+          })
+          .catch(() => caches.match(request)),
+      )
+      return
+    }
+
     event.respondWith(
       caches.match(request).then((cachedResponse) => {
         if (cachedResponse) {
