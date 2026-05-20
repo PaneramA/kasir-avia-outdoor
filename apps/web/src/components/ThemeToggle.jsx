@@ -4,7 +4,11 @@ import { saveTheme } from '../lib/storage'
 const ThemeToggle = () => {
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme)
-        saveTheme(theme)
+        try {
+            saveTheme(theme)
+        } catch {
+            // ignore storage write errors
+        }
     }, [theme])
 
     const isLight = theme === 'light'
