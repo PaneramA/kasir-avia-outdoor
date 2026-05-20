@@ -7,6 +7,7 @@ import Inventory from './pages/Inventory'
 import Rental from './pages/Rental'
 import Return from './pages/Return'
 import History from './pages/History'
+import FinancialRecap from './pages/FinancialRecap'
 import Customers from './pages/Customers'
 import Login from './pages/Login'
 import Users from './pages/Users'
@@ -428,10 +429,50 @@ function App() {
   const handleProcessReturn = useCallback(
     async (payload) => {
       const processed = await processReturn(payload)
-      await refreshData()
+      if (processed?.rental?.id) {
+        setRentals((previousRentals) => previousRentals.map((rental) => (
+          rental.id === processed.rental.id
+            ? {
+              ...rental,
+              ...processed.rental,
+              status: 'Returned',
+            }
+            : rental
+        )))
+
+        const returnedItems = Array.isArray(processed?.rental?.items) ? processed.rental.items : []
+        if (returnedItems.length > 0) {
+          const returnedQtyById = returnedItems.reduce((acc, item) => {
+            const itemId = String(item?.id || '').trim()
+            if (!itemId) {
+              return acc
+            }
+
+            const qty = Number(item?.qty || 0)
+            acc[itemId] = (acc[itemId] || 0) + (Number.isFinite(qty) ? Math.max(0, qty) : 0)
+            return acc
+          }, {})
+
+          setInventory((previousInventory) => previousInventory.map((item) => {
+            const restockQty = returnedQtyById[item.id] || 0
+            if (restockQty <= 0) {
+              return item
+            }
+
+            return {
+              ...item,
+              stock: Number(item.stock || 0) + restockQty,
+            }
+          }))
+        }
+      }
+
+      void refreshData().catch((error) => {
+        setErrorMessage(getErrorMessage(error))
+      })
       return processed
     },
-    [refreshData],
+    [getErrorMessage, refreshData],
   )
 
   const handleVerifyRentalDelete = useCallback(
@@ -616,6 +657,10 @@ function App() {
               }
             />
             <Route path={APP_ROUTES.customers} element={<Customers />} />
+            <Route
+              path={APP_ROUTES.financial}
+              element={<FinancialRecap rentals={rentals} />}
+            />
             <Route
               path={APP_ROUTES.history}
               element={(

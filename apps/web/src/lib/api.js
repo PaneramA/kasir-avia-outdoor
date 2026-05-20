@@ -1,4 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
+const API_REQUEST_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS || 20000);
 const TOKEN_KEY = 'avia_api_token';
 const USER_KEY = 'avia_api_user';
 const TENANT_CONTEXT_KEY = 'avia_tenant_context_v1';
@@ -118,10 +119,24 @@ async function request(path, options = {}, config = { auth: false }) {
     headers['x-branch-id'] = activeBranchId;
   }
 
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => {
+    controller.abort();
+  }, API_REQUEST_TIMEOUT_MS);
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     cache: 'no-store',
     headers,
+    signal: options.signal || controller.signal,
+  }).catch((error) => {
+    if (error?.name === 'AbortError') {
+      throw new Error('Koneksi ke server timeout. Coba ulang beberapa saat lagi.');
+    }
+
+    throw error;
+  }).finally(() => {
+    window.clearTimeout(timeoutId);
   });
 
   let payload = null;

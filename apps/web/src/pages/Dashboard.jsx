@@ -1,15 +1,18 @@
 import React from 'react';
+import { formatCurrency, formatMonthLabel, getCurrentMonthRangeDateKeys, getFinancialRecap } from '../lib/financial';
 
 const Dashboard = ({ inventory, rentals }) => {
     const calculateStats = () => {
+        const { monthKey, startDate, endDate } = getCurrentMonthRangeDateKeys();
+        const recap = getFinancialRecap(rentals, { startDate, endDate });
         const available = inventory.reduce((sum, item) => sum + parseInt(item.stock || 0), 0);
         const activeRentals = rentals.filter((r) => r.status === 'Active').length;
         const itemsOut = rentals
             .filter((r) => r.status === 'Active')
             .reduce((sum, r) => sum + r.items.reduce((iSum, item) => iSum + item.qty, 0), 0);
-        const revenue = rentals.reduce((sum, r) => sum + (r.finalTotal ?? r.total ?? 0), 0);
+        const revenue = recap.totalRevenue;
 
-        return { available, activeRentals, itemsOut, revenue };
+        return { available, activeRentals, itemsOut, revenue, monthLabel: formatMonthLabel(monthKey) };
     };
 
     const stats = calculateStats();
@@ -58,8 +61,9 @@ const Dashboard = ({ inventory, rentals }) => {
                         <i className="fas fa-wallet"></i>
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-[0.8rem] text-text-muted uppercase tracking-wider font-semibold mb-1">Pendapatan</span>
-                        <span className="text-[1.5rem] font-bold text-text-main">Rp {stats.revenue.toLocaleString()}</span>
+                        <span className="text-[0.8rem] text-text-muted uppercase tracking-wider font-semibold mb-1">Pendapatan Bulanan</span>
+                        <span className="text-[1.5rem] font-bold text-text-main">{formatCurrency(stats.revenue)}</span>
+                        <span className="text-[0.72rem] text-text-muted">{stats.monthLabel}</span>
                     </div>
                 </div>
             </div>
@@ -105,14 +109,14 @@ const Dashboard = ({ inventory, rentals }) => {
                                     </thead>
                                     <tbody>
                                         {recent.map((r, idx) => (
-                                            <tr key={idx} className="transition-colors hover:bg-white/5">
-                                                <td className="border-b border-white/5 p-4">
+                                            <tr key={idx} className="transition-colors hover:bg-surface-hover">
+                                                <td className="border-b border-border/60 p-4">
                                                     <strong className="text-text-main">{r.customer.name}</strong>
                                                     <br />
                                                     <small className="text-text-muted">{r.customer.phone}</small>
                                                 </td>
-                                                <td className="border-b border-white/5 p-4 text-text-muted">{r.items.map((i) => `${i.name} (${i.qty})`).join(', ')}</td>
-                                                <td className="border-b border-white/5 p-4">
+                                                <td className="border-b border-border/60 p-4 text-text-muted">{r.items.map((i) => `${i.name} (${i.qty})`).join(', ')}</td>
+                                                <td className="border-b border-border/60 p-4">
                                                     <span className={`rounded-[20px] px-3 py-1 text-[0.75rem] font-bold ${r.status.toLowerCase() === 'active'
                                                         ? 'bg-[#2ecc71]/20 text-[#2ecc71]'
                                                         : 'bg-text-muted/20 text-text-muted'
@@ -120,7 +124,7 @@ const Dashboard = ({ inventory, rentals }) => {
                                                         {r.status}
                                                     </span>
                                                 </td>
-                                                <td className="border-b border-white/5 p-4 font-bold text-accent">Rp {(r.finalTotal ?? r.total ?? 0).toLocaleString()}</td>
+                                                <td className="border-b border-border/60 p-4 font-bold text-accent">Rp {(r.finalTotal ?? r.total ?? 0).toLocaleString()}</td>
                                             </tr>
                                         ))}
                                     </tbody>

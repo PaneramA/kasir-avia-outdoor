@@ -968,7 +968,7 @@ const Rental = ({
                             <button
                                 key={suggestion.id}
                                 type="button"
-                                className="w-full text-left px-3 py-2 border-b border-border/40 last:border-b-0 hover:bg-black/5 dark:hover:bg-white/5"
+                                className="w-full text-left px-3 py-2 border-b border-border/40 last:border-b-0 hover:bg-surface-hover"
                                 onClick={() => handlePickCustomer(suggestion)}
                             >
                                 <span className="block text-sm text-text-main font-medium">{suggestion.name}</span>
@@ -1074,7 +1074,7 @@ const Rental = ({
                     <div className="text-center py-6 text-text-muted italic text-sm">Belum ada barang dipilih.</div>
                 ) : (
                     cart.map((item) => (
-                        <div className="bg-bg-main/50 border border-white/5 p-4 rounded-lg" key={item.id}>
+                        <div className="bg-bg-main/50 border border-border/60 p-4 rounded-lg" key={item.id}>
                             <div className="mb-3 flex items-start justify-between gap-3">
                                 <div className="flex min-w-0 flex-col">
                                     <span className="text-text-main font-medium">{item.name}</span>

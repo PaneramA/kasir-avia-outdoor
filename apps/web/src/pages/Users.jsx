@@ -407,7 +407,7 @@ const Users = () => {
                                 </thead>
                                 <tbody>
                                     {users.map((user) => (
-                                        <tr key={user.id} className="hover:bg-white/5">
+                                        <tr key={user.id} className="hover:bg-surface-hover">
                                             <td className="border-b border-border/40 p-3 font-medium text-text-main">
                                                 {editingUserId === user.id ? (
                                                     <input
