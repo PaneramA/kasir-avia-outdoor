@@ -347,7 +347,7 @@ const History = ({
                                             {isAdmin && (
                                                 <button
                                                     type="button"
-                                                    className="inline-flex items-center gap-2 rounded border border-[#e74c3c]/50 bg-[#e74c3c]/10 px-3 py-1.5 text-[0.75rem] font-semibold text-[#f3b2ad] hover:bg-[#e74c3c]/20"
+                                                    className="inline-flex items-center gap-2 rounded border border-[#b91c1c] bg-[#dc2626] px-3 py-1.5 text-[0.75rem] font-semibold text-white hover:bg-[#b91c1c]"
                                                     onClick={() => openDeleteModal(rental)}
                                                 >
                                                     <i className="fas fa-trash"></i> Hapus Riwayat
@@ -459,7 +459,7 @@ const History = ({
                                                     {isAdmin && (
                                                         <button
                                                             type="button"
-                                                            className="inline-flex items-center gap-2 rounded border border-[#e74c3c]/50 bg-[#e74c3c]/10 px-3 py-1.5 text-[0.75rem] font-semibold text-[#f3b2ad] hover:bg-[#e74c3c]/20"
+                                                            className="inline-flex items-center gap-2 rounded border border-[#b91c1c] bg-[#dc2626] px-3 py-1.5 text-[0.75rem] font-semibold text-white hover:bg-[#b91c1c]"
                                                             onClick={() => openDeleteModal(rental)}
                                                         >
                                                             <i className="fas fa-trash"></i> Hapus
@@ -486,7 +486,7 @@ const History = ({
                         </p>
 
                         {deleteErrorMessage && (
-                            <div className="mb-4 rounded-lg border border-[#e74c3c]/40 bg-[#e74c3c]/10 p-3 text-sm text-[#f3b2ad]">
+                            <div className="mb-4 rounded-lg border border-[#dc2626]/35 bg-[#fee2e2] p-3 text-sm text-[#991b1b]">
                                 {deleteErrorMessage}
                             </div>
                         )}

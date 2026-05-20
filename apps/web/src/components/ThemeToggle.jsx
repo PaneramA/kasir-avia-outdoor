@@ -1,17 +1,26 @@
-import React, { useEffect } from 'react'
-import { saveTheme } from '../lib/storage'
+import React, { useEffect, useState } from 'react'
+import { getTheme, saveTheme } from '../lib/storage'
 
 const ThemeToggle = () => {
+    const [theme, setTheme] = useState(getTheme)
+
     useEffect(() => {
-        document.documentElement.setAttribute('data-theme', 'light')
-        saveTheme('light')
-    }, [])
+        document.documentElement.setAttribute('data-theme', theme)
+        saveTheme(theme)
+    }, [theme])
+
+    const isLight = theme === 'light'
 
     return (
-        <div className="flex items-center gap-2 rounded-full border border-border bg-bg-main px-3 py-2 text-[0.75rem] font-semibold text-text-muted">
-            <i className="fas fa-sun text-accent"></i>
-            Mode Terang Aktif
-        </div>
+        <button
+            type="button"
+            className="flex items-center gap-2 rounded-full border border-border bg-bg-main px-3 py-2 text-[0.75rem] font-semibold text-text-muted transition hover:border-accent"
+            onClick={() => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'))}
+            aria-label="Ganti mode tema"
+        >
+            <i className={`fas ${isLight ? 'fa-sun text-accent' : 'fa-moon text-accent'}`}></i>
+            {isLight ? 'Mode Terang' : 'Mode Gelap'}
+        </button>
     )
 }
 

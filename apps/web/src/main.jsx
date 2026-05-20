@@ -3,9 +3,10 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
+import { getTheme } from './lib/storage'
 
 if (typeof window !== 'undefined') {
-  document.documentElement.setAttribute('data-theme', 'light')
+  document.documentElement.setAttribute('data-theme', getTheme())
   window.__aviaDeferredInstallPrompt = null
 
   window.addEventListener('beforeinstallprompt', (event) => {
