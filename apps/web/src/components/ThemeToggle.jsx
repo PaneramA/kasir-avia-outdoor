@@ -1,7 +1,18 @@
-import React, { useEffect } from 'react'
-import { saveTheme } from '../lib/storage'
+import React, { useEffect, useState } from 'react'
+import { getTheme, saveTheme } from '../lib/storage'
 
 const ThemeToggle = () => {
+<<<<<<< HEAD
+=======
+    const [theme, setTheme] = useState(() => {
+        try {
+            return getTheme()
+        } catch {
+            return 'light'
+        }
+    })
+
+>>>>>>> fc8dd42 (fix: blank screen)
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme)
         try {
