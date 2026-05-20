@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aviaoutdoor-shell-v3'
+const CACHE_NAME = 'aviaoutdoor-shell-v4'
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -34,9 +34,8 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url)
   const isNavigation = request.mode === 'navigate'
 
-  // Never cache API responses to avoid stale operational data.
+  // Bypass API requests completely so runtime data is never intercepted by SW.
   if (url.origin === self.location.origin && url.pathname.startsWith('/api/')) {
-    event.respondWith(fetch(request))
     return
   }
 
