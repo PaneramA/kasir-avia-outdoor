@@ -2,8 +2,6 @@ import React, { useEffect, useState } from 'react'
 import { getTheme, saveTheme } from '../lib/storage'
 
 const ThemeToggle = () => {
-<<<<<<< HEAD
-=======
     const [theme, setTheme] = useState(() => {
         try {
             return getTheme()
@@ -12,7 +10,6 @@ const ThemeToggle = () => {
         }
     })
 
->>>>>>> fc8dd42 (fix: blank screen)
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme)
         try {
