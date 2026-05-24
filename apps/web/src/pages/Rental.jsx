@@ -101,6 +101,8 @@ const Rental = ({
     const [mobileStepHint, setMobileStepHint] = useState('');
     const [inventoryViewMode, setInventoryViewMode] = useState(getInitialRentalInventoryView);
     const [receiptRental, setReceiptRental] = useState(null);
+    const [isFinalReviewOpen, setIsFinalReviewOpen] = useState(false);
+    const [isFinalReviewChecked, setIsFinalReviewChecked] = useState(false);
     const latestSearchRequestRef = useRef(0);
     const focusTimeoutRef = useRef(null);
     const hasRestoredDraftRef = useRef(false);
@@ -539,6 +541,20 @@ const Rental = ({
         && (customer.guarantee !== 'Lainnya' || customer.guaranteeOther.trim()),
     );
     const isItemsStepComplete = cart.length > 0;
+    const formatCurrency = (value) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
+    const formatDateTimeForSummary = (dateValue) => {
+        if (!(dateValue instanceof Date) || Number.isNaN(dateValue.getTime())) {
+            return '-';
+        }
+
+        return dateValue.toLocaleString('id-ID', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    };
 
     const validateCustomerStep = ({ focusOnError = false } = {}) => {
         const nextErrors = {
@@ -719,7 +735,7 @@ const Rental = ({
         }
     };
 
-    const handleCheckout = async () => {
+    const validateCheckoutBeforeSubmit = () => {
         const isCustomerValid = validateCustomerStep({ focusOnError: true });
         const isItemsValid = validateItemsStep({ focusOnError: true });
         const isDurationValid = validateDurationStep({ focusOnError: true });
@@ -729,27 +745,50 @@ const Rental = ({
             setMobileStep(1);
             setMobileStepHint('Lengkapi data penyewa dulu sebelum menyimpan transaksi.');
             alert('Lengkapi data penyewa terlebih dahulu.');
-            return;
+            return false;
         }
 
         if (!isItemsValid) {
             setMobileStep(2);
             setMobileStepHint('Pilih barang sewa dulu sebelum menyimpan transaksi.');
             alert('Pilih barang yang akan disewa terlebih dahulu.');
-            return;
+            return false;
         }
 
         if (!isDurationValid) {
             setMobileStep(3);
             setMobileStepHint('Periksa durasi sewa sebelum menyimpan transaksi.');
             alert('Durasi sewa belum valid.');
-            return;
+            return false;
         }
 
         if (!isPaymentValid) {
             setMobileStep(3);
             setMobileStepHint('Periksa detail pembayaran sebelum menyimpan transaksi.');
             alert('Detail pembayaran belum valid.');
+            return false;
+        }
+
+        return true;
+    };
+
+    const handleOpenFinalReview = () => {
+        if (!validateCheckoutBeforeSubmit()) {
+            return;
+        }
+
+        setMobileStepHint('');
+        setIsFinalReviewChecked(false);
+        setIsFinalReviewOpen(true);
+    };
+
+    const handleConfirmCheckout = async () => {
+        if (isSubmitting) {
+            return;
+        }
+
+        if (!validateCheckoutBeforeSubmit()) {
+            setIsFinalReviewOpen(false);
             return;
         }
 
@@ -790,6 +829,8 @@ const Rental = ({
             setItemsError('');
             setMobileStepHint('');
             setMobileStep(1);
+            setIsFinalReviewChecked(false);
+            setIsFinalReviewOpen(false);
             setReceiptRental(createdRental || null);
             alert('Transaksi berhasil disimpan!');
             scheduleFocusField('name');
@@ -799,6 +840,15 @@ const Rental = ({
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    const handleCloseFinalReview = () => {
+        if (isSubmitting) {
+            return;
+        }
+
+        setIsFinalReviewChecked(false);
+        setIsFinalReviewOpen(false);
     };
 
     const handleCloseReceipt = () => {
@@ -1365,9 +1415,9 @@ const Rental = ({
                                                 type="button"
                                                 disabled={isSubmitting}
                                                 className="w-full bg-accent text-white py-3.5 rounded-lg font-bold flex items-center justify-center gap-2 transition-all hover:bg-accent-hover disabled:opacity-60"
-                                                onClick={handleCheckout}
+                                                onClick={handleOpenFinalReview}
                                             >
-                                                {isSubmitting ? 'Menyimpan...' : 'Simpan Sewa'}
+                                                {isSubmitting ? 'Menyimpan...' : 'Lanjut ke Review'}
                                             </button>
                                         </div>
                                     </div>
@@ -1472,15 +1522,136 @@ const Rental = ({
                                     type="button"
                                     disabled={isSubmitting}
                                     className="w-full bg-accent text-white py-4 rounded-lg font-bold flex items-center justify-center gap-3 transition-all hover:bg-accent-hover shadow-[0_4px_15px_rgba(230,126,34,0.4)] mt-4 group disabled:opacity-60"
-                                    onClick={handleCheckout}
+                                    onClick={handleOpenFinalReview}
                                 >
-                                    <i className="fas fa-shopping-cart group-hover:animate-bounce"></i> {isSubmitting ? 'Menyimpan...' : 'Konfirmasi Sewa'}
+                                    <i className="fas fa-shopping-cart group-hover:animate-bounce"></i> {isSubmitting ? 'Menyimpan...' : 'Lanjut ke Review'}
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
+
+            {isFinalReviewOpen && (
+                <div className="fixed inset-0 z-[95] flex items-end justify-center bg-black/60 p-3 sm:items-center sm:p-5">
+                    <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-sidebar-bg shadow-2xl">
+                        <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
+                            <div>
+                                <p className="text-xs uppercase tracking-wide text-text-muted">Tahap Akhir</p>
+                                <h4 className="text-lg font-bold text-text-main">Konfirmasi & Review Sewa</h4>
+                            </div>
+                            <button
+                                type="button"
+                                className="rounded-md border border-border px-2 py-1 text-xs text-text-main transition hover:border-accent disabled:opacity-60"
+                                onClick={handleCloseFinalReview}
+                                disabled={isSubmitting}
+                            >
+                                Tutup
+                            </button>
+                        </div>
+
+                        <div className="custom-scrollbar max-h-[62vh] space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
+                            <div className="rounded-lg border border-border bg-bg-main/40 p-3">
+                                <p className="text-xs uppercase tracking-wide text-text-muted">Penyewa</p>
+                                <p className="mt-1 font-semibold text-text-main">{customer.name || '-'}</p>
+                                <p className="text-sm text-text-muted">{customer.phone || '-'}</p>
+                            </div>
+
+                            <div className="rounded-lg border border-border bg-bg-main/40 p-3">
+                                <p className="text-xs uppercase tracking-wide text-text-muted">Waktu Sewa</p>
+                                <p className="mt-1 text-sm text-text-main">{formatDateTimeForSummary(rentalStartAt)} - {formatDateTimeForSummary(rentalEndAt)}</p>
+                                <p className="mt-1 text-sm text-text-muted">Durasi: <span className="font-semibold text-text-main">{effectiveDuration} hari</span></p>
+                            </div>
+
+                            <div className="rounded-lg border border-border bg-bg-main/40 p-3">
+                                <p className="mb-2 text-xs uppercase tracking-wide text-text-muted">Review Barang</p>
+                                <div className="space-y-2">
+                                    {cart.map((item) => {
+                                        const perDay = Number(item.price || 0);
+                                        const itemQty = Number(item.qty || 0);
+                                        const lineTotal = perDay * itemQty * effectiveDuration;
+                                        return (
+                                            <div key={`review-${item.id}`} className="rounded-md border border-border/70 bg-sidebar-bg/70 p-2.5">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <p className="text-sm font-semibold text-text-main">{item.name}</p>
+                                                    <p className="text-sm font-bold text-accent">{formatCurrency(lineTotal)}</p>
+                                                </div>
+                                                <p className="mt-1 text-xs text-text-muted">
+                                                    {itemQty} x {formatCurrency(perDay)} x {effectiveDuration} hari
+                                                </p>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <div className="rounded-lg border border-accent/30 bg-accent/10 p-3">
+                                <div className="flex items-center justify-between text-sm text-text-muted">
+                                    <span>Status Pembayaran</span>
+                                    <span className="font-semibold text-text-main">{payment.status}</span>
+                                </div>
+                                <div className="mt-1 flex items-center justify-between text-sm text-text-muted">
+                                    <span>Metode</span>
+                                    <span className="font-semibold text-text-main">{payment.method}</span>
+                                </div>
+                                <div className="mt-1 flex items-center justify-between text-sm text-text-muted">
+                                    <span>Terbayar</span>
+                                    <span className="font-semibold text-text-main">{formatCurrency(computedPaidAmount)}</span>
+                                </div>
+                                <div className="mt-1 flex items-center justify-between text-sm text-text-muted">
+                                    <span>Sisa</span>
+                                    <span className="font-semibold text-text-main">{formatCurrency(remainingAmount)}</span>
+                                </div>
+                                <div className="mt-3 border-t border-accent/20 pt-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm text-text-muted">Total Sewa</span>
+                                        <span className="text-lg font-bold text-accent">{formatCurrency(totalAmount)}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-bg-main/40 p-3">
+                                <input
+                                    type="checkbox"
+                                    className="mt-0.5 h-4 w-4 accent-accent"
+                                    checked={isFinalReviewChecked}
+                                    onChange={(event) => setIsFinalReviewChecked(event.target.checked)}
+                                    disabled={isSubmitting}
+                                />
+                                <span className="text-sm text-text-main">
+                                    Saya sudah cek data penyewa, barang, durasi, dan total harga.
+                                </span>
+                            </label>
+                        </div>
+
+                        <div className="border-t border-border px-4 py-3 sm:px-5">
+                            {!isFinalReviewChecked && !isSubmitting && (
+                                <p className="mb-2 text-xs text-text-muted">
+                                    Centang konfirmasi review terlebih dahulu untuk melanjutkan.
+                                </p>
+                            )}
+                            <div className="grid grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                className="rounded-lg border border-border py-3 text-sm font-semibold text-text-main transition hover:border-accent disabled:opacity-60"
+                                onClick={handleCloseFinalReview}
+                                disabled={isSubmitting}
+                            >
+                                Kembali Edit
+                            </button>
+                            <button
+                                type="button"
+                                className="rounded-lg bg-accent py-3 text-sm font-bold text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                                onClick={handleConfirmCheckout}
+                                disabled={isSubmitting || !isFinalReviewChecked}
+                            >
+                                {isSubmitting ? 'Menyimpan...' : 'Konfirmasi Sewa'}
+                            </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <ReceiptModal
                 isOpen={Boolean(receiptRental)}
