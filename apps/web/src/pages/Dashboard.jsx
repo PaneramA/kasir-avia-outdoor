@@ -1,7 +1,16 @@
 import React from 'react';
 import { formatCurrency, formatMonthLabel, getCurrentMonthRangeDateKeys, getFinancialRecap } from '../lib/financial';
+import { getPlannedReturnDate } from '../lib/rentalTime';
 
 const Dashboard = ({ inventory, rentals }) => {
+    const [statusFilter, setStatusFilter] = React.useState('all');
+
+    const filterOptions = [
+        { value: 'all', label: 'Semua' },
+        { value: 'active', label: 'Active' },
+        { value: 'returned', label: 'Returned' },
+    ];
+
     const calculateStats = () => {
         const { monthKey, startDate, endDate } = getCurrentMonthRangeDateKeys();
         const recap = getFinancialRecap(rentals, { startDate, endDate });
@@ -16,7 +25,24 @@ const Dashboard = ({ inventory, rentals }) => {
     };
 
     const stats = calculateStats();
-    const recent = [...rentals].reverse().slice(0, 5);
+    const recent = [...rentals].reverse();
+    const filteredRecent = recent
+        .filter((r) => statusFilter === 'all' || (r.status || '').toLowerCase() === statusFilter)
+        .slice(0, 5);
+
+    const formatReturnDateLabel = (rental) => {
+        const actualReturnDate = rental?.returnDate ? new Date(rental.returnDate) : null;
+        if (actualReturnDate && !Number.isNaN(actualReturnDate.getTime())) {
+            return actualReturnDate.toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+
+        const plannedReturnDate = getPlannedReturnDate(rental);
+        if (plannedReturnDate) {
+            return plannedReturnDate.toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+
+        return '-';
+    };
 
     return (
         <div className="py-4 sm:py-5">
@@ -69,15 +95,37 @@ const Dashboard = ({ inventory, rentals }) => {
             </div>
 
             <div className="rounded-DEFAULT border border-border bg-sidebar-bg/50 p-4 sm:p-8">
-                <h3 className="mb-1 text-[1.1rem] font-bold text-text-main sm:text-[1.2rem]">Penyewaan Terbaru</h3>
-                <p className="text-text-muted text-[0.9rem]">Daftar transaksi terakhir.</p>
+                <div className="mb-4 flex flex-col gap-3 sm:mb-5 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <h3 className="mb-1 text-[1.1rem] font-bold text-text-main sm:text-[1.2rem]">Penyewaan Terbaru</h3>
+                        <p className="text-text-muted text-[0.9rem]">Daftar transaksi terakhir.</p>
+                    </div>
+                    <div className="inline-flex w-full flex-wrap gap-2 sm:w-auto">
+                        {filterOptions.map((option) => {
+                            const isActive = statusFilter === option.value;
+                            return (
+                                <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => setStatusFilter(option.value)}
+                                    className={`rounded-full border px-3 py-1.5 text-[0.75rem] font-semibold transition-colors sm:text-[0.8rem] ${isActive
+                                        ? 'border-accent bg-accent text-white'
+                                        : 'border-border bg-card-bg text-text-muted hover:border-accent/50 hover:text-text-main'
+                                        }`}
+                                >
+                                    {option.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
                 <div className="mt-5 sm:mt-6">
-                    {recent.length === 0 ? (
-                        <div className="text-center py-10 text-text-muted">Belum ada data terbaru.</div>
+                    {filteredRecent.length === 0 ? (
+                        <div className="text-center py-10 text-text-muted">Belum ada transaksi untuk filter ini.</div>
                     ) : (
                         <>
                             <div className="space-y-3 md:hidden">
-                                {recent.map((r, idx) => (
+                                {filteredRecent.map((r, idx) => (
                                     <article key={idx} className="rounded-lg border border-border bg-bg-main/40 p-4">
                                         <div className="mb-2 flex items-start justify-between gap-3">
                                             <div>
@@ -92,6 +140,9 @@ const Dashboard = ({ inventory, rentals }) => {
                                             </span>
                                         </div>
                                         <p className="text-xs text-text-muted">{r.items.map((i) => `${i.name} (${i.qty})`).join(', ')}</p>
+                                        <p className="mt-2 text-xs text-text-muted">
+                                            {r.status.toLowerCase() === 'active' ? 'Rencana Kembali' : 'Tanggal Kembali'}: {formatReturnDateLabel(r)}
+                                        </p>
                                         <p className="mt-2 font-bold text-accent">Rp {(r.finalTotal ?? r.total ?? 0).toLocaleString()}</p>
                                     </article>
                                 ))}
@@ -104,11 +155,12 @@ const Dashboard = ({ inventory, rentals }) => {
                                             <th className="border-b border-border p-4 text-left text-[0.85rem] font-semibold uppercase tracking-wider text-text-muted">Pelanggan</th>
                                             <th className="border-b border-border p-4 text-left text-[0.85rem] font-semibold uppercase tracking-wider text-text-muted">Barang</th>
                                             <th className="border-b border-border p-4 text-left text-[0.85rem] font-semibold uppercase tracking-wider text-text-muted">Status</th>
+                                            <th className="border-b border-border p-4 text-left text-[0.85rem] font-semibold uppercase tracking-wider text-text-muted">Tanggal Kembali</th>
                                             <th className="border-b border-border p-4 text-left text-[0.85rem] font-semibold uppercase tracking-wider text-text-muted">Total</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {recent.map((r, idx) => (
+                                        {filteredRecent.map((r, idx) => (
                                             <tr key={idx} className="transition-colors hover:bg-surface-hover">
                                                 <td className="border-b border-border/60 p-4">
                                                     <strong className="text-text-main">{r.customer.name}</strong>
@@ -123,6 +175,10 @@ const Dashboard = ({ inventory, rentals }) => {
                                                     }`}>
                                                         {r.status}
                                                     </span>
+                                                </td>
+                                                <td className="border-b border-border/60 p-4 text-text-muted">
+                                                    {r.status.toLowerCase() === 'active' ? 'Rencana: ' : ''}
+                                                    {formatReturnDateLabel(r)}
                                                 </td>
                                                 <td className="border-b border-border/60 p-4 font-bold text-accent">Rp {(r.finalTotal ?? r.total ?? 0).toLocaleString()}</td>
                                             </tr>
