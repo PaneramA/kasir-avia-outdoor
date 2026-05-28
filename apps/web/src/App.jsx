@@ -383,6 +383,91 @@ function App() {
     [refreshData],
   )
 
+  const handleImportItems = useCallback(
+    async (itemsPayload, options = {}) => {
+      const safeItems = Array.isArray(itemsPayload) ? itemsPayload : []
+      if (safeItems.length === 0) {
+        return {
+          total: 0,
+          createdCount: 0,
+          createdCategories: [],
+          failedItems: [],
+        }
+      }
+
+      const shouldCreateMissingCategories = options.createMissingCategories !== false
+      const normalizedCategoryMap = new Map(
+        categories.map((categoryName) => {
+          const trimmed = String(categoryName || '').trim()
+          return [trimmed.toLowerCase(), trimmed]
+        }),
+      )
+
+      const createdCategories = []
+      if (shouldCreateMissingCategories) {
+        const categoriesToCreate = []
+
+        safeItems.forEach((item) => {
+          const categoryName = String(item?.category || '').trim()
+          if (!categoryName) {
+            return
+          }
+
+          const key = categoryName.toLowerCase()
+          if (normalizedCategoryMap.has(key) || categoriesToCreate.some((existing) => existing.toLowerCase() === key)) {
+            return
+          }
+
+          categoriesToCreate.push(categoryName)
+        })
+
+        for (const categoryName of categoriesToCreate) {
+          try {
+            await createCategory(categoryName)
+            normalizedCategoryMap.set(categoryName.toLowerCase(), categoryName)
+            createdCategories.push(categoryName)
+          } catch (error) {
+            const message = error instanceof Error ? error.message : ''
+            if (message.toLowerCase().includes('already exists')) {
+              normalizedCategoryMap.set(categoryName.toLowerCase(), categoryName)
+              continue
+            }
+
+            throw error
+          }
+        }
+      }
+
+      const failedItems = []
+      let createdCount = 0
+
+      for (const itemPayload of safeItems) {
+        try {
+          await createItem(itemPayload)
+          createdCount += 1
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Gagal menyimpan item.'
+          failedItems.push({
+            name: String(itemPayload?.name || '').trim() || '-',
+            message,
+          })
+        }
+      }
+
+      if (createdCount > 0 || createdCategories.length > 0) {
+        await refreshData()
+      }
+
+      return {
+        total: safeItems.length,
+        createdCount,
+        createdCategories,
+        failedItems,
+      }
+    },
+    [categories, refreshData],
+  )
+
   const handleDeleteItem = useCallback(
     async (id) => {
       await removeItem(id)
@@ -627,6 +712,7 @@ function App() {
                   inventory={inventory}
                   categories={categories}
                   onSaveItem={handleCreateOrUpdateItem}
+                  onImportItems={handleImportItems}
                   onDeleteItem={handleDeleteItem}
                   onAddCategory={handleCreateCategory}
                   onDeleteCategory={handleDeleteCategory}

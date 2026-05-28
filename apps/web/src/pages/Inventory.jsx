@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import ItemModal from '../components/ItemModal';
 import CategoryModal from '../components/CategoryModal';
 import ViewModeToggle from '../components/ViewModeToggle';
@@ -14,11 +14,106 @@ const getInitialInventoryViewMode = () => {
     return saved === 'list' ? 'list' : 'grid';
 };
 
-const Inventory = ({ inventory, categories, onSaveItem, onDeleteItem, onAddCategory, onDeleteCategory }) => {
+const IMPORT_FIELD_ALIASES = {
+    name: ['name', 'nama', 'namabarang', 'barang', 'item'],
+    category: ['category', 'kategori'],
+    stock: ['stock', 'stok', 'qty', 'jumlah', 'jumlahstok'],
+    price: ['price', 'harga', 'hargasewa', 'hargaperhari', 'hargaharian'],
+    image: ['image', 'gambar', 'imageurl', 'urlgambar', 'foto', 'linkgambar'],
+};
+
+const INVENTORY_IMPORT_TEMPLATE_ROWS = [
+    ['name', 'category', 'stock', 'price', 'image'],
+    ['Tenda Dome 4P', 'Tenda', 5, 150000, 'https://contoh-url-gambar.com/tenda-dome-4p.jpg'],
+    ['Carrier 60L', 'Tas Gunung', 8, 85000, ''],
+];
+
+const normalizeImportHeader = (value) => String(value || '')
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+
+const getImportFieldValue = (row, fieldName) => {
+    const aliases = IMPORT_FIELD_ALIASES[fieldName] || [];
+    const matchEntry = Object.entries(row || {}).find(([key]) => aliases.includes(normalizeImportHeader(key)));
+    return matchEntry ? matchEntry[1] : '';
+};
+
+const parseImportNumber = (value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return Math.trunc(value);
+    }
+
+    const raw = String(value ?? '').trim();
+    if (!raw) {
+        return NaN;
+    }
+
+    const normalized = raw.replace(/[^\d-]/g, '');
+    if (!normalized || normalized === '-') {
+        return NaN;
+    }
+
+    return Number.parseInt(normalized, 10);
+};
+
+const parseImportRow = (row, fallbackRowNumber) => {
+    const rowNumber = Number.isInteger(row?.__rowNum__) ? row.__rowNum__ + 1 : fallbackRowNumber;
+    const item = {
+        name: String(getImportFieldValue(row, 'name') || '').trim(),
+        category: String(getImportFieldValue(row, 'category') || '').trim(),
+        stock: parseImportNumber(getImportFieldValue(row, 'stock')),
+        price: parseImportNumber(getImportFieldValue(row, 'price')),
+        image: String(getImportFieldValue(row, 'image') || '').trim(),
+    };
+
+    const errors = [];
+    if (!item.name) {
+        errors.push('Nama barang wajib diisi.');
+    }
+
+    if (!item.category) {
+        errors.push('Kategori wajib diisi.');
+    }
+
+    if (!Number.isFinite(item.stock) || item.stock < 0) {
+        errors.push('Stok harus angka 0 atau lebih.');
+    }
+
+    if (!Number.isFinite(item.price) || item.price < 0) {
+        errors.push('Harga harus angka 0 atau lebih.');
+    }
+
+    return { rowNumber, item, errors };
+};
+
+const escapeCsvCell = (value) => {
+    const text = String(value ?? '');
+    if (text.includes(',') || text.includes('"') || text.includes('\n')) {
+        return `"${text.replace(/"/g, '""')}"`;
+    }
+
+    return text;
+};
+
+const Inventory = ({
+    inventory,
+    categories,
+    onSaveItem,
+    onImportItems,
+    onDeleteItem,
+    onAddCategory,
+    onDeleteCategory,
+}) => {
     const [isItemModalOpen, setIsItemModalOpen] = useState(false);
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
     const [inventoryViewMode, setInventoryViewMode] = useState(getInitialInventoryViewMode);
+    const [isImporting, setIsImporting] = useState(false);
+    const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
+    const importFileInputRef = useRef(null);
 
     useEffect(() => {
         if (typeof window === 'undefined') {
@@ -51,6 +146,159 @@ const Inventory = ({ inventory, categories, onSaveItem, onDeleteItem, onAddCateg
         setIsItemModalOpen(true);
     };
 
+    const handleOpenImportDialog = () => {
+        importFileInputRef.current?.click();
+    };
+
+    const downloadTemplateCsvFallback = () => {
+        const csv = INVENTORY_IMPORT_TEMPLATE_ROWS
+            .map((row) => row.map(escapeCsvCell).join(','))
+            .join('\n');
+
+        const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'template-import-inventaris.csv';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
+    const handleDownloadTemplate = async () => {
+        setIsDownloadingTemplate(true);
+        try {
+            const XLSX = await import('xlsx');
+            const worksheet = XLSX.utils.aoa_to_sheet(INVENTORY_IMPORT_TEMPLATE_ROWS);
+            worksheet['!cols'] = [
+                { wch: 26 },
+                { wch: 20 },
+                { wch: 12 },
+                { wch: 14 },
+                { wch: 48 },
+            ];
+
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Template Inventaris');
+            XLSX.writeFile(workbook, 'template-import-inventaris.xlsx');
+        } catch {
+            downloadTemplateCsvFallback();
+            alert('Template Excel gagal dibuat. Template CSV didownload sebagai pengganti.');
+        } finally {
+            setIsDownloadingTemplate(false);
+        }
+    };
+
+    const fallbackImportItems = async (items) => {
+        const failedItems = [];
+        let createdCount = 0;
+
+        for (const item of items) {
+            try {
+                await onSaveItem(item, null);
+                createdCount += 1;
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Gagal menyimpan item.';
+                failedItems.push({
+                    name: String(item?.name || '').trim() || '-',
+                    message,
+                });
+            }
+        }
+
+        return {
+            total: items.length,
+            createdCount,
+            createdCategories: [],
+            failedItems,
+        };
+    };
+
+    const handleImportFile = async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+
+        if (!file) {
+            return;
+        }
+
+        setIsImporting(true);
+        try {
+            const XLSX = await import('xlsx');
+            const buffer = await file.arrayBuffer();
+            const workbook = XLSX.read(buffer, { type: 'array' });
+            const firstSheetName = workbook.SheetNames?.[0];
+
+            if (!firstSheetName) {
+                alert('Sheet tidak ditemukan di file yang diupload.');
+                return;
+            }
+
+            const worksheet = workbook.Sheets[firstSheetName];
+            const rows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+
+            if (!Array.isArray(rows) || rows.length === 0) {
+                alert('File kosong atau tidak memiliki baris data.');
+                return;
+            }
+
+            const parsedRows = rows.map((row, index) => parseImportRow(row, index + 2));
+            const validItems = parsedRows.filter((entry) => entry.errors.length === 0).map((entry) => entry.item);
+            const invalidRows = parsedRows.filter((entry) => entry.errors.length > 0);
+
+            if (validItems.length === 0) {
+                const errorPreview = invalidRows
+                    .slice(0, 5)
+                    .map((entry) => `Baris ${entry.rowNumber}: ${entry.errors.join(' ')}`)
+                    .join('\n');
+                alert(`Tidak ada data valid untuk diimport.\n\n${errorPreview}`);
+                return;
+            }
+
+            const importExecutor = typeof onImportItems === 'function' ? onImportItems : fallbackImportItems;
+            const result = await importExecutor(validItems, { createMissingCategories: true });
+
+            const failedItems = Array.isArray(result?.failedItems) ? result.failedItems : [];
+            const createdCategories = Array.isArray(result?.createdCategories) ? result.createdCategories : [];
+            const summaryLines = [
+                'Import selesai.',
+                `Total baris dibaca: ${rows.length}`,
+                `Valid: ${validItems.length}`,
+                `Berhasil disimpan: ${result?.createdCount || 0}`,
+                `Gagal validasi: ${invalidRows.length}`,
+                `Gagal simpan: ${failedItems.length}`,
+            ];
+
+            if (createdCategories.length > 0) {
+                summaryLines.push(`Kategori baru dibuat: ${createdCategories.join(', ')}`);
+            }
+
+            if (invalidRows.length > 0) {
+                const validationPreview = invalidRows
+                    .slice(0, 3)
+                    .map((entry) => `Baris ${entry.rowNumber}: ${entry.errors.join(' ')}`)
+                    .join('\n');
+                summaryLines.push(`Contoh validasi gagal:\n${validationPreview}`);
+            }
+
+            if (failedItems.length > 0) {
+                const saveFailurePreview = failedItems
+                    .slice(0, 3)
+                    .map((entry) => `${entry.name}: ${entry.message}`)
+                    .join('\n');
+                summaryLines.push(`Contoh gagal simpan:\n${saveFailurePreview}`);
+            }
+
+            alert(summaryLines.join('\n'));
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Gagal memproses file import.';
+            alert(message);
+        } finally {
+            setIsImporting(false);
+        }
+    };
+
     return (
         <div className="py-4 sm:py-5">
             <div className="mb-6 flex flex-col gap-4 sm:mb-[30px] sm:flex-row sm:items-center sm:justify-between">
@@ -60,19 +308,45 @@ const Inventory = ({ inventory, categories, onSaveItem, onDeleteItem, onAddCateg
                         Kelola stok, harga, dan kategori peralatan.
                     </p>
                 </div>
-                <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-4">
-                    <ViewModeToggle
-                        value={inventoryViewMode}
-                        onChange={setInventoryViewMode}
-                        containerClassName="min-h-11 rounded-DEFAULT"
-                        buttonClassName="px-3 py-2 text-xs"
-                    />
-                    <button className="flex min-h-11 w-full items-center justify-center gap-2 rounded-DEFAULT border border-border bg-sidebar-bg px-5 py-2.5 font-semibold text-text-main transition hover:bg-surface-hover sm:w-auto" onClick={() => setIsCategoryModalOpen(true)}>
-                        <i className="fas fa-tags"></i> Kategori
-                    </button>
-                    <button className="flex min-h-11 w-full items-center justify-center gap-2 rounded-DEFAULT bg-accent px-5 py-2.5 font-semibold text-white transition hover:bg-accent-hover shadow-[0_4px_15px_rgba(230,126,34,0.3)] sm:w-auto" onClick={handleAddItem}>
-                        <i className="fas fa-plus"></i> Tambah Barang
-                    </button>
+                <div className="w-full sm:w-auto">
+                    <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:gap-4">
+                        <input
+                            ref={importFileInputRef}
+                            type="file"
+                            className="hidden"
+                            accept=".csv,.xlsx,.xls"
+                            onChange={(event) => { void handleImportFile(event); }}
+                        />
+                        <ViewModeToggle
+                            value={inventoryViewMode}
+                            onChange={setInventoryViewMode}
+                            containerClassName="min-h-11 rounded-DEFAULT"
+                            buttonClassName="px-3 py-2 text-xs"
+                        />
+                        <button
+                            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-DEFAULT border border-border bg-sidebar-bg px-5 py-2.5 font-semibold text-text-main transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                            onClick={() => { void handleDownloadTemplate(); }}
+                            disabled={isDownloadingTemplate}
+                        >
+                            <i className="fas fa-download"></i> {isDownloadingTemplate ? 'Menyiapkan...' : 'Download Template'}
+                        </button>
+                        <button
+                            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-DEFAULT border border-border bg-sidebar-bg px-5 py-2.5 font-semibold text-text-main transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                            onClick={handleOpenImportDialog}
+                            disabled={isImporting}
+                        >
+                            <i className="fas fa-file-import"></i> {isImporting ? 'Memproses...' : 'Import CSV/Excel'}
+                        </button>
+                        <button className="flex min-h-11 w-full items-center justify-center gap-2 rounded-DEFAULT border border-border bg-sidebar-bg px-5 py-2.5 font-semibold text-text-main transition hover:bg-surface-hover sm:w-auto" onClick={() => setIsCategoryModalOpen(true)}>
+                            <i className="fas fa-tags"></i> Kategori
+                        </button>
+                        <button className="flex min-h-11 w-full items-center justify-center gap-2 rounded-DEFAULT bg-accent px-5 py-2.5 font-semibold text-white transition hover:bg-accent-hover shadow-[0_4px_15px_rgba(230,126,34,0.3)] sm:w-auto" onClick={handleAddItem}>
+                            <i className="fas fa-plus"></i> Tambah Barang
+                        </button>
+                    </div>
+                    <p className="mt-2 text-[0.75rem] text-text-muted sm:text-right">
+                        Kolom wajib import: <strong>name, category, stock, price</strong>. Kolom <strong>image</strong> opsional.
+                    </p>
                 </div>
             </div>
 
