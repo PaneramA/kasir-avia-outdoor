@@ -1119,7 +1119,7 @@ const Rental = ({
 
     const renderCartItems = () => (
         <>
-            <div className="custom-scrollbar mb-4 max-h-[300px] space-y-4 overflow-y-auto pr-1 sm:pr-2">
+            <div className="custom-scrollbar mb-4 max-h-[300px] space-y-4 overflow-y-auto pr-1 sm:pr-2 lg:max-h-none lg:overflow-visible lg:pr-0">
                 {cart.length === 0 ? (
                     <div className="text-center py-6 text-text-muted italic text-sm">Belum ada barang dipilih.</div>
                 ) : (
@@ -1156,7 +1156,7 @@ const Rental = ({
     );
 
     return (
-        <div className="py-4 sm:py-5">
+        <div className="py-4 sm:py-5 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:py-0">
             <div className="mb-4 grid grid-cols-3 gap-2 lg:hidden">
                 {MOBILE_FLOW_STEPS.map((stepLabel, index) => {
                     const stepNumber = index + 1;
@@ -1189,50 +1189,50 @@ const Rental = ({
                 </p>
             )}
 
-            <div className="flex flex-col gap-6 lg:h-full lg:min-h-0 lg:flex-row lg:gap-[30px]">
-                <div className={`${mobileStep === 2 ? 'flex' : 'hidden'} flex-1 flex-col lg:flex lg:min-h-0`}>
+            <div className="flex flex-col gap-6 lg:h-full lg:min-h-0 lg:flex-row lg:gap-[30px] lg:overflow-hidden">
+                <div className={`${mobileStep === 2 ? 'flex' : 'hidden'} flex-1 flex-col lg:flex lg:min-h-0 lg:overflow-hidden`}>
                     <div className="mb-5 sm:mb-[30px]">
-                        <div className="sticky top-2 z-20 rounded-xl border border-border/80 bg-bg-main/95 p-3 shadow-lg backdrop-blur lg:static lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                <h3 className="text-[1.1rem] font-bold text-text-main sm:text-[1.2rem]">Pilih Barang</h3>
-                                <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[260px] sm:items-end">
-                            <div className="w-full rounded-lg border border-border bg-sidebar-bg px-4 py-2">
-                                <input
-                                    className="w-full border-none bg-transparent text-sm text-text-main outline-none placeholder:text-text-muted"
-                                    type="text"
-                                    data-rental-field="shared-inventorySearch"
-                                    placeholder="Cari barang atau kategori..."
-                                    value={inventorySearch}
-                                    onChange={(e) => setInventorySearch(e.target.value)}
-                                />
-                            </div>
-                            <p className="hidden text-[0.68rem] text-text-muted lg:block">
-                                Shortcut desktop: `/` fokus pencarian, `Enter` tambah hasil teratas.
-                            </p>
-                            <div className="w-full rounded-lg border border-border bg-sidebar-bg px-4 py-2 sm:w-auto">
-                                <select
-                                    className="w-full cursor-pointer border-none bg-transparent text-sm text-text-main outline-none sm:min-w-[180px]"
-                                    data-rental-field="shared-inventoryFilter"
-                                    value={categoryFilter}
-                                    onChange={(e) => setCategoryFilter(e.target.value)}
-                                >
-                                    <option value="all">Semua Kategori</option>
-                                    {safeCategories.map((cat) => (
-                                        <option key={cat} value={cat}>{cat}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <ViewModeToggle
-                                value={inventoryViewMode}
-                                onChange={setInventoryViewMode}
-                                containerClassName="w-full sm:w-auto"
-                                buttonClassName="px-3 py-1.5 text-[0.72rem]"
-                            />
+                        <h3 className="text-[1.1rem] font-bold text-text-main sm:text-[1.2rem]">Pilih Barang</h3>
+                        <div className="sticky top-0 z-20 mt-3 rounded-xl border border-border/80 bg-bg-main/95 p-3 shadow-lg backdrop-blur lg:static lg:mt-0 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+                            <div className="flex flex-col gap-2 lg:gap-3">
+                                <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-end">
+                                    <div className="w-full rounded-lg border border-border bg-sidebar-bg px-4 py-2 lg:min-w-[340px] lg:max-w-[500px]">
+                                        <input
+                                            className="w-full border-none bg-transparent text-sm text-text-main outline-none placeholder:text-text-muted"
+                                            type="text"
+                                            data-rental-field="shared-inventorySearch"
+                                            placeholder="Cari barang atau kategori..."
+                                            value={inventorySearch}
+                                            onChange={(e) => setInventorySearch(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="w-full rounded-lg border border-border bg-sidebar-bg px-4 py-2 lg:w-[230px]">
+                                        <select
+                                            className="w-full cursor-pointer border-none bg-transparent text-sm text-text-main outline-none"
+                                            data-rental-field="shared-inventoryFilter"
+                                            value={categoryFilter}
+                                            onChange={(e) => setCategoryFilter(e.target.value)}
+                                        >
+                                            <option value="all">Semua Kategori</option>
+                                            {safeCategories.map((cat) => (
+                                                <option key={cat} value={cat}>{cat}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <ViewModeToggle
+                                        value={inventoryViewMode}
+                                        onChange={setInventoryViewMode}
+                                        containerClassName="w-full lg:w-auto"
+                                        buttonClassName="px-3 py-1.5 text-[0.72rem]"
+                                    />
                                 </div>
+                                <p className="hidden text-[0.68rem] text-text-muted lg:block lg:text-right">
+                                    Shortcut desktop: `/` fokus pencarian, `Enter` tambah hasil teratas.
+                                </p>
                             </div>
                         </div>
                     </div>
-                    <div className="custom-scrollbar lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-2">
+                    <div className="custom-scrollbar lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-y-contain lg:pr-2">
                         {filteredItems.length === 0 ? (
                             <div className="mt-4 rounded-lg border border-border bg-card-bg/40 p-4 text-center text-sm text-text-muted">
                                 {normalizedInventorySearch
@@ -1251,8 +1251,8 @@ const Rental = ({
                     </div>
                 </div>
 
-                <div className="w-full lg:sticky lg:top-6 lg:self-start lg:w-[400px] lg:max-h-[calc(100vh-7.5rem)]">
-                    <div className="rounded-xl border border-border bg-sidebar-bg p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] sm:p-6 lg:flex lg:h-[calc(100vh-7.5rem)] lg:flex-col">
+                <div className="w-full lg:flex lg:w-[400px] lg:min-h-0 lg:flex-col">
+                    <div className="rounded-xl border border-border bg-sidebar-bg p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] sm:p-6 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
                         <div className="lg:hidden">
                             {mobileStep === 1 && (
                                 <>
@@ -1425,9 +1425,9 @@ const Rental = ({
                             )}
                         </div>
 
-                        <div className="hidden lg:flex lg:h-full lg:min-h-0 lg:flex-col">
+                        <div className="hidden lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:overflow-hidden">
                             <h4 className="mb-4 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.1rem]">Detail Penyewa</h4>
-                            <div className="custom-scrollbar space-y-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+                            <div className="custom-scrollbar space-y-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-y-contain lg:pr-1">
                                 {renderCustomerFields('desktop')}
 
                                 <div className="h-[1px] bg-border my-6"></div>
@@ -1511,7 +1511,7 @@ const Rental = ({
                                 )}
                             </div>
 
-                            <div className="mt-4 rounded-lg border border-accent/20 bg-accent/10 p-4 sm:p-5 lg:sticky lg:bottom-0 lg:z-10 lg:backdrop-blur">
+                            <div className="mt-4 rounded-lg border border-accent/20 bg-accent/10 p-4 sm:p-5">
                                 <div className="mb-1 flex items-center justify-between gap-3">
                                     <span className="text-text-muted text-[0.9rem]">Total Bayar</span>
                                     <span className="text-text-muted text-[0.7rem] uppercase tracking-tighter">({effectiveDuration} Hari)</span>
