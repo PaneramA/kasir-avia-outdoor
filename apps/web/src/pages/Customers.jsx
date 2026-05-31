@@ -168,7 +168,7 @@ const Customers = () => {
     const totalCustomers = useMemo(() => customers.length, [customers])
 
     return (
-        <div className="space-y-5 py-4 sm:py-5">
+        <div className="space-y-5 pt-0 pb-4 sm:pb-5">
             <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>

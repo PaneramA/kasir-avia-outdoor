@@ -20,6 +20,7 @@ const Account = ({
         rentalDayCountMode: 'ROLLING_24H',
         rentalCutoffHour: 8,
         rentalCutoffMinute: 0,
+        financialClosingDay: 31,
     })
     const [branchForm, setBranchForm] = useState({
         storeName: '',
@@ -53,6 +54,9 @@ const Account = ({
             rentalCutoffMinute: Number.isFinite(Number(tenantSettings?.rentalCutoffMinute))
                 ? Math.min(59, Math.max(0, Number(tenantSettings.rentalCutoffMinute)))
                 : 0,
+            financialClosingDay: Number.isFinite(Number(tenantSettings?.financialClosingDay))
+                ? Math.min(31, Math.max(1, Number(tenantSettings.financialClosingDay)))
+                : 31,
         })
     }, [tenantSettings])
 
@@ -127,6 +131,7 @@ const Account = ({
                 rentalDayCountMode: storeForm.rentalDayCountMode,
                 rentalCutoffHour: Number(storeForm.rentalCutoffHour),
                 rentalCutoffMinute: Number(storeForm.rentalCutoffMinute),
+                financialClosingDay: Number(storeForm.financialClosingDay),
             })
             setStoreMessage('Pengaturan toko berhasil diperbarui.')
         } catch (error) {
@@ -174,7 +179,7 @@ const Account = ({
     }
 
     return (
-        <div className="py-5 max-w-[760px]">
+        <div className="max-w-[760px] pt-0 pb-5">
             <section className="bg-sidebar-bg/60 border border-border rounded-DEFAULT p-6 mb-6">
                 <h3 className="text-[1.1rem] font-bold text-text-main mb-1">Informasi Akun</h3>
                 <p className="text-text-muted text-sm">Akun login saat ini: <span className="text-text-main font-medium">{currentUser?.username}</span> ({currentUser?.role})</p>
@@ -223,6 +228,27 @@ const Account = ({
                             onChange={(event) => setStoreForm((prev) => ({ ...prev, phone: event.target.value }))}
                         />
                     </div>
+                    <div className="rounded-lg border border-border bg-bg-main/40 p-4">
+                        <h4 className="mb-2 text-sm font-semibold text-text-main">Periode Keuangan</h4>
+                        <p className="mb-3 text-xs text-text-muted">
+                            Tanggal tutup buku menentukan bulan laporan. Contoh tanggal 27: transaksi setelah 27 Mei masuk periode Juni.
+                        </p>
+                        <div>
+                            <label className="mb-1.5 block text-[0.85rem] text-text-muted">Tanggal Tutup Buku</label>
+                            <input
+                                type="number"
+                                min="1"
+                                max="31"
+                                className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                                value={storeForm.financialClosingDay}
+                                onChange={(event) => setStoreForm((prev) => ({
+                                    ...prev,
+                                    financialClosingDay: Math.min(31, Math.max(1, Number(event.target.value || 1))),
+                                }))}
+                            />
+                        </div>
+                    </div>
+
                     <div className="rounded-lg border border-border bg-bg-main/40 p-4">
                         <h4 className="mb-2 text-sm font-semibold text-text-main">Perhitungan Hari Sewa</h4>
                         <p className="mb-3 text-xs text-text-muted">

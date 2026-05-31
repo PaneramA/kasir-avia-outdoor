@@ -82,6 +82,39 @@ export function getPlannedReturnDate(rental) {
   return new Date(startDate.getTime() + (Math.trunc(duration) * DAY_MS));
 }
 
+export function getRentalReturnTimelineDate(rental) {
+  const actualReturnDate = toDate(rental?.returnDate);
+  if (actualReturnDate) {
+    return actualReturnDate;
+  }
+
+  return getPlannedReturnDate(rental);
+}
+
+export function compareRentalsByClosestReturnDate(a, b, now = new Date()) {
+  const aDate = getRentalReturnTimelineDate(a);
+  const bDate = getRentalReturnTimelineDate(b);
+
+  if (!aDate && !bDate) {
+    return (toDate(b?.date)?.getTime() || 0) - (toDate(a?.date)?.getTime() || 0);
+  }
+
+  if (!aDate) {
+    return 1;
+  }
+
+  if (!bDate) {
+    return -1;
+  }
+
+  const distanceDiff = Math.abs(aDate.getTime() - now.getTime()) - Math.abs(bDate.getTime() - now.getTime());
+  if (distanceDiff !== 0) {
+    return distanceDiff;
+  }
+
+  return aDate.getTime() - bDate.getTime();
+}
+
 export function getLateDurationMs(rental, now = new Date()) {
   const dueDate = getPlannedReturnDate(rental);
   if (!dueDate) {

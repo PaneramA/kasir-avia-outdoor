@@ -28,6 +28,7 @@ const DEFAULT_TENANT_SETTINGS = {
   rentalDayCountMode: 'ROLLING_24H',
   rentalCutoffHour: 8,
   rentalCutoffMinute: 0,
+  financialClosingDay: 31,
 };
 
 function createId(prefix) {
@@ -180,6 +181,9 @@ function toTenantSettingsDto(settings) {
   const rentalCutoffMinute = Number.isInteger(settings.rentalCutoffMinute)
     ? Math.min(59, Math.max(0, settings.rentalCutoffMinute))
     : DEFAULT_TENANT_SETTINGS.rentalCutoffMinute;
+  const financialClosingDay = Number.isInteger(settings.financialClosingDay)
+    ? Math.min(31, Math.max(1, settings.financialClosingDay))
+    : DEFAULT_TENANT_SETTINGS.financialClosingDay;
 
   return {
     tenantId: settings.tenantId,
@@ -192,6 +196,7 @@ function toTenantSettingsDto(settings) {
     rentalDayCountMode: normalizedMode,
     rentalCutoffHour,
     rentalCutoffMinute,
+    financialClosingDay,
     createdAt: settings.createdAt.toISOString(),
     updatedAt: settings.updatedAt.toISOString(),
   };
@@ -236,6 +241,15 @@ function normalizeCutoffMinute(rawMinute) {
   }
 
   return Math.min(59, Math.max(0, Math.trunc(parsed)));
+}
+
+function normalizeFinancialClosingDay(rawDay) {
+  const parsed = Number(rawDay);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_TENANT_SETTINGS.financialClosingDay;
+  }
+
+  return Math.min(31, Math.max(1, Math.trunc(parsed)));
 }
 
 function resolveRentalDayPolicy(settings) {
@@ -2214,6 +2228,9 @@ export async function updateTenantSettingsByTenantId(tenantId, payload, actor = 
   const nextRentalCutoffMinute = typeof payload?.rentalCutoffMinute !== 'undefined'
     ? normalizeCutoffMinute(payload.rentalCutoffMinute)
     : undefined;
+  const nextFinancialClosingDay = typeof payload?.financialClosingDay !== 'undefined'
+    ? normalizeFinancialClosingDay(payload.financialClosingDay)
+    : undefined;
 
   const updated = await prisma.tenantSettings.upsert({
     where: { tenantId: tenant.id },
@@ -2227,6 +2244,7 @@ export async function updateTenantSettingsByTenantId(tenantId, payload, actor = 
       ...(typeof nextRentalDayCountMode === 'string' ? { rentalDayCountMode: nextRentalDayCountMode } : {}),
       ...(typeof nextRentalCutoffHour === 'number' ? { rentalCutoffHour: nextRentalCutoffHour } : {}),
       ...(typeof nextRentalCutoffMinute === 'number' ? { rentalCutoffMinute: nextRentalCutoffMinute } : {}),
+      ...(typeof nextFinancialClosingDay === 'number' ? { financialClosingDay: nextFinancialClosingDay } : {}),
     },
     create: {
       tenantId: tenant.id,
@@ -2243,6 +2261,9 @@ export async function updateTenantSettingsByTenantId(tenantId, payload, actor = 
       rentalCutoffMinute: typeof nextRentalCutoffMinute === 'number'
         ? nextRentalCutoffMinute
         : DEFAULT_TENANT_SETTINGS.rentalCutoffMinute,
+      financialClosingDay: typeof nextFinancialClosingDay === 'number'
+        ? nextFinancialClosingDay
+        : DEFAULT_TENANT_SETTINGS.financialClosingDay,
     },
   });
 

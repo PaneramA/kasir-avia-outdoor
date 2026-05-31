@@ -704,7 +704,7 @@ function App() {
           <Routes>
             <Route path={APP_ROUTES.login} element={<Navigate to={APP_ROUTES.dashboard} replace />} />
             <Route path="/" element={<Navigate to={APP_ROUTES.dashboard} replace />} />
-            <Route path={APP_ROUTES.dashboard} element={<Dashboard inventory={inventory} rentals={rentals} />} />
+            <Route path={APP_ROUTES.dashboard} element={<Dashboard inventory={inventory} rentals={rentals} tenantSettings={tenantSettings} />} />
             <Route
               path={APP_ROUTES.inventory}
               element={
@@ -745,7 +745,13 @@ function App() {
             <Route path={APP_ROUTES.customers} element={<Customers />} />
             <Route
               path={APP_ROUTES.financial}
-              element={<FinancialRecap rentals={rentals} />}
+              element={(
+                <FinancialRecap
+                  key={`${tenantSettings?.tenantId || 'tenant'}-${tenantSettings?.financialClosingDay || 31}`}
+                  rentals={rentals}
+                  tenantSettings={tenantSettings}
+                />
+              )}
             />
             <Route
               path={APP_ROUTES.history}

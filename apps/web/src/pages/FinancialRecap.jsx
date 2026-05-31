@@ -3,9 +3,11 @@ import {
   formatCurrency,
   formatJakartaDateLabel,
   formatMonthLabel,
-  getCurrentMonthRangeDateKeys,
+  getCurrentFinancialMonthRangeDateKeys,
+  getFinancialClosingDay,
+  getFinancialMonthKeyForDate,
+  getFinancialMonthRangeDateKeys,
   getFinancialRecap,
-  toJakartaMonthKey,
 } from '../lib/financial'
 
 function triggerDownload(content, fileName, contentType) {
@@ -24,6 +26,7 @@ function buildCsvRows(recap) {
   const rows = []
   rows.push(['Laporan Keuangan AviaOutdoor'])
   rows.push([`Periode`, `${recap.startDate || '-'} s/d ${recap.endDate || '-'}`])
+  rows.push(['Tanggal Tutup Buku', recap.financialClosingDay || 31])
   rows.push([])
   rows.push(['Ringkasan'])
   rows.push(['Total Pendapatan', recap.totalRevenue])
@@ -91,10 +94,14 @@ async function exportExcel(recap) {
   }
 }
 
-const FinancialRecap = ({ rentals = [] }) => {
+const FinancialRecap = ({ rentals = [], tenantSettings }) => {
+  const financialClosingDay = useMemo(
+    () => getFinancialClosingDay(tenantSettings),
+    [tenantSettings],
+  )
   const { monthKey: currentMonthKey, startDate: currentMonthStart, endDate: currentMonthEnd } = useMemo(
-    () => getCurrentMonthRangeDateKeys(),
-    [],
+    () => getCurrentFinancialMonthRangeDateKeys(financialClosingDay),
+    [financialClosingDay],
   )
   const [selectedMonthKey, setSelectedMonthKey] = useState(currentMonthKey)
   const [startDate, setStartDate] = useState(currentMonthStart)
@@ -103,7 +110,7 @@ const FinancialRecap = ({ rentals = [] }) => {
   const monthOptions = useMemo(() => {
     const keys = new Set([currentMonthKey])
     rentals.forEach((rental) => {
-      const key = toJakartaMonthKey(rental?.date)
+      const key = getFinancialMonthKeyForDate(rental?.date, financialClosingDay)
       if (key) {
         keys.add(key)
       }
@@ -115,11 +122,11 @@ const FinancialRecap = ({ rentals = [] }) => {
         value: key,
         label: formatMonthLabel(key),
       }))
-  }, [currentMonthKey, rentals])
+  }, [currentMonthKey, financialClosingDay, rentals])
 
   const recap = useMemo(
-    () => getFinancialRecap(rentals, { startDate, endDate }),
-    [rentals, startDate, endDate],
+    () => getFinancialRecap(rentals, { startDate, endDate, financialClosingDay }),
+    [financialClosingDay, rentals, startDate, endDate],
   )
 
   const bestMethod = recap.methods[0] || null
@@ -132,20 +139,20 @@ const FinancialRecap = ({ rentals = [] }) => {
       return
     }
 
-    const year = Number(match[1])
-    const month = Number(match[2])
-    const lastDay = new Date(year, month, 0).getDate()
-    setStartDate(`${year}-${String(month).padStart(2, '0')}-01`)
-    setEndDate(`${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`)
+    const range = getFinancialMonthRangeDateKeys(selectedMonthKey, financialClosingDay)
+    setStartDate(range.startDate)
+    setEndDate(range.endDate)
   }
 
   return (
-    <div className="flex flex-col gap-6 py-4 sm:py-5">
+    <div className="flex flex-col gap-6 pt-0 pb-4 sm:pb-5">
       <div className="rounded-lg border border-border bg-sidebar-bg p-4 sm:p-5">
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h3 className="text-[1.2rem] font-bold text-text-main">Recap Keuangan</h3>
-            <p className="text-[0.88rem] text-text-muted">Basis pencatatan: tanggal transaksi sewa (timezone Asia/Jakarta).</p>
+            <p className="text-[0.88rem] text-text-muted">
+              Basis pencatatan: tanggal transaksi sewa. Tutup buku setiap tanggal {financialClosingDay}.
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -167,7 +174,7 @@ const FinancialRecap = ({ rentals = [] }) => {
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="sm:col-span-2 lg:col-span-2">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text-muted">Bulan Cepat</label>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text-muted">Periode Cepat</label>
             <div className="flex gap-2">
               <select
                 className="w-full rounded-lg border border-border bg-bg-main px-3 py-2 text-sm text-text-main outline-none focus:border-accent"
@@ -181,11 +188,14 @@ const FinancialRecap = ({ rentals = [] }) => {
               <button
                 type="button"
                 className="rounded-lg border border-border bg-bg-main px-3 py-2 text-sm font-semibold text-text-main hover:border-accent"
-                onClick={handleApplyMonth}
-              >
-                Terapkan
-              </button>
-            </div>
+              onClick={handleApplyMonth}
+            >
+              Terapkan
+            </button>
+          </div>
+          <p className="mt-1 text-[0.72rem] text-text-muted">
+            Periode terpilih: {startDate || '-'} s/d {endDate || '-'}
+          </p>
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-text-muted">Tanggal Mulai</label>

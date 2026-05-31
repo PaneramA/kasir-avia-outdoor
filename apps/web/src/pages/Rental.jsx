@@ -1156,7 +1156,7 @@ const Rental = ({
     );
 
     return (
-        <div className="py-4 sm:py-5 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:py-0">
+        <div className="pt-0 pb-4 sm:pb-5 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:pb-0">
             <div className="mb-4 grid grid-cols-3 gap-2 lg:hidden">
                 {MOBILE_FLOW_STEPS.map((stepLabel, index) => {
                     const stepNumber = index + 1;

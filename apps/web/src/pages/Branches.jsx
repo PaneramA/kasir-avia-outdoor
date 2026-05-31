@@ -370,7 +370,7 @@ const Branches = () => {
   }
 
   return (
-    <div className="space-y-6 py-4 sm:py-5">
+    <div className="space-y-6 pt-0 pb-4 sm:pb-5">
       {message && (
         <div className="rounded-lg border border-[#2ecc71]/40 bg-[#2ecc71]/10 p-3 text-sm text-[#6ee7a8]">{message}</div>
       )}

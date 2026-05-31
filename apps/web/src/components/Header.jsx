@@ -307,7 +307,7 @@ const Header = ({
     const showIosInstallHint = !isStandalone && !installPromptEvent && isIos
 
     return (
-        <header ref={containerRef} className="mb-4 flex flex-col gap-4 py-4 sm:mb-5 sm:py-6 lg:flex-row lg:items-center lg:justify-between lg:py-8">
+        <header ref={containerRef} className="mb-3 flex flex-col gap-4 py-3 sm:mb-4 sm:py-4 lg:flex-row lg:items-center lg:justify-between lg:py-5">
             <div className="flex items-start gap-3 sm:items-center">
                 <button
                     type="button"

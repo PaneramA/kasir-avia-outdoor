@@ -180,7 +180,7 @@ const Return = ({ rentals, onProcessReturn }) => {
     };
 
     return (
-        <div className="flex flex-col gap-6 py-4 lg:flex-row lg:gap-[30px] lg:py-5">
+        <div className="flex flex-col gap-6 pt-0 pb-4 lg:flex-row lg:gap-[30px] lg:pb-5">
             <div className="flex flex-1 flex-col">
                 <div className="mb-5">
                     <h3 className="mb-2 text-[1.1rem] font-bold text-text-main sm:text-[1.2rem]">Daftar Penyewaan Aktif</h3>

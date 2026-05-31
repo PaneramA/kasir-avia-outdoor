@@ -2,6 +2,16 @@ import React, { useMemo, useState } from 'react';
 import ReceiptModal from '../components/ReceiptModal';
 import { openReceiptWhatsApp, printReceipt } from '../lib/receipt';
 import { formatCurrency, getCurrentMonthRangeDateKeys, getFinancialRecap, toJakartaDateKey } from '../lib/financial';
+import { compareRentalsByClosestReturnDate, getRentalReturnTimelineDate } from '../lib/rentalTime';
+
+function formatReturnTimelineLabel(rental) {
+    const returnDate = getRentalReturnTimelineDate(rental);
+    if (!returnDate) {
+        return '-';
+    }
+
+    return returnDate.toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' });
+}
 
 function formatPaymentSummary(rental) {
     const status = String(rental?.payment?.status || 'LUNAS').toUpperCase();
@@ -187,6 +197,7 @@ const History = ({
 
         return true;
     });
+    const sortedFilteredRentals = [...filteredRentals].sort((a, b) => compareRentalsByClosestReturnDate(a, b));
 
     const periodRecap = useMemo(
         () => getFinancialRecap(rentals, { startDate, endDate }),
@@ -198,7 +209,7 @@ const History = ({
     const totalRevenue = periodRecap.totalRevenue;
 
     return (
-        <div className="flex h-full flex-col py-4 sm:py-5">
+        <div className="flex h-full flex-col pt-0 pb-4 sm:pb-5">
             {deleteSuccessMessage && (
                 <div className="mb-4 rounded-lg border border-[#2ecc71]/40 bg-[#2ecc71]/10 p-3 text-sm text-[#6ee7a8]">
                     {deleteSuccessMessage}
@@ -289,7 +300,7 @@ const History = ({
 
             <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-sidebar-bg/50">
                 <div className="custom-scrollbar flex-1 overflow-x-auto">
-                    {filteredRentals.length === 0 ? (
+                    {sortedFilteredRentals.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-text-muted py-12">
                             <i className="fas fa-folder-open text-[3rem] mb-4 opacity-30"></i>
                             <p>Tidak ada transaksi yang sesuai dengan pencarian Anda.</p>
@@ -297,7 +308,7 @@ const History = ({
                     ) : (
                         <>
                             <div className="space-y-3 p-3 sm:p-4 md:hidden">
-                                {[...filteredRentals].reverse().map((rental) => {
+                                {sortedFilteredRentals.map((rental) => {
                                     const payment = formatPaymentSummary(rental);
                                     return (
                                     <article key={rental.id} className="rounded-lg border border-border/60 bg-bg-main/40 p-4">
@@ -329,6 +340,9 @@ const History = ({
                                         <p className="mt-2 text-sm font-bold text-text-main">Rp {(rental.finalTotal ?? rental.total ?? 0).toLocaleString()}</p>
                                         <p className="mt-1 text-[0.72rem] text-text-muted">
                                             {payment.status} • {payment.method} • Terbayar Rp {payment.paidAmount.toLocaleString()} • Sisa Rp {payment.remainingAmount.toLocaleString()}
+                                        </p>
+                                        <p className="mt-1 text-[0.72rem] text-text-muted">
+                                            {rental.status === 'Active' ? 'Rencana kembali' : 'Tanggal kembali'}: {formatReturnTimelineLabel(rental)}
                                         </p>
                                         {rental.status === 'Returned' && rental.additionalFee > 0 && (
                                             <p className="mt-1 inline-block rounded bg-[#e74c3c]/10 px-2 py-0.5 text-[0.72rem] text-[#e74c3c]">
@@ -371,7 +385,7 @@ const History = ({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {[...filteredRentals].reverse().map((rental) => {
+                                    {sortedFilteredRentals.map((rental) => {
                                         const payment = formatPaymentSummary(rental);
                                         return (
                                         <tr key={rental.id} className="group transition-colors hover:bg-surface-hover">
@@ -407,20 +421,23 @@ const History = ({
                                             </td>
                                             <td className="align-top border-b border-border/50 p-4">
                                                 {rental.status === 'Active' ? (
-                                                    <span className="inline-flex items-center gap-1.5 rounded-full border border-accent/20 bg-accent/10 px-2.5 py-1 text-[0.75rem] font-bold text-accent">
-                                                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent"></span>
-                                                        Aktif
-                                                    </span>
+                                                    <div>
+                                                        <span className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-accent/20 bg-accent/10 px-2.5 py-1 text-[0.75rem] font-bold text-accent">
+                                                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent"></span>
+                                                            Aktif
+                                                        </span>
+                                                        <div className="text-[0.7rem] text-text-muted">
+                                                            Rencana kembali: <br />{formatReturnTimelineLabel(rental)}
+                                                        </div>
+                                                    </div>
                                                 ) : (
                                                     <div>
                                                         <span className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-[#2ecc71]/20 bg-[#2ecc71]/10 px-2.5 py-1 text-[0.75rem] font-bold text-[#2ecc71]">
                                                             <i className="fas fa-check"></i> Selesai
                                                         </span>
-                                                        {rental.returnDate && (
-                                                            <div className="text-[0.7rem] text-text-muted">
-                                                                Dikembalikan: <br />{new Date(rental.returnDate).toLocaleDateString('id-ID')}
-                                                            </div>
-                                                        )}
+                                                        <div className="text-[0.7rem] text-text-muted">
+                                                            Dikembalikan: <br />{formatReturnTimelineLabel(rental)}
+                                                        </div>
                                                     </div>
                                                 )}
                                             </td>

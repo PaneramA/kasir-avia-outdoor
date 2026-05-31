@@ -93,6 +93,28 @@ function parseDateKey(dateKey) {
   return { year, month, day }
 }
 
+function normalizeClosingDay(value) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) {
+    return 31
+  }
+
+  return Math.min(31, Math.max(1, Math.trunc(parsed)))
+}
+
+function getLastDayOfMonth(year, month) {
+  return new Date(year, month, 0).getDate()
+}
+
+function toDateKeyFromParts(year, month, day) {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+function shiftMonth(year, month, offset) {
+  const date = new Date(year, month - 1 + offset, 1)
+  return { year: date.getFullYear(), month: date.getMonth() + 1 }
+}
+
 export function getJakartaTimezone() {
   return JAKARTA_TIMEZONE
 }
@@ -171,9 +193,62 @@ export function getMonthRangeDateKeys(monthKey) {
   return { startDate, endDate }
 }
 
+export function getFinancialClosingDay(settingsOrDay) {
+  if (typeof settingsOrDay === 'object' && settingsOrDay !== null) {
+    return normalizeClosingDay(settingsOrDay.financialClosingDay)
+  }
+
+  return normalizeClosingDay(settingsOrDay)
+}
+
+export function getFinancialMonthRangeDateKeys(monthKey, settingsOrDay) {
+  const parsed = parseMonthKey(monthKey)
+  if (!parsed) {
+    return { startDate: '', endDate: '' }
+  }
+
+  const closingDay = getFinancialClosingDay(settingsOrDay)
+  const previousMonth = shiftMonth(parsed.year, parsed.month, -1)
+  const previousMonthLastDay = getLastDayOfMonth(previousMonth.year, previousMonth.month)
+  const previousClosingDay = Math.min(closingDay, previousMonthLastDay)
+  const startSource = new Date(previousMonth.year, previousMonth.month - 1, previousClosingDay)
+  startSource.setDate(startSource.getDate() + 1)
+
+  const endDay = Math.min(closingDay, getLastDayOfMonth(parsed.year, parsed.month))
+
+  return {
+    startDate: toDateKeyFromParts(startSource.getFullYear(), startSource.getMonth() + 1, startSource.getDate()),
+    endDate: toDateKeyFromParts(parsed.year, parsed.month, endDay),
+  }
+}
+
 export function getCurrentMonthRangeDateKeys(now = new Date()) {
   const monthKey = getCurrentJakartaMonthKey(now)
   const { startDate, endDate } = getMonthRangeDateKeys(monthKey)
+  return { monthKey, startDate, endDate }
+}
+
+export function getFinancialMonthKeyForDate(dateValue, settingsOrDay) {
+  const parts = getJakartaParts(dateValue)
+  if (!parts) {
+    return ''
+  }
+
+  const year = Number(parts.year)
+  const month = Number(parts.month)
+  const day = Number(parts.day)
+  const closingDay = Math.min(getFinancialClosingDay(settingsOrDay), getLastDayOfMonth(year, month))
+  if (day <= closingDay) {
+    return `${parts.year}-${parts.month}`
+  }
+
+  const next = shiftMonth(year, month, 1)
+  return `${next.year}-${String(next.month).padStart(2, '0')}`
+}
+
+export function getCurrentFinancialMonthRangeDateKeys(settingsOrDay, now = new Date()) {
+  const monthKey = getFinancialMonthKeyForDate(now, settingsOrDay)
+  const { startDate, endDate } = getFinancialMonthRangeDateKeys(monthKey, settingsOrDay)
   return { monthKey, startDate, endDate }
 }
 
@@ -211,7 +286,7 @@ export function filterRentalsByTransactionDate(rentals, { startDate = '', endDat
   })
 }
 
-export function getFinancialRecap(rentals, { startDate = '', endDate = '' } = {}) {
+export function getFinancialRecap(rentals, { startDate = '', endDate = '', financialClosingDay } = {}) {
   const filteredRentals = filterRentalsByTransactionDate(rentals, { startDate, endDate })
   const totalRevenue = filteredRentals.reduce((sum, rental) => sum + getRentalAmount(rental), 0)
   const totalTransactions = filteredRentals.length
@@ -224,7 +299,7 @@ export function getFinancialRecap(rentals, { startDate = '', endDate = '' } = {}
   filteredRentals.forEach((rental) => {
     const amount = getRentalAmount(rental)
     const method = String(rental?.payment?.method || 'TUNAI').trim().toUpperCase() || 'TUNAI'
-    const monthKey = toJakartaMonthKey(rental?.date)
+    const monthKey = getFinancialMonthKeyForDate(rental?.date, financialClosingDay)
 
     const methodCurrent = methodBucket.get(method) || { method, count: 0, revenue: 0 }
     methodCurrent.count += 1
@@ -283,6 +358,7 @@ export function getFinancialRecap(rentals, { startDate = '', endDate = '' } = {}
   return {
     startDate,
     endDate,
+    financialClosingDay: getFinancialClosingDay(financialClosingDay),
     filteredRentals,
     totalRevenue,
     totalTransactions,
