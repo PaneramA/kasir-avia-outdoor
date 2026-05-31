@@ -119,6 +119,7 @@ async function main() {
       ],
       timezone: 'Asia/Jakarta',
       currency: 'IDR',
+      financialClosingDay: 31,
     },
   });
 

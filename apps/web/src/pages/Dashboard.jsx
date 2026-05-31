@@ -1,8 +1,16 @@
 import React from 'react';
-import { formatCurrency, formatMonthLabel, getCurrentMonthRangeDateKeys, getFinancialRecap } from '../lib/financial';
-import { getPlannedReturnDate } from '../lib/rentalTime';
+import { Link } from 'react-router-dom';
+import { APP_ROUTES } from '../lib/routes';
+import {
+    formatCurrency,
+    formatMonthLabel,
+    getCurrentFinancialMonthRangeDateKeys,
+    getFinancialClosingDay,
+    getFinancialRecap,
+} from '../lib/financial';
+import { compareRentalsByClosestReturnDate, getPlannedReturnDate, toDate } from '../lib/rentalTime';
 
-const Dashboard = ({ inventory, rentals }) => {
+const Dashboard = ({ inventory, rentals, tenantSettings }) => {
     const [statusFilter, setStatusFilter] = React.useState('all');
 
     const filterOptions = [
@@ -12,8 +20,9 @@ const Dashboard = ({ inventory, rentals }) => {
     ];
 
     const calculateStats = () => {
-        const { monthKey, startDate, endDate } = getCurrentMonthRangeDateKeys();
-        const recap = getFinancialRecap(rentals, { startDate, endDate });
+        const financialClosingDay = getFinancialClosingDay(tenantSettings);
+        const { monthKey, startDate, endDate } = getCurrentFinancialMonthRangeDateKeys(financialClosingDay);
+        const recap = getFinancialRecap(rentals, { startDate, endDate, financialClosingDay });
         const available = inventory.reduce((sum, item) => sum + parseInt(item.stock || 0), 0);
         const activeRentals = rentals.filter((r) => r.status === 'Active').length;
         const itemsOut = rentals
@@ -25,9 +34,15 @@ const Dashboard = ({ inventory, rentals }) => {
     };
 
     const stats = calculateStats();
-    const recent = [...rentals].reverse();
-    const filteredRecent = recent
+    const filteredRecent = rentals
         .filter((r) => statusFilter === 'all' || (r.status || '').toLowerCase() === statusFilter)
+        .sort((a, b) => {
+            if (statusFilter === 'active') {
+                return compareRentalsByClosestReturnDate(a, b);
+            }
+
+            return (toDate(b?.date)?.getTime() || 0) - (toDate(a?.date)?.getTime() || 0);
+        })
         .slice(0, 5);
 
     const formatReturnDateLabel = (rental) => {
@@ -45,7 +60,7 @@ const Dashboard = ({ inventory, rentals }) => {
     };
 
     return (
-        <div className="py-4 sm:py-5">
+        <div className="pt-0 pb-4 sm:pb-5">
             <div className="relative mb-6 overflow-hidden rounded-DEFAULT border border-accent/20 bg-accent/10 p-5 sm:mb-8 sm:p-8">
                 <h2 className="mb-2 text-[1.25rem] font-bold text-accent sm:text-[1.5rem]">Sistem Rental AviaOutdoor</h2>
                 <p className="text-text-muted">Pusat kendali operasional persewaan alat camping & hiking.</p>
@@ -100,23 +115,32 @@ const Dashboard = ({ inventory, rentals }) => {
                         <h3 className="mb-1 text-[1.1rem] font-bold text-text-main sm:text-[1.2rem]">Penyewaan Terbaru</h3>
                         <p className="text-text-muted text-[0.9rem]">Daftar transaksi terakhir.</p>
                     </div>
-                    <div className="inline-flex w-full flex-wrap gap-2 sm:w-auto">
-                        {filterOptions.map((option) => {
-                            const isActive = statusFilter === option.value;
-                            return (
-                                <button
-                                    key={option.value}
-                                    type="button"
-                                    onClick={() => setStatusFilter(option.value)}
-                                    className={`rounded-full border px-3 py-1.5 text-[0.75rem] font-semibold transition-colors sm:text-[0.8rem] ${isActive
-                                        ? 'border-accent bg-accent text-white'
-                                        : 'border-border bg-card-bg text-text-muted hover:border-accent/50 hover:text-text-main'
-                                        }`}
-                                >
-                                    {option.label}
-                                </button>
-                            );
-                        })}
+                    <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+                        <Link
+                            to={APP_ROUTES.history}
+                            className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/10 px-3 py-1.5 text-[0.75rem] font-semibold text-accent transition-colors hover:bg-accent/20 sm:text-[0.8rem]"
+                        >
+                            <i className="fas fa-list-ul text-[0.72rem]"></i>
+                            Lihat semua
+                        </Link>
+                        <div className="inline-flex flex-wrap gap-2">
+                            {filterOptions.map((option) => {
+                                const isActive = statusFilter === option.value;
+                                return (
+                                    <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => setStatusFilter(option.value)}
+                                        className={`rounded-full border px-3 py-1.5 text-[0.75rem] font-semibold transition-colors sm:text-[0.8rem] ${isActive
+                                            ? 'border-accent bg-accent text-white'
+                                            : 'border-border bg-card-bg text-text-muted hover:border-accent/50 hover:text-text-main'
+                                            }`}
+                                    >
+                                        {option.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
                 <div className="mt-5 sm:mt-6">

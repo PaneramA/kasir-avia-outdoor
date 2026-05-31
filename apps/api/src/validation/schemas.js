@@ -66,6 +66,7 @@ export const updateTenantSettingsSchema = z.object({
   rentalDayCountMode: z.enum(['ROLLING_24H', 'DAILY_CUTOFF']).optional(),
   rentalCutoffHour: z.coerce.number().int().min(0).max(23).optional(),
   rentalCutoffMinute: z.coerce.number().int().min(0).max(59).optional(),
+  financialClosingDay: z.coerce.number().int().min(1).max(31).optional(),
 });
 
 export const createTenantSchema = z.object({

@@ -250,7 +250,7 @@ const Users = () => {
     }
 
     return (
-        <div className="space-y-6 py-4 sm:py-5">
+        <div className="space-y-6 pt-0 pb-4 sm:pb-5">
             <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">
                 <h3 className="text-[1.1rem] font-bold text-text-main mb-1">Tambah User Baru</h3>
                 <p className="text-text-muted text-sm mb-5">Buat akun admin atau kasir untuk akses aplikasi.</p>

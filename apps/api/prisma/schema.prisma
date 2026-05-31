@@ -58,6 +58,7 @@ model TenantSettings {
   rentalDayCountMode String @default("ROLLING_24H")
   rentalCutoffHour Int      @default(8)
   rentalCutoffMinute Int    @default(0)
+  financialClosingDay Int   @default(31)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
