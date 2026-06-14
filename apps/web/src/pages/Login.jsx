@@ -41,7 +41,7 @@ const Login = ({ onLogin, isSubmitting, errorMessage }) => {
                 initialBranchName: registerBranchName || undefined,
             })
 
-            setRegisterMessage('Pendaftaran berhasil. Toko kamu menunggu approval developer setelah pembayaran terverifikasi.')
+            setRegisterMessage('Pendaftaran berhasil. Toko kamu menunggu approval admin setelah pembayaran terverifikasi.')
             setUsername(registerUsername)
             setPassword('')
             setRegisterPassword('')
@@ -91,7 +91,7 @@ const Login = ({ onLogin, isSubmitting, errorMessage }) => {
                         </h2>
                         <p className="mt-1 text-sm text-text-muted">
                             {isRegisterMode
-                                ? 'Daftar untuk membuat akun utama dan toko baru (status pending approval developer).'
+                                ? 'Daftar untuk membuat akun pemilik toko baru yang nanti menunggu approval admin.'
                                 : 'Gunakan akun backend yang sudah terdaftar.'}
                         </p>
                     </div>

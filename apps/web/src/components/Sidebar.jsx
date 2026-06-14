@@ -10,6 +10,7 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
 
     const menuItems = [
         { path: APP_ROUTES.dashboard, icon: 'fas fa-th-large', label: 'Dashboard' },
+        ...(isAdminLike ? [{ path: APP_ROUTES.admin, icon: 'fas fa-user-shield', label: 'Admin Panel' }] : []),
         { path: APP_ROUTES.rental, icon: 'fas fa-handshake', label: 'Sewa Barang' },
         { path: APP_ROUTES.return, icon: 'fas fa-undo', label: 'Pengembalian' },
         { path: APP_ROUTES.inventory, icon: 'fas fa-boxes-stacked', label: 'Inventaris' },
@@ -93,7 +94,7 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
                         {isProfileMenuOpen && (
                             <div className="mt-3 flex flex-col gap-1 rounded-DEFAULT border border-border bg-bg-main/80 p-2">
                                 <NavLink
-                                    to={APP_ROUTES.account}
+                                    to={isAdminLike ? APP_ROUTES.adminAccount : APP_ROUTES.settingsAccount}
                                     onClick={onCloseMobile}
                                     className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
                                         ? 'bg-accent text-white'
@@ -105,7 +106,31 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
                                 </NavLink>
                                 {isAdminLike && (
                                     <NavLink
-                                        to={APP_ROUTES.users}
+                                        to={APP_ROUTES.adminRegistrations}
+                                        onClick={onCloseMobile}
+                                        className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
+                                            ? 'bg-accent text-white'
+                                            : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
+                                        }`}
+                                    >
+                                        <i className="fas fa-user-clock mr-2"></i>
+                                        Approval Toko
+                                    </NavLink>
+                                )}
+                                <NavLink
+                                    to={isAdminLike ? APP_ROUTES.adminPlans : APP_ROUTES.settingsBranches}
+                                    onClick={onCloseMobile}
+                                    className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
+                                        ? 'bg-accent text-white'
+                                        : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
+                                    }`}
+                                >
+                                    <i className={`${isAdminLike ? 'fas fa-layer-group' : 'fas fa-code-branch'} mr-2`}></i>
+                                    {isAdminLike ? 'Paket & Limit' : 'Cabang Toko'}
+                                </NavLink>
+                                {!isAdminLike && (
+                                    <NavLink
+                                        to={APP_ROUTES.settingsTeam}
                                         onClick={onCloseMobile}
                                         className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
                                             ? 'bg-accent text-white'
@@ -113,20 +138,9 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
                                         }`}
                                     >
                                         <i className="fas fa-users-cog mr-2"></i>
-                                        Setting User
+                                        Tim & Akses
                                     </NavLink>
                                 )}
-                                <NavLink
-                                    to={APP_ROUTES.branches}
-                                    onClick={onCloseMobile}
-                                    className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
-                                        ? 'bg-accent text-white'
-                                        : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
-                                    }`}
-                                >
-                                    <i className="fas fa-code-branch mr-2"></i>
-                                    Cabang & Akses
-                                </NavLink>
                                 <button
                                     onClick={onLogout}
                                     className="rounded-lg px-3 py-2 text-left text-sm text-text-muted hover:bg-surface-hover hover:text-[#e74c3c]"

@@ -1,6 +1,15 @@
 export const APP_ROUTES = {
   login: '/login',
   dashboard: '/dashboard',
+  settingsAccount: '/settings/account',
+  settingsBranches: '/settings/branches',
+  settingsTeam: '/settings/team',
+  admin: '/admin',
+  adminRegistrations: '/admin/registrations',
+  adminPlans: '/admin/plans',
+  adminUsers: '/admin/users',
+  adminBranches: '/admin/branches',
+  adminAccount: '/admin/account',
   rental: '/rental',
   return: '/return',
   inventory: '/inventory',
@@ -16,6 +25,42 @@ export const PAGE_INFO = {
   [APP_ROUTES.dashboard]: {
     title: 'Dashboard',
     subtitle: 'Status inventaris dan penyewaan hari ini.',
+  },
+  [APP_ROUTES.settingsAccount]: {
+    title: 'Settings • Akun',
+    subtitle: 'Kelola akun, paket tenant, dan pengaturan toko kamu.',
+  },
+  [APP_ROUTES.settingsBranches]: {
+    title: 'Settings • Cabang',
+    subtitle: 'Kelola daftar cabang toko dan status operasional tenant kamu.',
+  },
+  [APP_ROUTES.settingsTeam]: {
+    title: 'Settings • Tim & Akses',
+    subtitle: 'Kelola user toko, membership tenant, dan akses user per cabang.',
+  },
+  [APP_ROUTES.admin]: {
+    title: 'Admin Panel',
+    subtitle: 'Pusat kontrol approval tenant dan pengaturan paket platform.',
+  },
+  [APP_ROUTES.adminRegistrations]: {
+    title: 'Admin • Pendaftaran Toko',
+    subtitle: 'Pantau tenant baru yang mendaftar dan berikan approval.',
+  },
+  [APP_ROUTES.adminPlans]: {
+    title: 'Admin • Paket & Limit',
+    subtitle: 'Rancangan kontrol paket, kuota, dan fitur per tenant.',
+  },
+  [APP_ROUTES.adminUsers]: {
+    title: 'Admin • User',
+    subtitle: 'Kelola akun, role, reset password, dan akses user.',
+  },
+  [APP_ROUTES.adminBranches]: {
+    title: 'Admin • Cabang & Akses',
+    subtitle: 'Kelola cabang, membership tenant, dan approval tenant baru.',
+  },
+  [APP_ROUTES.adminAccount]: {
+    title: 'Admin • Akun Saya',
+    subtitle: 'Kelola akun login dan pengaturan toko dari area admin.',
   },
   [APP_ROUTES.rental]: {
     title: 'Sewa Barang',
@@ -54,3 +99,49 @@ export const PAGE_INFO = {
     subtitle: 'Ubah password dan pengaturan profil toko.',
   },
 };
+
+export function resolvePageInfo(pathname) {
+  const normalizedPath = String(pathname || '').trim();
+
+  if (PAGE_INFO[normalizedPath]) {
+    return PAGE_INFO[normalizedPath];
+  }
+
+  if (normalizedPath.startsWith(`${APP_ROUTES.settingsAccount}/`)) {
+    return PAGE_INFO[APP_ROUTES.settingsAccount];
+  }
+
+  if (normalizedPath.startsWith(`${APP_ROUTES.settingsBranches}/`)) {
+    return PAGE_INFO[APP_ROUTES.settingsBranches];
+  }
+
+  if (normalizedPath.startsWith(`${APP_ROUTES.settingsTeam}/`)) {
+    return PAGE_INFO[APP_ROUTES.settingsTeam];
+  }
+
+  if (normalizedPath.startsWith(`${APP_ROUTES.adminUsers}/`)) {
+    return PAGE_INFO[APP_ROUTES.adminUsers];
+  }
+
+  if (normalizedPath.startsWith(`${APP_ROUTES.adminRegistrations}/`)) {
+    return PAGE_INFO[APP_ROUTES.adminRegistrations];
+  }
+
+  if (normalizedPath.startsWith(`${APP_ROUTES.adminPlans}/`)) {
+    return PAGE_INFO[APP_ROUTES.adminPlans];
+  }
+
+  if (normalizedPath.startsWith(`${APP_ROUTES.adminBranches}/`)) {
+    return PAGE_INFO[APP_ROUTES.adminBranches];
+  }
+
+  if (normalizedPath.startsWith(`${APP_ROUTES.adminAccount}/`)) {
+    return PAGE_INFO[APP_ROUTES.adminAccount];
+  }
+
+  if (normalizedPath.startsWith(`${APP_ROUTES.admin}/`)) {
+    return PAGE_INFO[APP_ROUTES.admin];
+  }
+
+  return PAGE_INFO[APP_ROUTES.dashboard];
+}

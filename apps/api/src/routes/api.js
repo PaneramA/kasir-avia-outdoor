@@ -16,21 +16,27 @@ import {
   findUserById,
   findUserByUsername,
   getTenantSettingsForUser,
+  getTenantSubscriptionSummaryForUser,
   getBranchSettingsForUser,
   updateBranchSettingsByIdForUser,
   getSchemaSummary,
   getUserTenantMembershipSummary,
   createBranchForUser,
   createTenantForSuperuser,
+  createPlanForPlatformAdmin,
   updateBranchForUser,
+  updatePlanForPlatformAdmin,
+  updateTenantSubscriptionForPlatformAdmin,
   updateTenantForSuperuser,
   listBranchAccessForUser,
+  listPlansForPlatformAdmin,
   upsertBranchAccessForUser,
   removeBranchAccessForUser,
   listTenantMembershipsForUser,
   upsertTenantMembershipForUser,
   updateTenantMembershipForUser,
   listBranchesForUser,
+  listTenantSubscriptionsForPlatformAdmin,
   listTenantsForUser,
   listPublicActiveTenants,
   listCategories,
@@ -73,7 +79,10 @@ import {
   updateTenantSettingsSchema,
   updateBranchSettingsSchema,
   createBranchSchema,
+  createPlanSchema,
   updateBranchSchema,
+  updatePlanSchema,
+  updateTenantSubscriptionSchema,
   upsertBranchAccessSchema,
   upsertTenantMembershipSchema,
   updateTenantMembershipSchema,
@@ -328,6 +337,16 @@ export async function apiRoute(req, res, env) {
     return user;
   };
 
+  const ensurePlatformAdmin = async () => {
+    const user = await ensureAuth();
+    const role = normalizeRole(user.role);
+    if (role !== 'admin' && role !== 'superuser') {
+      throw new Error('Forbidden');
+    }
+
+    return user;
+  };
+
   const ensureRequestContext = async () => {
     if (requestContext) {
       return requestContext;
@@ -394,7 +413,7 @@ export async function apiRoute(req, res, env) {
         sendError(
           res,
           403,
-          'Akun kamu masih menunggu approval developer. Silakan selesaikan pembayaran lalu tunggu aktivasi toko.',
+          'Akun kamu masih menunggu approval admin. Silakan selesaikan pembayaran lalu tunggu aktivasi toko.',
         );
         return true;
       }
@@ -449,10 +468,48 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'POST' && pathname === '/api/tenants') {
-      await ensureSuperuser();
+      await ensurePlatformAdmin();
       const body = createTenantSchema.parse(await readJsonBody(req));
       const created = await createTenantForSuperuser(body);
       sendSuccess(res, 201, created);
+      return true;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/plans') {
+      await ensurePlatformAdmin();
+      sendSuccess(res, 200, await listPlansForPlatformAdmin());
+      return true;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/plans') {
+      await ensurePlatformAdmin();
+      const body = createPlanSchema.parse(await readJsonBody(req));
+      const created = await createPlanForPlatformAdmin(body);
+      sendSuccess(res, 201, created);
+      return true;
+    }
+
+    if (req.method === 'PATCH' && pathname.startsWith('/api/plans/')) {
+      await ensurePlatformAdmin();
+      const planId = decodeURIComponent(pathname.replace('/api/plans/', ''));
+      const body = updatePlanSchema.parse(await readJsonBody(req));
+      const updated = await updatePlanForPlatformAdmin(planId, body);
+      sendSuccess(res, 200, updated);
+      return true;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/subscriptions') {
+      await ensurePlatformAdmin();
+      sendSuccess(res, 200, await listTenantSubscriptionsForPlatformAdmin());
+      return true;
+    }
+
+    if (req.method === 'PATCH' && pathname.startsWith('/api/subscriptions/')) {
+      await ensurePlatformAdmin();
+      const tenantId = decodeURIComponent(pathname.replace('/api/subscriptions/', ''));
+      const body = updateTenantSubscriptionSchema.parse(await readJsonBody(req));
+      const updated = await updateTenantSubscriptionForPlatformAdmin(tenantId, body);
+      sendSuccess(res, 200, updated);
       return true;
     }
 
@@ -643,6 +700,17 @@ export async function apiRoute(req, res, env) {
       return true;
     }
 
+    if (req.method === 'GET' && pathname === '/api/tenants/current/subscription') {
+      const user = await ensureAuth();
+      const subscriptionSummary = await getTenantSubscriptionSummaryForUser({
+        userId: user.id,
+        role: user.role,
+        requestedTenantId: 'current',
+      });
+      sendSuccess(res, 200, subscriptionSummary);
+      return true;
+    }
+
     if (req.method === 'PATCH' && pathname === '/api/tenants/current/settings') {
       const user = await ensureAuth();
       const currentSettings = await getTenantSettingsForUser({
@@ -696,7 +764,7 @@ export async function apiRoute(req, res, env) {
       && pathname.startsWith('/api/tenants/')
       && !pathname.endsWith('/settings')
     ) {
-      await ensureSuperuser();
+      await ensurePlatformAdmin();
       const tenantId = decodeURIComponent(pathname.replace('/api/tenants/', ''));
       if (!tenantId) {
         throw new Error('Tenant id is required');
@@ -723,7 +791,7 @@ export async function apiRoute(req, res, env) {
 
       sendSuccess(res, 201, {
         ...created,
-        message: 'Pendaftaran berhasil. Toko baru kamu berstatus pending dan menunggu approval developer.',
+        message: 'Pendaftaran berhasil. Toko baru kamu berstatus pending dan menunggu approval admin.',
       });
       return true;
     }
@@ -1001,7 +1069,17 @@ export async function apiRoute(req, res, env) {
     }
 
     if (message === 'Tenant is not active') {
-      sendError(res, 403, 'Tenant belum aktif. Menunggu approval developer.');
+      sendError(res, 403, 'Tenant belum aktif. Menunggu approval admin.');
+      return true;
+    }
+
+    if (message.startsWith('Feature not available in current plan:')) {
+      sendError(res, 403, message);
+      return true;
+    }
+
+    if (message.startsWith('Plan limit exceeded:')) {
+      sendError(res, 409, message);
       return true;
     }
 
