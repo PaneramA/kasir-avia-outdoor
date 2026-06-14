@@ -3,6 +3,9 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
 import Dashboard from './pages/Dashboard'
+import AdminOverview from './pages/AdminOverview'
+import AdminRegistrations from './pages/AdminRegistrations'
+import AdminPlans from './pages/AdminPlans'
 import Inventory from './pages/Inventory'
 import Rental from './pages/Rental'
 import Return from './pages/Return'
@@ -13,7 +16,8 @@ import Login from './pages/Login'
 import Users from './pages/Users'
 import Account from './pages/Account'
 import Branches from './pages/Branches'
-import { APP_ROUTES, PAGE_INFO } from './lib/routes'
+import TeamSettings from './pages/TeamSettings'
+import { APP_ROUTES, resolvePageInfo } from './lib/routes'
 import {
   createCategory,
   createItem,
@@ -628,10 +632,7 @@ function App() {
     await refreshData()
   }, [activeTenantId, refreshData])
 
-  const headerInfo = useMemo(
-    () => PAGE_INFO[location.pathname] || PAGE_INFO[APP_ROUTES.dashboard],
-    [location.pathname],
-  )
+  const headerInfo = useMemo(() => resolvePageInfo(location.pathname), [location.pathname])
   const isAdminLikeUser = useMemo(() => {
     const role = String(currentUser?.role || '').trim().toLowerCase()
     return role === 'admin' || role === 'superuser'
@@ -766,14 +767,34 @@ function App() {
             />
             <Route
               path={APP_ROUTES.users}
+              element={isAdminLikeUser ? <Navigate to={APP_ROUTES.adminUsers} replace /> : <Navigate to={APP_ROUTES.settingsTeam} replace />}
+            />
+            <Route
+              path={APP_ROUTES.adminUsers}
               element={isAdminLikeUser ? <Users /> : <Navigate to={APP_ROUTES.dashboard} replace />}
             />
             <Route
               path={APP_ROUTES.branches}
-              element={<Branches />}
+              element={isAdminLikeUser ? <Navigate to={APP_ROUTES.adminRegistrations} replace /> : <Navigate to={APP_ROUTES.settingsBranches} replace />}
+            />
+            <Route
+              path={APP_ROUTES.settingsBranches}
+              element={isAdminLikeUser ? <Navigate to={APP_ROUTES.adminRegistrations} replace /> : <Branches />}
+            />
+            <Route
+              path={APP_ROUTES.settingsTeam}
+              element={isAdminLikeUser ? <Navigate to={APP_ROUTES.adminRegistrations} replace /> : <TeamSettings />}
+            />
+            <Route
+              path={APP_ROUTES.adminBranches}
+              element={isAdminLikeUser ? <Navigate to={APP_ROUTES.adminRegistrations} replace /> : <Navigate to={APP_ROUTES.dashboard} replace />}
             />
             <Route
               path={APP_ROUTES.account}
+              element={isAdminLikeUser ? <Navigate to={APP_ROUTES.adminAccount} replace /> : <Navigate to={APP_ROUTES.settingsAccount} replace />}
+            />
+            <Route
+              path={APP_ROUTES.settingsAccount}
               element={(
                 <Account
                   currentUser={currentUser}
@@ -783,6 +804,18 @@ function App() {
                   onUpdateBranchSettings={handleUpdateBranchSettings}
                 />
               )}
+            />
+            <Route
+              path={APP_ROUTES.adminAccount}
+              element={isAdminLikeUser ? (
+                <Account
+                  currentUser={currentUser}
+                  tenantSettings={tenantSettings}
+                  branchSettings={branchSettings}
+                  onUpdateTenantSettings={handleUpdateTenantSettings}
+                  onUpdateBranchSettings={handleUpdateBranchSettings}
+                />
+              ) : <Navigate to={APP_ROUTES.account} replace />}
             />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>

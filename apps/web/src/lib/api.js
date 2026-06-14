@@ -323,6 +323,10 @@ export function fetchCurrentTenantSettings() {
   return request('/api/tenants/current/settings', {}, { auth: true });
 }
 
+export function fetchCurrentTenantSubscriptionSummary() {
+  return request('/api/tenants/current/subscription', {}, { auth: true });
+}
+
 export function fetchTenants() {
   return request('/api/tenants', {}, { auth: true });
 }
@@ -336,6 +340,35 @@ export function createTenant(payload) {
 
 export function updateTenant(tenantId, payload) {
   return request(`/api/tenants/${encodeURIComponent(tenantId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
+export function fetchPlans() {
+  return request('/api/plans', {}, { auth: true });
+}
+
+export function createPlanDefinition(payload) {
+  return request('/api/plans', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
+export function updatePlanDefinition(planId, payload) {
+  return request(`/api/plans/${encodeURIComponent(planId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
+export function fetchTenantSubscriptions() {
+  return request('/api/subscriptions', {}, { auth: true });
+}
+
+export function updateTenantSubscription(tenantId, payload) {
+  return request(`/api/subscriptions/${encodeURIComponent(tenantId)}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   }, { auth: true });

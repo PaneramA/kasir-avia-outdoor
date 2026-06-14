@@ -7,6 +7,10 @@ const TENANT_MEMBERSHIP_ROLES = new Set(['owner', 'admin', 'kasir']);
 const TENANT_MEMBERSHIP_STATUSES = new Set(['active', 'inactive']);
 const BRANCH_ACCESS_ROLES = new Set(['admin', 'kasir']);
 const TENANT_STATUSES = new Set(['active', 'suspended']);
+const PLAN_STATUSES = new Set(['active', 'inactive']);
+const PLAN_PRICE_PERIODS = new Set(['monthly', 'yearly', 'custom']);
+const PLAN_FEATURE_VALUE_TYPES = new Set(['boolean', 'integer', 'string', 'json']);
+const SUBSCRIPTION_STATUSES = new Set(['trial', 'active', 'suspended', 'expired']);
 const PAYMENT_STATUSES = new Set(['DP', 'LUNAS']);
 const PAYMENT_METHODS = new Set(['QRIS', 'BANK', 'TUNAI']);
 const RENTAL_DAY_COUNT_MODES = new Set(['ROLLING_24H', 'DAILY_CUTOFF']);
@@ -30,6 +34,65 @@ const DEFAULT_TENANT_SETTINGS = {
   rentalCutoffMinute: 0,
   financialClosingDay: 31,
 };
+const DEFAULT_PLAN_CATALOG = [
+  {
+    code: 'basic',
+    name: 'Basic',
+    description: 'Paket awal untuk satu toko kecil.',
+    priceAmount: 0,
+    pricePeriod: 'monthly',
+    status: 'active',
+    features: [
+      { key: 'maxBranches', valueType: 'integer', value: 1 },
+      { key: 'maxItems', valueType: 'integer', value: 150 },
+      { key: 'maxMonthlyTransactions', valueType: 'integer', value: 300 },
+      { key: 'maxTenantUsers', valueType: 'integer', value: 3 },
+      { key: 'canManageBranches', valueType: 'boolean', value: true },
+      { key: 'canManageStaff', valueType: 'boolean', value: true },
+      { key: 'canUseFinancialRecap', valueType: 'boolean', value: false },
+      { key: 'canUseMultiBranch', valueType: 'boolean', value: false },
+      { key: 'canExportData', valueType: 'boolean', value: false },
+    ],
+  },
+  {
+    code: 'growth',
+    name: 'Growth',
+    description: 'Paket menengah untuk tenant dengan beberapa cabang.',
+    priceAmount: 250000,
+    pricePeriod: 'monthly',
+    status: 'active',
+    features: [
+      { key: 'maxBranches', valueType: 'integer', value: 3 },
+      { key: 'maxItems', valueType: 'integer', value: 1000 },
+      { key: 'maxMonthlyTransactions', valueType: 'integer', value: 2500 },
+      { key: 'maxTenantUsers', valueType: 'integer', value: 10 },
+      { key: 'canManageBranches', valueType: 'boolean', value: true },
+      { key: 'canManageStaff', valueType: 'boolean', value: true },
+      { key: 'canUseFinancialRecap', valueType: 'boolean', value: true },
+      { key: 'canUseMultiBranch', valueType: 'boolean', value: true },
+      { key: 'canExportData', valueType: 'boolean', value: true },
+    ],
+  },
+  {
+    code: 'enterprise',
+    name: 'Enterprise',
+    description: 'Paket fleksibel untuk tenant besar.',
+    priceAmount: 0,
+    pricePeriod: 'custom',
+    status: 'active',
+    features: [
+      { key: 'maxBranches', valueType: 'integer', value: 9999 },
+      { key: 'maxItems', valueType: 'integer', value: 999999 },
+      { key: 'maxMonthlyTransactions', valueType: 'integer', value: 999999 },
+      { key: 'maxTenantUsers', valueType: 'integer', value: 9999 },
+      { key: 'canManageBranches', valueType: 'boolean', value: true },
+      { key: 'canManageStaff', valueType: 'boolean', value: true },
+      { key: 'canUseFinancialRecap', valueType: 'boolean', value: true },
+      { key: 'canUseMultiBranch', valueType: 'boolean', value: true },
+      { key: 'canExportData', valueType: 'boolean', value: true },
+    ],
+  },
+];
 
 function createId(prefix) {
   return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -48,8 +111,22 @@ function slugifyTenant(value) {
     .slice(0, 80);
 }
 
+function normalizePlanCode(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+}
+
 function isSuperuserRole(rawRole) {
   return normalizeRole(rawRole) === 'superuser';
+}
+
+function isPlatformAdminRole(rawRole) {
+  const normalized = normalizeRole(rawRole);
+  return normalized === 'admin' || normalized === 'superuser';
 }
 
 function normalizeRentalStatus(rawStatus) {
@@ -216,6 +293,94 @@ function parseIsoDate(value, fieldName) {
   return parsed;
 }
 
+function parseOptionalIsoDate(value, fieldName) {
+  if (value == null) {
+    return null;
+  }
+
+  return parseIsoDate(value, fieldName);
+}
+
+function normalizePlanPricePeriod(rawPeriod) {
+  const normalized = String(rawPeriod || 'monthly').trim().toLowerCase();
+  if (!PLAN_PRICE_PERIODS.has(normalized)) {
+    throw new Error('Plan price period is invalid');
+  }
+
+  return normalized;
+}
+
+function normalizePlanStatus(rawStatus) {
+  const normalized = String(rawStatus || 'active').trim().toLowerCase();
+  if (!PLAN_STATUSES.has(normalized)) {
+    throw new Error('Plan status is invalid');
+  }
+
+  return normalized;
+}
+
+function normalizeSubscriptionStatus(rawStatus) {
+  const normalized = String(rawStatus || 'trial').trim().toLowerCase();
+  if (!SUBSCRIPTION_STATUSES.has(normalized)) {
+    throw new Error('Subscription status is invalid');
+  }
+
+  return normalized;
+}
+
+function normalizePlanFeatureValueType(rawValueType) {
+  const normalized = String(rawValueType || 'integer').trim().toLowerCase();
+  if (!PLAN_FEATURE_VALUE_TYPES.has(normalized)) {
+    throw new Error('Plan feature value type is invalid');
+  }
+
+  return normalized;
+}
+
+function normalizePlanFeaturesInput(features) {
+  const safeFeatures = Array.isArray(features) ? features : [];
+  const seenKeys = new Set();
+
+  return safeFeatures.map((feature, index) => {
+    const key = String(feature?.key || '').trim();
+    if (!key) {
+      throw new Error(`Plan feature key is required at index ${index}`);
+    }
+
+    if (seenKeys.has(key)) {
+      throw new Error(`Plan feature key must be unique: ${key}`);
+    }
+    seenKeys.add(key);
+
+    const valueType = normalizePlanFeatureValueType(feature?.valueType);
+    const rawValue = feature?.value;
+    let valueJson;
+
+    if (valueType === 'boolean') {
+      if (typeof rawValue !== 'boolean') {
+        throw new Error(`Plan feature ${key} must be boolean`);
+      }
+      valueJson = rawValue;
+    } else if (valueType === 'integer') {
+      const parsed = Number(rawValue);
+      if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+        throw new Error(`Plan feature ${key} must be integer`);
+      }
+      valueJson = parsed;
+    } else if (valueType === 'string') {
+      valueJson = String(rawValue ?? '').trim();
+    } else {
+      valueJson = rawValue ?? null;
+    }
+
+    return {
+      key,
+      valueType,
+      valueJson,
+    };
+  });
+}
+
 function normalizeRentalDayCountMode(rawMode) {
   const mode = String(rawMode || DEFAULT_TENANT_SETTINGS.rentalDayCountMode)
     .trim()
@@ -332,11 +497,22 @@ function toTenantMembershipDto(membership) {
 }
 
 function toTenantDto(tenant) {
+  const ownerUsernames = Array.isArray(tenant.memberships)
+    ? tenant.memberships
+      .filter((membership) => String(membership?.role || '').trim().toLowerCase() === 'owner')
+      .map((membership) => String(membership?.user?.username || '').trim())
+      .filter(Boolean)
+    : [];
+
   return {
     id: tenant.id,
     slug: tenant.slug,
     name: tenant.name,
     status: tenant.status,
+    ownerUsernames,
+    branchCount: typeof tenant?._count?.branches === 'number' ? tenant._count.branches : undefined,
+    membershipCount: typeof tenant?._count?.memberships === 'number' ? tenant._count.memberships : undefined,
+    subscription: tenant.subscription ? toTenantSubscriptionDto(tenant.subscription) : null,
     createdAt: tenant.createdAt.toISOString(),
     updatedAt: tenant.updatedAt.toISOString(),
   };
@@ -353,6 +529,172 @@ function toBranchAccessDto(access) {
     role: access.role,
     createdAt: access.createdAt.toISOString(),
   };
+}
+
+function toPlanFeatureDto(feature) {
+  return {
+    id: feature.id,
+    key: feature.key,
+    valueType: feature.valueType,
+    value: feature.valueJson,
+    createdAt: feature.createdAt.toISOString(),
+    updatedAt: feature.updatedAt.toISOString(),
+  };
+}
+
+function toPlanDto(plan) {
+  return {
+    id: plan.id,
+    code: plan.code,
+    name: plan.name,
+    description: plan.description || '',
+    priceAmount: plan.priceAmount,
+    pricePeriod: plan.pricePeriod,
+    status: plan.status,
+    features: Array.isArray(plan.features)
+      ? [...plan.features]
+        .sort((left, right) => left.key.localeCompare(right.key))
+        .map(toPlanFeatureDto)
+      : [],
+    tenantCount: typeof plan?._count?.subscriptions === 'number' ? plan._count.subscriptions : undefined,
+    createdAt: plan.createdAt.toISOString(),
+    updatedAt: plan.updatedAt.toISOString(),
+  };
+}
+
+function toTenantSubscriptionDto(subscription) {
+  return {
+    id: subscription.id,
+    tenantId: subscription.tenantId,
+    planId: subscription.planId,
+    status: subscription.status,
+    startsAt: subscription.startsAt.toISOString(),
+    endsAt: subscription.endsAt ? subscription.endsAt.toISOString() : null,
+    graceEndsAt: subscription.graceEndsAt ? subscription.graceEndsAt.toISOString() : null,
+    billingNotes: subscription.billingNotes || '',
+    plan: subscription.plan ? toPlanDto(subscription.plan) : null,
+    createdAt: subscription.createdAt.toISOString(),
+    updatedAt: subscription.updatedAt.toISOString(),
+  };
+}
+
+function toTenantSubscriptionSummaryDto(tenant) {
+  return {
+    tenantId: tenant.id,
+    tenantSlug: tenant.slug,
+    tenantName: tenant.name,
+    tenantStatus: tenant.status,
+    tenantCreatedAt: tenant.createdAt.toISOString(),
+    tenantUpdatedAt: tenant.updatedAt.toISOString(),
+    subscription: tenant.subscription ? toTenantSubscriptionDto(tenant.subscription) : null,
+  };
+}
+
+function toQuotaSummary(used, limit) {
+  const normalizedUsed = Number.isFinite(Number(used)) ? Math.max(0, Number(used)) : 0;
+  const normalizedLimit = Number.isFinite(Number(limit)) ? Number(limit) : 0;
+  const isLimited = normalizedLimit > 0;
+
+  return {
+    used: normalizedUsed,
+    limit: isLimited ? normalizedLimit : null,
+    remaining: isLimited ? Math.max(0, normalizedLimit - normalizedUsed) : null,
+    isUnlimited: !isLimited,
+  };
+}
+
+async function ensureDefaultPlanCatalog(tx) {
+  for (const planDefinition of DEFAULT_PLAN_CATALOG) {
+    const plan = await tx.plan.upsert({
+      where: { code: planDefinition.code },
+      update: {},
+      create: {
+        code: planDefinition.code,
+        name: planDefinition.name,
+        description: planDefinition.description,
+        priceAmount: planDefinition.priceAmount,
+        pricePeriod: planDefinition.pricePeriod,
+        status: planDefinition.status,
+      },
+    });
+
+    const features = normalizePlanFeaturesInput(planDefinition.features);
+    for (const feature of features) {
+      await tx.planFeature.upsert({
+        where: {
+          planId_key: {
+            planId: plan.id,
+            key: feature.key,
+          },
+        },
+        update: {},
+        create: {
+          planId: plan.id,
+          key: feature.key,
+          valueType: feature.valueType,
+          valueJson: feature.valueJson,
+        },
+      });
+    }
+  }
+}
+
+async function getPlanByCode(tx, planCode) {
+  const normalizedCode = normalizePlanCode(planCode);
+  if (!normalizedCode) {
+    throw new Error('Plan code is required');
+  }
+
+  await ensureDefaultPlanCatalog(tx);
+  const plan = await tx.plan.findUnique({
+    where: { code: normalizedCode },
+  });
+
+  if (!plan) {
+    throw new Error('Plan not found');
+  }
+
+  return plan;
+}
+
+async function ensureTenantSubscriptionForTenant(tx, tenantId, options = {}) {
+  const targetTenantId = String(tenantId || '').trim();
+  if (!targetTenantId) {
+    throw new Error('Tenant id is required');
+  }
+
+  const plan = options.planId
+    ? await tx.plan.findUnique({ where: { id: options.planId } })
+    : await getPlanByCode(tx, options.planCode || 'basic');
+
+  if (!plan) {
+    throw new Error('Plan not found');
+  }
+
+  const subscriptionStatus = normalizeSubscriptionStatus(
+    options.status || 'trial',
+  );
+
+  return tx.tenantSubscription.upsert({
+    where: { tenantId: targetTenantId },
+    update: {
+      ...(options.forcePlanUpdate ? { planId: plan.id } : {}),
+      ...(options.forceStatusUpdate ? { status: subscriptionStatus } : {}),
+      ...(options.startsAt instanceof Date ? { startsAt: options.startsAt } : {}),
+      ...(Object.prototype.hasOwnProperty.call(options, 'endsAt') ? { endsAt: options.endsAt } : {}),
+      ...(Object.prototype.hasOwnProperty.call(options, 'graceEndsAt') ? { graceEndsAt: options.graceEndsAt } : {}),
+      ...(Object.prototype.hasOwnProperty.call(options, 'billingNotes') ? { billingNotes: options.billingNotes } : {}),
+    },
+    create: {
+      tenantId: targetTenantId,
+      planId: plan.id,
+      status: subscriptionStatus,
+      startsAt: options.startsAt instanceof Date ? options.startsAt : new Date(),
+      ...(options.endsAt instanceof Date ? { endsAt: options.endsAt } : {}),
+      ...(options.graceEndsAt instanceof Date ? { graceEndsAt: options.graceEndsAt } : {}),
+      ...(typeof options.billingNotes === 'string' ? { billingNotes: options.billingNotes } : {}),
+    },
+  });
 }
 
 async function ensureDefaultTenantAndBranch(tx) {
@@ -407,6 +749,7 @@ export async function initDatabase(env) {
 
   await prisma.$transaction(async (tx) => {
     const defaultTenant = await ensureDefaultTenantAndBranch(tx);
+    await ensureDefaultPlanCatalog(tx);
 
     const adminUser = await tx.user.upsert({
       where: { username: env.adminUsername },
@@ -437,6 +780,11 @@ export async function initDatabase(env) {
         role: 'owner',
         status: 'active',
       },
+    });
+
+    await ensureTenantSubscriptionForTenant(tx, defaultTenant.id, {
+      planCode: 'basic',
+      status: 'active',
     });
 
     for (const categoryName of DEFAULT_CATEGORIES) {
@@ -560,6 +908,8 @@ export async function createItem(payload, context) {
   if (!Number.isFinite(price) || price < 0) {
     throw new Error('Price must be a number >= 0');
   }
+
+  await assertTenantCanCreateItem(tenantId);
 
   const category = await prisma.category.findFirst({
     where: withTenantScope({
@@ -773,6 +1123,8 @@ export async function createRental(payload, context) {
   if (items.length === 0) {
     throw new Error('Rental items are required');
   }
+
+  await assertTenantCanCreateRental(tenantId);
 
   if (!PAYMENT_STATUSES.has(rawPaymentStatus)) {
     throw new Error('Payment status is invalid');
@@ -1229,10 +1581,42 @@ async function ensureCanAdministerTenant({ actorUserId, actorRole, tenantId }) {
 }
 
 export async function listTenantsForUser({ userId, role }) {
-  const isSuperuser = isSuperuserRole(role);
+  const isPlatformAdmin = isPlatformAdminRole(role);
+  const tenantInclude = {
+    memberships: {
+      where: {
+        role: 'owner',
+      },
+      include: {
+        user: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    },
+    subscription: {
+      include: {
+        plan: {
+          include: {
+            features: true,
+            _count: {
+              select: {
+                subscriptions: true,
+              },
+            },
+          },
+        },
+      },
+    },
+    _count: {
+      select: {
+        branches: true,
+        memberships: true,
+      },
+    },
+  };
 
-  if (isSuperuser) {
+  if (isPlatformAdmin) {
     const tenants = await prisma.tenant.findMany({
+      include: tenantInclude,
       orderBy: { createdAt: 'asc' },
     });
 
@@ -1248,7 +1632,9 @@ export async function listTenantsForUser({ userId, role }) {
       },
     },
     include: {
-      tenant: true,
+      tenant: {
+        include: tenantInclude,
+      },
     },
     orderBy: { createdAt: 'asc' },
   });
@@ -1281,6 +1667,535 @@ export async function listPublicActiveTenants() {
     slug: tenant.slug,
     name: tenant.name,
   }));
+}
+
+export async function listPlansForPlatformAdmin() {
+  await ensureDefaultPlanCatalog(prisma);
+
+  const plans = await prisma.plan.findMany({
+    include: {
+      features: true,
+      _count: {
+        select: {
+          subscriptions: true,
+        },
+      },
+    },
+    orderBy: [
+      { priceAmount: 'asc' },
+      { createdAt: 'asc' },
+    ],
+  });
+
+  return plans.map(toPlanDto);
+}
+
+export async function createPlanForPlatformAdmin(payload) {
+  const code = normalizePlanCode(payload?.code);
+  const name = String(payload?.name || '').trim();
+  const description = typeof payload?.description === 'string' ? payload.description.trim() : '';
+  const priceAmount = Number(payload?.priceAmount ?? 0);
+  const pricePeriod = normalizePlanPricePeriod(payload?.pricePeriod);
+  const status = normalizePlanStatus(payload?.status);
+  const features = normalizePlanFeaturesInput(payload?.features);
+
+  if (!code) {
+    throw new Error('Plan code is required');
+  }
+
+  if (!name) {
+    throw new Error('Plan name is required');
+  }
+
+  if (!Number.isFinite(priceAmount) || !Number.isInteger(priceAmount) || priceAmount < 0) {
+    throw new Error('Plan price amount is invalid');
+  }
+
+  const existing = await prisma.plan.findUnique({
+    where: { code },
+  });
+  if (existing) {
+    throw new Error('Plan code already exists');
+  }
+
+  const created = await prisma.$transaction(async (tx) => {
+    const plan = await tx.plan.create({
+      data: {
+        code,
+        name,
+        description: description || null,
+        priceAmount,
+        pricePeriod,
+        status,
+      },
+    });
+
+    if (features.length > 0) {
+      await tx.planFeature.createMany({
+        data: features.map((feature) => ({
+          planId: plan.id,
+          key: feature.key,
+          valueType: feature.valueType,
+          valueJson: feature.valueJson,
+        })),
+      });
+    }
+
+    return tx.plan.findUnique({
+      where: { id: plan.id },
+      include: {
+        features: true,
+        _count: {
+          select: {
+            subscriptions: true,
+          },
+        },
+      },
+    });
+  });
+
+  if (!created) {
+    throw new Error('Failed to create plan');
+  }
+
+  return toPlanDto(created);
+}
+
+export async function updatePlanForPlatformAdmin(planId, payload) {
+  const targetPlanId = String(planId || '').trim();
+  if (!targetPlanId) {
+    throw new Error('Plan id is required');
+  }
+
+  const existing = await prisma.plan.findUnique({
+    where: { id: targetPlanId },
+  });
+  if (!existing) {
+    throw new Error('Plan not found');
+  }
+
+  const nextCodeRaw = typeof payload?.code === 'string' ? normalizePlanCode(payload.code) : undefined;
+  const nextName = typeof payload?.name === 'string' ? payload.name.trim() : undefined;
+  const nextDescription = typeof payload?.description === 'string' ? payload.description.trim() : undefined;
+  const nextPriceAmount = payload?.priceAmount == null ? undefined : Number(payload.priceAmount);
+  const nextPricePeriod = typeof payload?.pricePeriod === 'string'
+    ? normalizePlanPricePeriod(payload.pricePeriod)
+    : undefined;
+  const nextStatus = typeof payload?.status === 'string'
+    ? normalizePlanStatus(payload.status)
+    : undefined;
+  const nextFeatures = Array.isArray(payload?.features)
+    ? normalizePlanFeaturesInput(payload.features)
+    : undefined;
+
+  if (nextCodeRaw === '') {
+    throw new Error('Plan code is required');
+  }
+
+  if (nextName === '') {
+    throw new Error('Plan name is required');
+  }
+
+  if (
+    typeof nextPriceAmount === 'number'
+    && (!Number.isFinite(nextPriceAmount) || !Number.isInteger(nextPriceAmount) || nextPriceAmount < 0)
+  ) {
+    throw new Error('Plan price amount is invalid');
+  }
+
+  if (nextCodeRaw && nextCodeRaw !== existing.code) {
+    const duplicate = await prisma.plan.findUnique({
+      where: { code: nextCodeRaw },
+    });
+    if (duplicate) {
+      throw new Error('Plan code already exists');
+    }
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.plan.update({
+      where: { id: existing.id },
+      data: {
+        ...(typeof nextCodeRaw === 'string' ? { code: nextCodeRaw } : {}),
+        ...(typeof nextName === 'string' ? { name: nextName } : {}),
+        ...(typeof nextDescription === 'string' ? { description: nextDescription || null } : {}),
+        ...(typeof nextPriceAmount === 'number' ? { priceAmount: nextPriceAmount } : {}),
+        ...(typeof nextPricePeriod === 'string' ? { pricePeriod: nextPricePeriod } : {}),
+        ...(typeof nextStatus === 'string' ? { status: nextStatus } : {}),
+      },
+    });
+
+    if (Array.isArray(nextFeatures)) {
+      await tx.planFeature.deleteMany({
+        where: { planId: existing.id },
+      });
+
+      if (nextFeatures.length > 0) {
+        await tx.planFeature.createMany({
+          data: nextFeatures.map((feature) => ({
+            planId: existing.id,
+            key: feature.key,
+            valueType: feature.valueType,
+            valueJson: feature.valueJson,
+          })),
+        });
+      }
+    }
+
+    return tx.plan.findUnique({
+      where: { id: existing.id },
+      include: {
+        features: true,
+        _count: {
+          select: {
+            subscriptions: true,
+          },
+        },
+      },
+    });
+  });
+
+  if (!updated) {
+    throw new Error('Failed to update plan');
+  }
+
+  return toPlanDto(updated);
+}
+
+export async function listTenantSubscriptionsForPlatformAdmin() {
+  await ensureDefaultPlanCatalog(prisma);
+
+  const tenants = await prisma.tenant.findMany({
+    include: {
+      subscription: {
+        include: {
+          plan: {
+            include: {
+              features: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  return tenants.map(toTenantSubscriptionSummaryDto);
+}
+
+export async function updateTenantSubscriptionForPlatformAdmin(tenantId, payload) {
+  const targetTenantId = String(tenantId || '').trim();
+  if (!targetTenantId) {
+    throw new Error('Tenant id is required');
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: targetTenantId },
+    include: {
+      subscription: true,
+    },
+  });
+  if (!tenant) {
+    throw new Error('Tenant not found');
+  }
+
+  const nextStartsAt = typeof payload?.startsAt === 'string'
+    ? parseIsoDate(payload.startsAt, 'startsAt')
+    : undefined;
+  const nextEndsAt = Object.prototype.hasOwnProperty.call(payload || {}, 'endsAt')
+    ? parseOptionalIsoDate(payload.endsAt, 'endsAt')
+    : undefined;
+  const nextGraceEndsAt = Object.prototype.hasOwnProperty.call(payload || {}, 'graceEndsAt')
+    ? parseOptionalIsoDate(payload.graceEndsAt, 'graceEndsAt')
+    : undefined;
+  const nextBillingNotes = typeof payload?.billingNotes === 'string'
+    ? payload.billingNotes.trim()
+    : undefined;
+  const nextStatus = typeof payload?.status === 'string'
+    ? normalizeSubscriptionStatus(payload.status)
+    : undefined;
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await ensureDefaultPlanCatalog(tx);
+
+    const existingSubscription = await tx.tenantSubscription.findUnique({
+      where: { tenantId: tenant.id },
+    });
+
+    let planId = existingSubscription?.planId || '';
+    if (typeof payload?.planId === 'string') {
+      const targetPlan = await tx.plan.findUnique({
+        where: { id: payload.planId.trim() },
+      });
+      if (!targetPlan) {
+        throw new Error('Plan not found');
+      }
+      planId = targetPlan.id;
+    }
+
+    if (!planId) {
+      const fallbackPlan = await getPlanByCode(tx, 'basic');
+      planId = fallbackPlan.id;
+    }
+
+    await ensureTenantSubscriptionForTenant(tx, tenant.id, {
+      planId,
+      status: nextStatus || existingSubscription?.status || (tenant.status === 'active' ? 'active' : 'trial'),
+      startsAt: nextStartsAt || existingSubscription?.startsAt || new Date(),
+      endsAt: nextEndsAt === undefined ? existingSubscription?.endsAt : nextEndsAt,
+      graceEndsAt: nextGraceEndsAt === undefined ? existingSubscription?.graceEndsAt : nextGraceEndsAt,
+      billingNotes: nextBillingNotes === undefined ? existingSubscription?.billingNotes : nextBillingNotes,
+      forcePlanUpdate: true,
+      forceStatusUpdate: true,
+    });
+
+    const updatedSubscription = await tx.tenantSubscription.findUnique({
+      where: { tenantId: tenant.id },
+      include: {
+        plan: {
+          include: {
+            features: true,
+          },
+        },
+      },
+    });
+
+    return {
+      ...tenant,
+      subscription: updatedSubscription,
+    };
+  });
+
+  return toTenantSubscriptionSummaryDto(updated);
+}
+
+async function resolveTenantSubscriptionForTenant(tenantId, client = prisma) {
+  const targetTenantId = String(tenantId || '').trim();
+  if (!targetTenantId) {
+    throw new Error('Tenant id is required');
+  }
+
+  await ensureDefaultPlanCatalog(client);
+
+  const tenant = await client.tenant.findUnique({
+    where: { id: targetTenantId },
+    include: {
+      subscription: {
+        include: {
+          plan: {
+            include: {
+              features: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!tenant) {
+    throw new Error('Tenant not found');
+  }
+
+  if (tenant.subscription?.plan) {
+    return tenant.subscription;
+  }
+
+  await ensureTenantSubscriptionForTenant(client, tenant.id, {
+    planCode: 'basic',
+    status: tenant.status === 'active' ? 'active' : 'trial',
+    forceStatusUpdate: true,
+  });
+
+  const subscription = await client.tenantSubscription.findUnique({
+    where: { tenantId: tenant.id },
+    include: {
+      plan: {
+        include: {
+          features: true,
+        },
+      },
+    },
+  });
+
+  if (!subscription) {
+    throw new Error('Tenant subscription not found');
+  }
+
+  return subscription;
+}
+
+function getEntitlementValue(subscription, key, fallback = null) {
+  const features = Array.isArray(subscription?.plan?.features) ? subscription.plan.features : [];
+  const feature = features.find((item) => item.key === key);
+  return feature ? feature.valueJson : fallback;
+}
+
+function getBooleanEntitlement(subscription, key, fallback = false) {
+  const value = getEntitlementValue(subscription, key, fallback);
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function getIntegerEntitlement(subscription, key, fallback = 0) {
+  const value = Number(getEntitlementValue(subscription, key, fallback));
+  if (!Number.isFinite(value) || !Number.isInteger(value)) {
+    return fallback;
+  }
+
+  return value;
+}
+
+function createFeatureDisabledError(featureLabel) {
+  return new Error(`Feature not available in current plan: ${featureLabel}`);
+}
+
+function createPlanLimitExceededError(limitLabel, limitValue) {
+  return new Error(`Plan limit exceeded: ${limitLabel} maksimal ${limitValue}`);
+}
+
+async function assertTenantCanCreateBranch(tenantId) {
+  const subscription = await resolveTenantSubscriptionForTenant(tenantId);
+  if (!getBooleanEntitlement(subscription, 'canManageBranches', true)) {
+    throw createFeatureDisabledError('branch management');
+  }
+
+  const maxBranches = getIntegerEntitlement(subscription, 'maxBranches', 0);
+  if (maxBranches > 0) {
+    const currentCount = await prisma.branch.count({
+      where: { tenantId },
+    });
+
+    if (currentCount >= maxBranches) {
+      throw createPlanLimitExceededError('cabang', maxBranches);
+    }
+  }
+}
+
+async function assertTenantCanCreateItem(tenantId) {
+  const subscription = await resolveTenantSubscriptionForTenant(tenantId);
+  const maxItems = getIntegerEntitlement(subscription, 'maxItems', 0);
+  if (maxItems > 0) {
+    const currentCount = await prisma.item.count({
+      where: { tenantId },
+    });
+
+    if (currentCount >= maxItems) {
+      throw createPlanLimitExceededError('item inventaris', maxItems);
+    }
+  }
+}
+
+async function assertTenantCanCreateRental(tenantId) {
+  const subscription = await resolveTenantSubscriptionForTenant(tenantId);
+  const maxMonthlyTransactions = getIntegerEntitlement(subscription, 'maxMonthlyTransactions', 0);
+  if (maxMonthlyTransactions > 0) {
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const currentCount = await prisma.rental.count({
+      where: {
+        tenantId,
+        deletedAt: null,
+        date: {
+          gte: periodStart,
+          lt: periodEnd,
+        },
+      },
+    });
+
+    if (currentCount >= maxMonthlyTransactions) {
+      throw createPlanLimitExceededError('transaksi bulanan', maxMonthlyTransactions);
+    }
+  }
+}
+
+async function assertTenantCanCreateTenantUser(tenantId) {
+  const subscription = await resolveTenantSubscriptionForTenant(tenantId);
+  if (!getBooleanEntitlement(subscription, 'canManageStaff', true)) {
+    throw createFeatureDisabledError('staff management');
+  }
+
+  const maxTenantUsers = getIntegerEntitlement(subscription, 'maxTenantUsers', 0);
+  if (maxTenantUsers > 0) {
+    const currentCount = await prisma.userMembership.count({
+      where: {
+        tenantId,
+        status: 'active',
+      },
+    });
+
+    if (currentCount >= maxTenantUsers) {
+      throw createPlanLimitExceededError('user toko aktif', maxTenantUsers);
+    }
+  }
+}
+
+export async function getTenantSubscriptionSummaryForUser({
+  userId,
+  role,
+  requestedTenantId,
+}) {
+  const tenant = await resolveTenantForUser({
+    userId,
+    role,
+    requestedTenantId: requestedTenantId || 'current',
+  });
+
+  const subscription = await resolveTenantSubscriptionForTenant(tenant.id);
+  const maxBranches = getIntegerEntitlement(subscription, 'maxBranches', 0);
+  const maxItems = getIntegerEntitlement(subscription, 'maxItems', 0);
+  const maxMonthlyTransactions = getIntegerEntitlement(subscription, 'maxMonthlyTransactions', 0);
+  const maxTenantUsers = getIntegerEntitlement(subscription, 'maxTenantUsers', 0);
+
+  const now = new Date();
+  const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+  const [branchCount, itemCount, monthlyTransactionCount, activeUserCount] = await Promise.all([
+    prisma.branch.count({
+      where: { tenantId: tenant.id },
+    }),
+    prisma.item.count({
+      where: { tenantId: tenant.id },
+    }),
+    prisma.rental.count({
+      where: {
+        tenantId: tenant.id,
+        deletedAt: null,
+        date: {
+          gte: periodStart,
+          lt: periodEnd,
+        },
+      },
+    }),
+    prisma.userMembership.count({
+      where: {
+        tenantId: tenant.id,
+        status: 'active',
+      },
+    }),
+  ]);
+
+  return {
+    tenantId: tenant.id,
+    tenantName: tenant.name,
+    tenantSlug: tenant.slug,
+    tenantStatus: tenant.status,
+    subscription: toTenantSubscriptionDto(subscription),
+    usage: {
+      periodKey: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+      branches: toQuotaSummary(branchCount, maxBranches),
+      items: toQuotaSummary(itemCount, maxItems),
+      monthlyTransactions: toQuotaSummary(monthlyTransactionCount, maxMonthlyTransactions),
+      activeUsers: toQuotaSummary(activeUserCount, maxTenantUsers),
+    },
+    features: {
+      canManageBranches: getBooleanEntitlement(subscription, 'canManageBranches', true),
+      canManageStaff: getBooleanEntitlement(subscription, 'canManageStaff', true),
+      canUseFinancialRecap: getBooleanEntitlement(subscription, 'canUseFinancialRecap', false),
+      canUseMultiBranch: getBooleanEntitlement(subscription, 'canUseMultiBranch', false),
+      canExportData: getBooleanEntitlement(subscription, 'canExportData', false),
+    },
+  };
 }
 
 export async function createTenantForSuperuser(payload) {
@@ -1361,6 +2276,12 @@ export async function createTenantForSuperuser(payload) {
         rentalCutoffHour: DEFAULT_TENANT_SETTINGS.rentalCutoffHour,
         rentalCutoffMinute: DEFAULT_TENANT_SETTINGS.rentalCutoffMinute,
       },
+    });
+
+    await ensureTenantSubscriptionForTenant(tx, createdTenant.id, {
+      planCode: 'basic',
+      status: tenantStatus === 'active' ? 'active' : 'trial',
+      forceStatusUpdate: true,
     });
 
     if (ownerUserId) {
@@ -1521,6 +2442,8 @@ export async function createBranchForUser({
   if (status !== 'active' && status !== 'inactive') {
     throw new Error('Branch status is invalid');
   }
+
+  await assertTenantCanCreateBranch(tenant.id);
 
   const duplicate = await prisma.branch.findFirst({
     where: {
@@ -3023,6 +3946,8 @@ export async function createTenantUserForUser({
     throw new Error('Tenant role is invalid');
   }
 
+  await assertTenantCanCreateTenantUser(tenant.id);
+
   const existingUser = await prisma.user.findUnique({
     where: { username: normalizedUsername },
   });
@@ -3150,6 +4075,12 @@ export async function createSelfRegisteredTenantUser({
         rentalCutoffHour: DEFAULT_TENANT_SETTINGS.rentalCutoffHour,
         rentalCutoffMinute: DEFAULT_TENANT_SETTINGS.rentalCutoffMinute,
       },
+    });
+
+    await ensureTenantSubscriptionForTenant(tx, tenant.id, {
+      planCode: 'basic',
+      status: 'trial',
+      forceStatusUpdate: true,
     });
 
     const user = await tx.user.create({
