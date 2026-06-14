@@ -29,6 +29,68 @@ model Tenant {
   branches       Branch[]
   settings       TenantSettings?
   memberships    UserMembership[]
+  subscription   TenantSubscription?
+}
+
+model Plan {
+  id            String               @id @default(cuid())
+  code          String               @unique
+  name          String
+  description   String?
+  priceAmount   Int                  @default(0)
+  pricePeriod   String               @default("monthly")
+  status        String               @default("active")
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  features      PlanFeature[]
+  subscriptions TenantSubscription[]
+}
+
+model PlanFeature {
+  id         String   @id @default(cuid())
+  planId     String
+  key        String
+  valueType  String
+  valueJson  Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  plan       Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, key])
+  @@index([key])
+}
+
+model TenantSubscription {
+  id             String                @id @default(cuid())
+  tenantId        String                @unique
+  planId          String
+  status          String                @default("trial")
+  startsAt        DateTime              @default(now())
+  endsAt          DateTime?
+  graceEndsAt     DateTime?
+  billingNotes    String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan            Plan                  @relation(fields: [planId], references: [id], onDelete: Restrict)
+  usageSnapshots  TenantUsageSnapshot[]
+
+  @@index([planId, status])
+}
+
+model TenantUsageSnapshot {
+  id                     String             @id @default(cuid())
+  tenantSubscriptionId   String
+  periodKey              String
+  branchCount            Int                @default(0)
+  itemCount              Int                @default(0)
+  monthlyTransactionCount Int               @default(0)
+  activeUserCount        Int                @default(0)
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  tenantSubscription     TenantSubscription @relation(fields: [tenantSubscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantSubscriptionId, periodKey])
 }
 
 model Branch {

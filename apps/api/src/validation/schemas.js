@@ -84,6 +84,60 @@ export const updateTenantSchema = z.object({
   status: z.enum(['active', 'suspended']).optional(),
 });
 
+const planFeatureSchema = z.object({
+  key: z.string().trim().min(1).max(80),
+  valueType: z.enum(['boolean', 'integer', 'string', 'json']).default('integer'),
+  value: z.unknown(),
+});
+
+export const createPlanSchema = z.object({
+  code: z.string().trim().min(2).max(40),
+  name: z.string().trim().min(2).max(120),
+  description: z.string().trim().max(300).optional(),
+  priceAmount: z.coerce.number().int().min(0).default(0),
+  pricePeriod: z.enum(['monthly', 'yearly', 'custom']).default('monthly'),
+  status: z.enum(['active', 'inactive']).default('active'),
+  features: z.array(planFeatureSchema).max(50).optional().default([]),
+});
+
+export const updatePlanSchema = z.object({
+  code: z.string().trim().min(2).max(40).optional(),
+  name: z.string().trim().min(2).max(120).optional(),
+  description: z.string().trim().max(300).optional(),
+  priceAmount: z.coerce.number().int().min(0).optional(),
+  pricePeriod: z.enum(['monthly', 'yearly', 'custom']).optional(),
+  status: z.enum(['active', 'inactive']).optional(),
+  features: z.array(planFeatureSchema).max(50).optional(),
+}).refine((payload) => (
+  typeof payload.code === 'string'
+  || typeof payload.name === 'string'
+  || typeof payload.description === 'string'
+  || typeof payload.priceAmount === 'number'
+  || typeof payload.pricePeriod === 'string'
+  || typeof payload.status === 'string'
+  || Array.isArray(payload.features)
+), {
+  message: 'At least one field is required',
+});
+
+export const updateTenantSubscriptionSchema = z.object({
+  planId: z.string().trim().min(1).optional(),
+  status: z.enum(['trial', 'active', 'suspended', 'expired']).optional(),
+  startsAt: z.string().datetime().optional(),
+  endsAt: z.union([z.string().datetime(), z.null()]).optional(),
+  graceEndsAt: z.union([z.string().datetime(), z.null()]).optional(),
+  billingNotes: z.string().trim().max(300).optional(),
+}).refine((payload) => (
+  typeof payload.planId === 'string'
+  || typeof payload.status === 'string'
+  || typeof payload.startsAt === 'string'
+  || Object.prototype.hasOwnProperty.call(payload, 'endsAt')
+  || Object.prototype.hasOwnProperty.call(payload, 'graceEndsAt')
+  || typeof payload.billingNotes === 'string'
+), {
+  message: 'At least one field is required',
+});
+
 export const createBranchSchema = z.object({
   tenantId: z.string().trim().min(1).optional(),
   code: z.string().trim().min(2).max(40),

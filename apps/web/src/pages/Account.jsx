@@ -1,5 +1,17 @@
 import React, { useEffect, useState } from 'react'
-import { changeMyPassword } from '../lib/api'
+import { changeMyPassword, fetchCurrentTenantSubscriptionSummary } from '../lib/api'
+
+function formatQuota(quota) {
+    if (!quota || typeof quota !== 'object') {
+        return '-'
+    }
+
+    if (quota.isUnlimited) {
+        return `${quota.used} dipakai / tak terbatas`
+    }
+
+    return `${quota.used} / ${quota.limit} dipakai • sisa ${quota.remaining}`
+}
 
 const Account = ({
     currentUser,
@@ -37,6 +49,9 @@ const Account = ({
     const [isSubmittingBranchStore, setIsSubmittingBranchStore] = useState(false)
     const [branchStoreMessage, setBranchStoreMessage] = useState('')
     const [branchStoreErrorMessage, setBranchStoreErrorMessage] = useState('')
+    const [subscriptionSummary, setSubscriptionSummary] = useState(null)
+    const [isSubscriptionLoading, setIsSubscriptionLoading] = useState(true)
+    const [subscriptionErrorMessage, setSubscriptionErrorMessage] = useState('')
 
     useEffect(() => {
         setStoreForm({
@@ -72,6 +87,41 @@ const Account = ({
                 : '',
         })
     }, [branchSettings])
+
+    useEffect(() => {
+        let isActive = true
+
+        const loadSubscriptionSummary = async () => {
+            setIsSubscriptionLoading(true)
+            setSubscriptionErrorMessage('')
+
+            try {
+                const summary = await fetchCurrentTenantSubscriptionSummary()
+                if (!isActive) {
+                    return
+                }
+
+                setSubscriptionSummary(summary || null)
+            } catch (error) {
+                if (!isActive) {
+                    return
+                }
+
+                const messageText = error instanceof Error ? error.message : 'Gagal memuat paket tenant.'
+                setSubscriptionErrorMessage(messageText)
+            } finally {
+                if (isActive) {
+                    setIsSubscriptionLoading(false)
+                }
+            }
+        }
+
+        void loadSubscriptionSummary()
+
+        return () => {
+            isActive = false
+        }
+    }, [tenantSettings?.tenantId])
 
     const handleSubmit = async (event) => {
         event.preventDefault()
@@ -183,6 +233,82 @@ const Account = ({
             <section className="bg-sidebar-bg/60 border border-border rounded-DEFAULT p-6 mb-6">
                 <h3 className="text-[1.1rem] font-bold text-text-main mb-1">Informasi Akun</h3>
                 <p className="text-text-muted text-sm">Akun login saat ini: <span className="text-text-main font-medium">{currentUser?.username}</span> ({currentUser?.role})</p>
+            </section>
+
+            <section className="bg-sidebar-bg/60 border border-border rounded-DEFAULT p-6 mb-6">
+                <h3 className="text-[1.1rem] font-bold text-text-main mb-1">Paket & Kuota Tenant</h3>
+                <p className="text-text-muted text-sm mb-5">
+                    Ringkasan paket aktif dan sisa kuota toko kamu saat ini.
+                </p>
+
+                {subscriptionErrorMessage && (
+                    <div className="mb-4 rounded-lg border border-[#e74c3c]/40 bg-[#e74c3c]/10 p-3 text-sm text-[#f3b2ad]">{subscriptionErrorMessage}</div>
+                )}
+
+                {isSubscriptionLoading ? (
+                    <div className="text-text-muted">Memuat paket tenant...</div>
+                ) : subscriptionSummary ? (
+                    <>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-5">
+                            <div className="rounded-lg border border-border/50 bg-bg-main/30 p-4">
+                                <p className="text-xs uppercase tracking-wide text-text-muted">Paket Aktif</p>
+                                <p className="mt-2 text-[1.1rem] font-bold text-text-main">{subscriptionSummary.subscription?.plan?.name || 'Belum ada paket'}</p>
+                                <p className="mt-1 text-xs text-text-muted">{subscriptionSummary.subscription?.plan?.pricePeriod || '-'}</p>
+                            </div>
+                            <div className="rounded-lg border border-border/50 bg-bg-main/30 p-4">
+                                <p className="text-xs uppercase tracking-wide text-text-muted">Status Subscription</p>
+                                <p className="mt-2 text-[1.1rem] font-bold capitalize text-text-main">{subscriptionSummary.subscription?.status || '-'}</p>
+                                <p className="mt-1 text-xs text-text-muted">Tenant: {subscriptionSummary.tenantStatus}</p>
+                            </div>
+                            <div className="rounded-lg border border-border/50 bg-bg-main/30 p-4">
+                                <p className="text-xs uppercase tracking-wide text-text-muted">Periode Pakai</p>
+                                <p className="mt-2 text-[1.1rem] font-bold text-text-main">{subscriptionSummary.usage?.periodKey || '-'}</p>
+                                <p className="mt-1 text-xs text-text-muted">{subscriptionSummary.tenantName}</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mb-5">
+                            <div className="rounded-lg border border-border/50 bg-bg-main/30 p-4">
+                                <p className="text-sm font-semibold text-text-main">Kuota Cabang</p>
+                                <p className="mt-1 text-sm text-text-muted">{formatQuota(subscriptionSummary.usage?.branches)}</p>
+                            </div>
+                            <div className="rounded-lg border border-border/50 bg-bg-main/30 p-4">
+                                <p className="text-sm font-semibold text-text-main">Kuota Item Inventaris</p>
+                                <p className="mt-1 text-sm text-text-muted">{formatQuota(subscriptionSummary.usage?.items)}</p>
+                            </div>
+                            <div className="rounded-lg border border-border/50 bg-bg-main/30 p-4">
+                                <p className="text-sm font-semibold text-text-main">Kuota Transaksi Bulanan</p>
+                                <p className="mt-1 text-sm text-text-muted">{formatQuota(subscriptionSummary.usage?.monthlyTransactions)}</p>
+                            </div>
+                            <div className="rounded-lg border border-border/50 bg-bg-main/30 p-4">
+                                <p className="text-sm font-semibold text-text-main">Kuota User Toko Aktif</p>
+                                <p className="mt-1 text-sm text-text-muted">{formatQuota(subscriptionSummary.usage?.activeUsers)}</p>
+                            </div>
+                        </div>
+
+                        <div className="rounded-lg border border-border/50 bg-bg-main/30 p-4">
+                            <p className="text-sm font-semibold text-text-main mb-3">Fitur yang Aktif</p>
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                {[
+                                    ['Kelola cabang', subscriptionSummary.features?.canManageBranches],
+                                    ['Kelola staff toko', subscriptionSummary.features?.canManageStaff],
+                                    ['Rekap keuangan', subscriptionSummary.features?.canUseFinancialRecap],
+                                    ['Multi-branch', subscriptionSummary.features?.canUseMultiBranch],
+                                    ['Export data', subscriptionSummary.features?.canExportData],
+                                ].map(([label, enabled]) => (
+                                    <div key={label} className="flex items-center justify-between rounded-lg border border-border/40 bg-sidebar-bg/40 px-3 py-2">
+                                        <span className="text-sm text-text-main">{label}</span>
+                                        <span className={`text-xs font-semibold uppercase tracking-wide ${enabled ? 'text-[#6ee7a8]' : 'text-text-muted'}`}>
+                                            {enabled ? 'Aktif' : 'Nonaktif'}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <div className="text-text-muted">Data paket tenant belum tersedia.</div>
+                )}
             </section>
 
             <section className="bg-sidebar-bg/60 border border-border rounded-DEFAULT p-6 mb-6">
