@@ -127,6 +127,20 @@ describe('application state orchestration', () => {
     expect(fetchItems).not.toHaveBeenCalled();
   });
 
+  it('redirects platform administrators away from the cashier shell', async () => {
+    const admin = { id: 'admin-1', username: 'platform', role: 'superuser' };
+    getStoredSession.mockReturnValue({ token: 'admin-token', user: admin });
+    fetchCurrentUser.mockResolvedValue(admin);
+    fetchPlans.mockResolvedValue([]);
+    renderApp('/dashboard');
+
+    expect(await screen.findByText('Avia Admin')).toBeInTheDocument();
+    expect(await screen.findByText('Ringkasan platform')).toBeInTheDocument();
+    expect(fetchTenants).toHaveBeenCalledWith('admin/tenants');
+    expect(fetchBranches).not.toHaveBeenCalled();
+    expect(fetchDashboardSummary).not.toHaveBeenCalled();
+  });
+
   it('keeps an administrator in the cashier app when the URL is not /admin', async () => {
     const admin = { id: 'admin-1', username: 'platform', role: 'admin' };
     getStoredSession.mockReturnValue({ token: 'admin-token', user: admin });

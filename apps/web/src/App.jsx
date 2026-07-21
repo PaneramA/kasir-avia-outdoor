@@ -120,7 +120,7 @@ function App() {
   )
   const currentUser = session.token ? (authQuery.data || session.user || null) : null
   const isPlatformAdminUser = useMemo(() => isPlatformAdmin(currentUser), [currentUser])
-  const shouldLoadOperationalData = Boolean(currentUser) && !isAdminPath
+  const shouldLoadOperationalData = Boolean(currentUser) && !isAdminPath && !isPlatformAdminUser
   const isAuthInitializing = Boolean(session.token) && !currentUser && authQuery.isLoading
 
   const tenantQuery = useSWR(
@@ -733,6 +733,10 @@ function App() {
         </ErrorBoundary>
       </AdminLayout>
     )
+  }
+
+  if (isPlatformAdminUser) {
+    return <Navigate to={APP_ROUTES.admin} replace />
   }
 
   return (
