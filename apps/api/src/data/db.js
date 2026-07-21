@@ -126,8 +126,7 @@ function isSuperuserRole(rawRole) {
 }
 
 function isPlatformAdminRole(rawRole) {
-  const normalized = normalizeRole(rawRole);
-  return normalized === 'admin' || normalized === 'superuser';
+  return isSuperuserRole(rawRole);
 }
 
 function normalizeRentalStatus(rawStatus) {
@@ -755,12 +754,12 @@ export async function initDatabase(env) {
     const adminUser = await tx.user.upsert({
       where: { username: env.adminUsername },
       update: {
-        role: 'admin',
+        role: 'superuser',
       },
       create: {
         username: env.adminUsername,
         passwordHash: hashPassword(env.adminPassword, env.passwordPepper),
-        role: 'admin',
+        role: 'superuser',
       },
     });
 

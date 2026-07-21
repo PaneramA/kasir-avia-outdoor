@@ -54,6 +54,9 @@ Sebelum push ke production, ubah nilai ini di `.env`:
 
 Server akan menampilkan warning saat nilai default masih dipakai.
 
+Default development saat env kosong: `ADMIN_USERNAME=admin@gmail.com` dan `ADMIN_PASSWORD=adminavo123`.
+Gunakan akun ini untuk `/admin`; akun toko/kasir tetap dibuat dari panel admin atau pengaturan tim tenant.
+
 Catatan: hash password lama akan di-upgrade otomatis ke format hash terbaru saat user berhasil login.
 Catatan: endpoint login akan mengembalikan `429 Too Many Requests` saat limit gagal login terlampaui.
 Catatan: `CORS_ORIGIN` mendukung beberapa origin dengan format comma-separated.

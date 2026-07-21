@@ -96,7 +96,7 @@ function PageLoader() {
 
 function isPlatformAdmin(user) {
   const role = String(user?.role || '').trim().toLowerCase()
-  return role === 'admin' || role === 'superuser'
+  return role === 'superuser'
 }
 
 function App() {
@@ -119,7 +119,7 @@ function App() {
     { fallbackData: session.user || undefined, keepPreviousData: false },
   )
   const currentUser = session.token ? (authQuery.data || session.user || null) : null
-  const isAdminLikeUser = useMemo(() => isPlatformAdmin(currentUser), [currentUser])
+  const isPlatformAdminUser = useMemo(() => isPlatformAdmin(currentUser), [currentUser])
   const shouldLoadOperationalData = Boolean(currentUser) && !isAdminPath
   const isAuthInitializing = Boolean(session.token) && !currentUser && authQuery.isLoading
 
@@ -300,6 +300,11 @@ function App() {
 
     try {
       const user = await login(username, password)
+      if (isPlatformAdmin(user)) {
+        logout()
+        setSession({ token: '', user: null })
+        throw new Error('Akun platform admin hanya bisa masuk lewat /admin.')
+      }
       setSession(getStoredSession())
       await authQuery.mutate(user, { revalidate: false })
     } catch (error) {
@@ -698,7 +703,7 @@ function App() {
   }
 
   if (isAdminPath) {
-    if (!isAdminLikeUser) {
+    if (!isPlatformAdminUser) {
       return (
         <AdminLogin
           onLogin={handleAdminLogin}
@@ -880,7 +885,7 @@ function App() {
             />
             <Route
               path={APP_ROUTES.adminAccount}
-              element={isAdminLikeUser ? (
+              element={isPlatformAdminUser ? (
                 <Account
                   currentUser={currentUser}
                   tenantSettings={tenantSettings}

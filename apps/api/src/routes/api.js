@@ -342,13 +342,7 @@ export async function apiRoute(req, res, env) {
   };
 
   const ensurePlatformAdmin = async () => {
-    const user = await ensureAuth();
-    const role = normalizeRole(user.role);
-    if (role !== 'admin' && role !== 'superuser') {
-      throw new Error('Forbidden');
-    }
-
-    return user;
+    return ensureSuperuser();
   };
 
   const ensureRequestContext = async () => {
@@ -821,7 +815,7 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'GET' && pathname === '/api/users') {
-      await ensureAdmin();
+      await ensurePlatformAdmin();
       sendSuccess(res, 200, await listUsers());
       return true;
     }
@@ -858,7 +852,7 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'POST' && pathname === '/api/users') {
-      await ensureAdmin();
+      await ensurePlatformAdmin();
       const body = createUserSchema.parse(await readJsonBody(req));
       const created = await createUser(body, env.passwordPepper);
       sendSuccess(res, 201, created);
@@ -866,7 +860,7 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'PATCH' && pathname.startsWith('/api/users/') && !pathname.endsWith('/password')) {
-      await ensureAdmin();
+      await ensurePlatformAdmin();
       const userId = decodeURIComponent(pathname.replace('/api/users/', ''));
       const body = updateUserSchema.parse(await readJsonBody(req));
       const updated = await updateUserByAdmin(userId, body);
@@ -875,7 +869,7 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'DELETE' && pathname.startsWith('/api/users/') && !pathname.endsWith('/password')) {
-      const adminUser = await ensureAdmin();
+      const adminUser = await ensurePlatformAdmin();
       const userId = decodeURIComponent(pathname.replace('/api/users/', ''));
       const removed = await deleteUserByAdmin(adminUser.id, userId);
       sendSuccess(res, 200, removed);
@@ -891,7 +885,7 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'PATCH' && pathname.startsWith('/api/users/') && pathname.endsWith('/password')) {
-      await ensureAdmin();
+      await ensurePlatformAdmin();
       const userId = decodeURIComponent(pathname.replace('/api/users/', '').replace('/password', ''));
       const body = adminChangePasswordSchema.parse(await readJsonBody(req));
       const result = await changeUserPasswordByAdmin(userId, body.newPassword, env.passwordPepper);

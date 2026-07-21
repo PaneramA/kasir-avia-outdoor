@@ -141,6 +141,17 @@ describe('application state orchestration', () => {
     expect(fetchItems).not.toHaveBeenCalled();
   });
 
+  it('does not allow tenant admin accounts into the platform admin panel', async () => {
+    const tenantAdmin = { id: 'admin-tenant-1', username: 'tenant-admin', role: 'admin' };
+    getStoredSession.mockReturnValue({ token: 'tenant-admin-token', user: tenantAdmin });
+    fetchCurrentUser.mockResolvedValue(tenantAdmin);
+    renderApp('/admin');
+
+    expect(await screen.findByRole('heading', { name: 'Login administrator' })).toBeInTheDocument();
+    expect(screen.getByText(/bukan akun administrator/i)).toBeInTheDocument();
+    expect(fetchPlans).not.toHaveBeenCalled();
+  });
+
   it('restores tenant context and loads the dashboard summary without full operational datasets', async () => {
     const owner = { id: 'owner-1', username: 'owner', role: 'kasir' };
     getStoredSession.mockReturnValue({ token: 'owner-token', user: owner });
