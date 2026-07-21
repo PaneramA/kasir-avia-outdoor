@@ -45,6 +45,7 @@ const Header = ({
     activeBranchId = '',
     onTenantChange,
     onBranchChange,
+    onDataDemandChange,
 }) => {
     const navigate = useNavigate()
     const containerRef = useRef(null)
@@ -305,6 +306,12 @@ const Header = ({
     const showSearchResult = searchQuery.trim().length > 0
     const showInstallButton = !isStandalone && Boolean(installPromptEvent)
     const showIosInstallHint = !isStandalone && !installPromptEvent && isIos
+
+    useEffect(() => {
+        if (typeof onDataDemandChange === 'function') {
+            onDataDemandChange(isNotificationsOpen || searchQuery.trim().length >= 2)
+        }
+    }, [isNotificationsOpen, onDataDemandChange, searchQuery])
 
     return (
         <header ref={containerRef} className="mb-3 flex flex-col gap-4 py-3 sm:mb-4 sm:py-4 lg:flex-row lg:items-center lg:justify-between lg:py-5">

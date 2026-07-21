@@ -1,444 +1,370 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { fetchPlans, fetchTenants, updateTenant, updateTenantSubscription } from '../lib/api'
+import React, { useEffect, useMemo, useState } from 'react'
+import useSWR from 'swr'
+import AdminTenantOnboarding from '../components/AdminTenantOnboarding'
+import { deleteTenant, fetchPlans, fetchTenants, updateTenant, updateTenantSubscription } from '../lib/api'
+import { ADMIN_CACHE_KEYS } from '../lib/adminCache'
 
-function formatDateTime(value) {
-  if (!value) {
-    return '-'
+const featureLabels = {
+  canManageBranches: 'Kelola cabang',
+  canManageStaff: 'Kelola staf',
+  canUseFinancialRecap: 'Rekap keuangan',
+  canUseMultiBranch: 'Multi cabang',
+  canExportData: 'Export data',
+}
+
+function toDateInput(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toISOString().slice(0, 10)
+}
+
+function toApiDate(value) {
+  if (!value) return null
+  return new Date(`${value}T23:59:59.999Z`).toISOString()
+}
+
+function buildDraft(tenant, plans) {
+  const subscription = tenant?.subscription || {}
+  return {
+    name: tenant?.name || '',
+    slug: tenant?.slug || '',
+    tenantStatus: tenant?.status || 'suspended',
+    planId: subscription.planId || plans[0]?.id || '',
+    subscriptionStatus: subscription.status || 'trial',
+    startsAt: toDateInput(subscription.startsAt),
+    endsAt: toDateInput(subscription.endsAt),
+    graceEndsAt: toDateInput(subscription.graceEndsAt),
+    billingNotes: subscription.billingNotes || '',
   }
+}
 
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) {
-    return '-'
-  }
-
-  return parsed.toLocaleString('id-ID', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+function getPlanFeature(plan, key, fallback = false) {
+  const feature = Array.isArray(plan?.features) ? plan.features.find((item) => item.key === key) : null
+  return feature ? feature.value : fallback
 }
 
 function formatCurrency(value) {
-  const parsed = Number(value || 0)
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency',
-    currency: 'IDR',
-    maximumFractionDigits: 0,
-  }).format(Number.isFinite(parsed) ? parsed : 0)
-}
-
-function appendReviewNote(existingNotes, decisionLabel, noteText) {
-  const normalizedExisting = String(existingNotes || '').trim()
-  const normalizedNote = String(noteText || '').trim()
-  const timestamp = new Date().toLocaleString('id-ID', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-  const entry = `[${decisionLabel} • ${timestamp}] ${normalizedNote || '-'}`
-
-  return normalizedExisting ? `${normalizedExisting}\n${entry}` : entry
-}
-
-function buildDraftForTenant(tenant, plans) {
-  const activePlans = Array.isArray(plans)
-    ? plans.filter((plan) => String(plan?.status || '').trim().toLowerCase() === 'active')
-    : []
-  const fallbackPlanId = activePlans[0]?.id || plans[0]?.id || ''
-  const subscription = tenant?.subscription || null
-  const tenantStatus = String(tenant?.status || '').trim().toLowerCase()
-
-  return {
-    planId: subscription?.planId || fallbackPlanId,
-    subscriptionStatus: tenantStatus === 'active' ? (subscription?.status || 'active') : 'active',
-    adminNote: '',
-  }
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value || 0))
 }
 
 const AdminRegistrations = () => {
-  const [tenants, setTenants] = useState([])
-  const [plans, setPlans] = useState([])
-  const [draftsByTenantId, setDraftsByTenantId] = useState({})
-  const [expandedTenantId, setExpandedTenantId] = useState('')
-  const [isLoading, setIsLoading] = useState(true)
+  const tenantQuery = useSWR(ADMIN_CACHE_KEYS.tenants, fetchTenants)
+  const planQuery = useSWR(ADMIN_CACHE_KEYS.plans, fetchPlans)
+  const tenants = useMemo(() => Array.isArray(tenantQuery.data) ? tenantQuery.data : [], [tenantQuery.data])
+  const plans = useMemo(() => Array.isArray(planQuery.data) ? planQuery.data : [], [planQuery.data])
+  const [drafts, setDrafts] = useState({})
+  const [selectedTenantId, setSelectedTenantId] = useState('')
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false)
+  const [savingTenantId, setSavingTenantId] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteForm, setDeleteForm] = useState({ confirmationText: '', password: '' })
+  const [isDeleting, setIsDeleting] = useState(false)
   const [message, setMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
-  const [processingTenantId, setProcessingTenantId] = useState('')
-
-  const loadData = useCallback(async () => {
-    setIsLoading(true)
-    setErrorMessage('')
-
-    try {
-      const [tenantData, planData] = await Promise.all([
-        fetchTenants(),
-        fetchPlans(),
-      ])
-
-      const safeTenants = Array.isArray(tenantData) ? tenantData : []
-      const safePlans = Array.isArray(planData) ? planData : []
-
-      setTenants(safeTenants)
-      setPlans(safePlans)
-      setDraftsByTenantId((previousDrafts) => {
-        const nextDrafts = {}
-        safeTenants.forEach((tenant) => {
-          nextDrafts[tenant.id] = previousDrafts[tenant.id] || buildDraftForTenant(tenant, safePlans)
-        })
-        return nextDrafts
-      })
-      setExpandedTenantId((previousTenantId) => (
-        safeTenants.some((tenant) => tenant.id === previousTenantId) ? previousTenantId : safeTenants[0]?.id || ''
-      ))
-    } catch (error) {
-      const messageText = error instanceof Error ? error.message : 'Gagal memuat daftar tenant.'
-      setErrorMessage(messageText)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
 
   useEffect(() => {
-    void loadData()
-  }, [loadData])
+    setDrafts((previous) => tenants.reduce((result, tenant) => ({
+      ...result,
+      [tenant.id]: previous[tenant.id] || buildDraft(tenant, plans),
+    }), {}))
+    setSelectedTenantId((current) => tenants.some((tenant) => tenant.id === current) ? current : (tenants[0]?.id || ''))
+  }, [plans, tenants])
 
-  const pendingTenants = useMemo(
-    () => tenants
-      .filter((tenant) => String(tenant?.status || '').trim().toLowerCase() !== 'active')
-      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
-    [tenants],
-  )
+  const isLoading = tenantQuery.isLoading || planQuery.isLoading
+  const queryError = tenantQuery.error || planQuery.error
+  const queryErrorMessage = queryError instanceof Error ? queryError.message : (queryError ? 'Gagal memuat data toko.' : '')
 
-  const activeTenants = useMemo(
-    () => tenants
-      .filter((tenant) => String(tenant?.status || '').trim().toLowerCase() === 'active')
-      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
-      .slice(0, 8),
-    [tenants],
-  )
+  const handleRefresh = async () => {
+    setErrorMessage('')
+    try {
+      await Promise.all([tenantQuery.mutate(), planQuery.mutate()])
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Gagal memperbarui data toko.')
+    }
+  }
 
-  const activePlans = useMemo(
-    () => plans.filter((plan) => String(plan?.status || '').trim().toLowerCase() === 'active'),
-    [plans],
-  )
+  const handleTenantCreated = async (created) => {
+    const createdTenant = created?.tenant
+    if (!createdTenant?.id) return
+    await tenantQuery.mutate((currentTenants = []) => [
+      createdTenant,
+      ...currentTenants.filter((tenant) => tenant.id !== createdTenant.id),
+    ], { revalidate: false })
+    setSelectedTenantId(createdTenant.id)
+    setMessage(`Toko ${createdTenant.name} dan akun owner berhasil dibuat.`)
+    void tenantQuery.mutate()
+  }
 
-  const getDraft = useCallback((tenant) => (
-    draftsByTenantId[tenant.id] || buildDraftForTenant(tenant, plans)
-  ), [draftsByTenantId, plans])
+  const filteredTenants = useMemo(() => {
+    const keyword = query.trim().toLowerCase()
+    return tenants.filter((tenant) => {
+      const matchesQuery = !keyword || [tenant.name, tenant.slug, ...(tenant.ownerUsernames || [])]
+        .some((value) => String(value || '').toLowerCase().includes(keyword))
+      const matchesStatus = statusFilter === 'all' || String(tenant.status).toLowerCase() === statusFilter
+      return matchesQuery && matchesStatus
+    })
+  }, [query, statusFilter, tenants])
 
-  const updateDraft = useCallback((tenantId, patch) => {
-    setDraftsByTenantId((previousDrafts) => ({
-      ...previousDrafts,
-      [tenantId]: {
-        ...(previousDrafts[tenantId] || {}),
-        ...patch,
-      },
+  const selectedTenant = tenants.find((tenant) => tenant.id === selectedTenantId) || null
+  const selectedDraft = selectedTenant ? (drafts[selectedTenant.id] || buildDraft(selectedTenant, plans)) : null
+  const selectedPlan = plans.find((plan) => plan.id === selectedDraft?.planId) || null
+
+  const updateDraft = (patch) => {
+    if (!selectedTenant) return
+    setDrafts((previous) => ({
+      ...previous,
+      [selectedTenant.id]: { ...(previous[selectedTenant.id] || buildDraft(selectedTenant, plans)), ...patch },
     }))
-  }, [])
+  }
 
-  const handleReviewDecision = useCallback(async (tenant, decision) => {
-    const draft = getDraft(tenant)
-    const selectedPlanId = String(draft.planId || '').trim()
-    const noteText = String(draft.adminNote || '').trim()
+  const handleSave = async (event) => {
+    event.preventDefault()
+    if (!selectedTenant || !selectedDraft?.planId) return
+    setMessage('')
+    setErrorMessage('')
+    try {
+      setSavingTenantId(selectedTenant.id)
+      await updateTenant(selectedTenant.id, {
+        name: selectedDraft.name,
+        slug: selectedDraft.slug,
+        status: selectedDraft.tenantStatus,
+      })
+      await updateTenantSubscription(selectedTenant.id, {
+        planId: selectedDraft.planId,
+        status: selectedDraft.subscriptionStatus,
+        startsAt: selectedDraft.startsAt ? new Date(`${selectedDraft.startsAt}T00:00:00.000Z`).toISOString() : undefined,
+        endsAt: toApiDate(selectedDraft.endsAt),
+        graceEndsAt: toApiDate(selectedDraft.graceEndsAt),
+        billingNotes: selectedDraft.billingNotes,
+      })
+      setMessage(`Perubahan ${selectedDraft.name} berhasil disimpan.`)
+      setDrafts({})
+      await tenantQuery.mutate()
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Gagal menyimpan perubahan toko.')
+    } finally {
+      setSavingTenantId('')
+    }
+  }
+
+  const openDeleteDialog = () => {
+    if (!selectedTenant) return
+    setDeleteTarget(selectedTenant)
+    setDeleteForm({ confirmationText: '', password: '' })
+    setMessage('')
+    setErrorMessage('')
+  }
+
+  const closeDeleteDialog = () => {
+    if (isDeleting) return
+    setDeleteTarget(null)
+    setDeleteForm({ confirmationText: '', password: '' })
+  }
+
+  const handleDelete = async (event) => {
+    event.preventDefault()
+    if (!deleteTarget) return
 
     setMessage('')
     setErrorMessage('')
-
-    if (!selectedPlanId) {
-      setErrorMessage(`Pilih paket awal terlebih dahulu untuk tenant ${tenant.name}.`)
-      return
-    }
-
-    if (decision === 'reject' && !noteText) {
-      setErrorMessage(`Tambahkan catatan admin saat menolak atau menahan tenant ${tenant.name}.`)
-      return
-    }
-
     try {
-      setProcessingTenantId(tenant.id)
-
-      const nextSubscriptionStatus = decision === 'approve'
-        ? String(draft.subscriptionStatus || 'active').trim().toLowerCase()
-        : 'suspended'
-
-      const nextBillingNotes = appendReviewNote(
-        tenant.subscription?.billingNotes,
-        decision === 'approve' ? 'APPROVED' : 'REJECTED',
-        noteText,
-      )
-
-      await updateTenantSubscription(tenant.id, {
-        planId: selectedPlanId,
-        status: nextSubscriptionStatus,
-        billingNotes: nextBillingNotes,
-      })
-
-      await updateTenant(tenant.id, {
-        status: decision === 'approve' ? 'active' : 'suspended',
-      })
-
-      setMessage(
-        decision === 'approve'
-          ? `Tenant ${tenant.name} berhasil di-approve, diaktifkan, dan diberi paket awal.`
-          : `Tenant ${tenant.name} tetap suspended dan catatan review berhasil disimpan.`,
-      )
-
-      setDraftsByTenantId((previousDrafts) => ({
-        ...previousDrafts,
-        [tenant.id]: {
-          ...(previousDrafts[tenant.id] || {}),
-          adminNote: '',
-        },
-      }))
-
-      await loadData()
+      setIsDeleting(true)
+      const removed = await deleteTenant(deleteTarget.id, deleteForm)
+      const remainingTenants = tenants.filter((tenant) => tenant.id !== deleteTarget.id)
+      setDeleteTarget(null)
+      setDeleteForm({ confirmationText: '', password: '' })
+      await tenantQuery.mutate(remainingTenants, { revalidate: false })
+      setSelectedTenantId(remainingTenants[0]?.id || '')
+      setDrafts((previous) => Object.fromEntries(
+        Object.entries(previous).filter(([tenantId]) => tenantId !== deleteTarget.id),
+      ))
+      setMessage(`Toko ${removed?.name || deleteTarget.name} beserta seluruh datanya berhasil dihapus.`)
+      void tenantQuery.mutate()
     } catch (error) {
-      const messageText = error instanceof Error ? error.message : 'Gagal memperbarui status tenant.'
-      setErrorMessage(messageText)
+      setErrorMessage(error instanceof Error ? error.message : 'Gagal menghapus toko.')
     } finally {
-      setProcessingTenantId('')
+      setIsDeleting(false)
     }
-  }, [getDraft, loadData])
+  }
 
   return (
-    <div className="space-y-6 pt-0 pb-5">
-      <section className="rounded-DEFAULT border border-border bg-[linear-gradient(135deg,rgba(230,126,34,0.16),rgba(20,26,26,0.96))] p-5 sm:p-6">
-        <p className="text-[0.76rem] font-semibold uppercase tracking-[0.16em] text-accent">Approval Center</p>
-        <h2 className="mt-2 text-[1.45rem] font-bold text-text-main sm:text-[1.75rem]">
-          Approval untuk toko baru yang register
-        </h2>
-        <p className="mt-2 max-w-[760px] text-sm leading-relaxed text-text-muted">
-          Review tenant baru, pilih paket awal, simpan catatan admin, lalu aktifkan toko saat onboarding
-          dan pembayaran sudah siap.
-        </p>
-      </section>
+    <div className="space-y-5">
+      {message && <div className="rounded-lg border border-[#acd9c8] bg-[#edf9f4] p-3 text-sm text-[#176456]">{message}</div>}
+      {(errorMessage || queryErrorMessage) && <div className="rounded-lg border border-[#e9b7b7] bg-[#fff1f1] p-3 text-sm text-[#a82f2f]">{errorMessage || queryErrorMessage}</div>}
 
-      {message && (
-        <div className="rounded-lg border border-[#2ecc71]/40 bg-[#2ecc71]/10 p-3 text-sm text-[#6ee7a8]">{message}</div>
-      )}
-
-      {errorMessage && (
-        <div className="rounded-lg border border-[#e74c3c]/40 bg-[#e74c3c]/10 p-3 text-sm text-[#f3b2ad]">{errorMessage}</div>
-      )}
-
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <article className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-5">
-          <p className="text-sm text-text-muted">Menunggu Approval</p>
-          <p className="mt-2 text-[1.5rem] font-bold text-text-main">{pendingTenants.length}</p>
-        </article>
-        <article className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-5">
-          <p className="text-sm text-text-muted">Tenant Aktif</p>
-          <p className="mt-2 text-[1.5rem] font-bold text-text-main">{tenants.length - pendingTenants.length}</p>
-        </article>
-        <article className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-5">
-          <p className="text-sm text-text-muted">Paket Aktif</p>
-          <p className="mt-2 text-[1.5rem] font-bold text-text-main">{activePlans.length}</p>
-        </article>
-        <article className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-5">
-          <p className="text-sm text-text-muted">Total Tenant</p>
-          <p className="mt-2 text-[1.5rem] font-bold text-text-main">{tenants.length}</p>
-        </article>
-      </section>
-
-      <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-5 sm:p-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h3 className="text-[1.05rem] font-bold text-text-main">Review Pendaftaran Baru</h3>
-            <p className="mt-1 text-sm text-text-muted">
-              Toko yang belum aktif muncul di sini. Kamu bisa pilih paket, status subscription awal, dan catatan admin sebelum approve.
-            </p>
+      <section className="rounded-lg border border-[#dce3e6] bg-white p-4">
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px_auto_auto]">
+          <div className="relative">
+            <i className="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#85919a]" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cari nama, slug, atau owner" className="min-h-11 w-full rounded-lg border border-[#cfd8dc] pl-10 pr-3 text-sm outline-none focus:border-[#2a7c6f]" />
           </div>
-          <p className="text-xs text-text-muted">
-            Tenant yang belum disetujui atau ditahan akan tetap memakai status platform <span className="font-semibold text-text-main">suspended</span>.
-          </p>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="min-h-11 rounded-lg border border-[#cfd8dc] bg-white px-3 text-sm outline-none focus:border-[#2a7c6f]">
+            <option value="all">Semua status</option>
+            <option value="active">Aktif</option>
+            <option value="suspended">Suspended</option>
+          </select>
+          <button type="button" onClick={() => void handleRefresh()} disabled={tenantQuery.isValidating || planQuery.isValidating} className="min-h-11 rounded-lg border border-[#cfd8dc] px-4 text-sm font-semibold text-[#52616b] hover:border-[#2a7c6f] disabled:opacity-60"><i className={`fas fa-rotate-right mr-2 ${(tenantQuery.isValidating || planQuery.isValidating) ? 'animate-spin' : ''}`} />Perbarui</button>
+          <button type="button" onClick={() => setIsOnboardingOpen(true)} className="min-h-11 rounded-lg bg-[#173f3a] px-4 text-sm font-bold text-white hover:bg-[#0f302c]"><i className="fas fa-plus mr-2" />Tambah toko</button>
         </div>
+      </section>
 
-        {isLoading ? (
-          <div className="mt-4 text-text-muted">Memuat daftar pendaftaran...</div>
-        ) : pendingTenants.length === 0 ? (
-          <div className="mt-4 rounded-lg border border-border/50 bg-bg-main/30 p-4 text-sm text-text-muted">
-            Belum ada tenant baru yang menunggu approval.
+      <div className="grid min-h-[620px] gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <section className="overflow-hidden rounded-lg border border-[#dce3e6] bg-white">
+          <div className="border-b border-[#e6ebed] px-4 py-3.5">
+            <p className="text-sm font-bold">Daftar toko</p>
+            <p className="mt-0.5 text-xs text-[#71808a]">{filteredTenants.length} dari {tenants.length} toko</p>
           </div>
-        ) : (
-          <div className="mt-4 space-y-4">
-            {pendingTenants.map((tenant) => {
-              const draft = getDraft(tenant)
-              const selectedPlan = plans.find((plan) => plan.id === draft.planId) || null
-              const isExpanded = expandedTenantId === tenant.id
+          <div className="max-h-[680px] overflow-y-auto p-2">
+            {isLoading && <p className="p-4 text-sm text-[#71808a]">Memuat toko...</p>}
+            {!isLoading && filteredTenants.map((tenant) => (
+              <button
+                type="button"
+                key={tenant.id}
+                onClick={() => { setSelectedTenantId(tenant.id); setMessage(''); setErrorMessage('') }}
+                className={`mb-1 w-full rounded-lg border p-3 text-left transition ${selectedTenantId === tenant.id ? 'border-[#76a69d] bg-[#eef7f5]' : 'border-transparent hover:bg-[#f4f6f7]'}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0"><p className="truncate text-sm font-semibold">{tenant.name}</p><p className="mt-0.5 truncate text-xs text-[#85919a]">{tenant.slug}</p></div>
+                  <span className={`shrink-0 rounded-full px-2 py-1 text-[0.68rem] font-bold uppercase ${String(tenant.status).toLowerCase() === 'active' ? 'bg-[#dff3e7] text-[#267349]' : 'bg-[#fff0cf] text-[#8b6108]'}`}>{tenant.status}</span>
+                </div>
+                <p className="mt-2 text-xs text-[#65737d]">{tenant.subscription?.plan?.name || 'Tanpa paket'} · {tenant.branchCount ?? 0} cabang</p>
+              </button>
+            ))}
+            {!isLoading && filteredTenants.length === 0 && <p className="p-4 text-center text-sm text-[#71808a]">Toko tidak ditemukan.</p>}
+          </div>
+        </section>
 
-              return (
-                <article key={tenant.id} className="rounded-lg border border-border/50 bg-bg-main/30 p-4">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold text-text-main">{tenant.name}</p>
-                        <span className="rounded-full bg-[#e67e22]/12 px-2.5 py-1 text-[0.72rem] font-semibold uppercase tracking-wide text-accent">
-                          {tenant.status}
-                        </span>
-                        <span className="rounded-full bg-border/60 px-2.5 py-1 text-[0.72rem] font-semibold uppercase tracking-wide text-text-muted">
-                          {tenant.subscription?.status || 'trial'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-text-muted">slug: {tenant.slug}</p>
-                      <p className="text-xs text-text-muted">
-                        Owner: {tenant.ownerUsernames?.length ? tenant.ownerUsernames.join(', ') : '-'}
-                      </p>
-                      <p className="text-xs text-text-muted">
-                        Cabang awal: {tenant.branchCount ?? 0} • User tenant: {tenant.membershipCount ?? 0}
-                      </p>
-                      <p className="text-xs text-text-muted">Dibuat: {formatDateTime(tenant.createdAt)}</p>
-                    </div>
+        <section className="rounded-lg border border-[#dce3e6] bg-white">
+          {!selectedTenant || !selectedDraft ? (
+            <div className="flex min-h-[420px] items-center justify-center p-6 text-sm text-[#71808a]">Pilih toko untuk membuka pengaturan.</div>
+          ) : (
+            <form onSubmit={handleSave}>
+              <div className="flex flex-col gap-3 border-b border-[#e6ebed] p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-bold">{selectedTenant.name}</h2>
+                  <p className="mt-1 text-xs text-[#71808a]">Owner: {selectedTenant.ownerUsernames?.join(', ') || '-'} · {selectedTenant.membershipCount ?? 0} user</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={openDeleteDialog} className="min-h-11 rounded-lg border border-[#e1aaaa] bg-white px-4 text-sm font-bold text-[#b52f2f] hover:bg-[#fff1f1]"><i className="fas fa-trash-can mr-2" />Hapus toko</button>
+                  <button type="submit" disabled={savingTenantId === selectedTenant.id} className="min-h-11 rounded-lg bg-[#173f3a] px-5 text-sm font-bold text-white hover:bg-[#0f302c] disabled:opacity-60"><i className="fas fa-floppy-disk mr-2" />{savingTenantId === selectedTenant.id ? 'Menyimpan...' : 'Simpan perubahan'}</button>
+                </div>
+              </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        className="min-h-11 rounded-lg border border-border bg-sidebar-bg px-4 py-2 text-sm font-semibold text-text-main transition hover:border-accent"
-                        onClick={() => setExpandedTenantId((currentTenantId) => (
-                          currentTenantId === tenant.id ? '' : tenant.id
-                        ))}
-                      >
-                        {isExpanded ? 'Tutup Review' : 'Buka Review'}
-                      </button>
-                      <button
-                        type="button"
-                        className="min-h-11 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-hover disabled:opacity-60"
-                        onClick={() => handleReviewDecision(tenant, 'approve')}
-                        disabled={processingTenantId === tenant.id}
-                      >
-                        {processingTenantId === tenant.id ? 'Memproses...' : 'Approve Cepat'}
-                      </button>
-                    </div>
+              <div className="grid gap-6 p-5 lg:grid-cols-2 lg:p-6">
+                <div className="space-y-4">
+                  <h3 className="border-b border-[#edf0f1] pb-2 text-sm font-bold">Identitas toko</h3>
+                  <div><label className="mb-1.5 block text-xs font-semibold text-[#52616b]">Nama toko</label><input value={selectedDraft.name} onChange={(event) => updateDraft({ name: event.target.value })} minLength="2" maxLength="120" className="min-h-11 w-full rounded-lg border border-[#cfd8dc] px-3 text-sm outline-none focus:border-[#2a7c6f]" required /></div>
+                  <div><label className="mb-1.5 block text-xs font-semibold text-[#52616b]">Slug</label><input value={selectedDraft.slug} onChange={(event) => updateDraft({ slug: event.target.value })} minLength="2" maxLength="80" className="min-h-11 w-full rounded-lg border border-[#cfd8dc] px-3 text-sm outline-none focus:border-[#2a7c6f]" required /></div>
+                  <div><label className="mb-1.5 block text-xs font-semibold text-[#52616b]">Status toko</label><select value={selectedDraft.tenantStatus} onChange={(event) => updateDraft({ tenantStatus: event.target.value })} className="min-h-11 w-full rounded-lg border border-[#cfd8dc] bg-white px-3 text-sm outline-none focus:border-[#2a7c6f]"><option value="active">Aktif</option><option value="suspended">Suspended</option></select></div>
+
+                  <h3 className="border-b border-[#edf0f1] pb-2 pt-2 text-sm font-bold">Masa langganan</h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><label className="mb-1.5 block text-xs font-semibold text-[#52616b]">Mulai</label><input type="date" value={selectedDraft.startsAt} onChange={(event) => updateDraft({ startsAt: event.target.value })} className="min-h-11 w-full rounded-lg border border-[#cfd8dc] px-3 text-sm" /></div>
+                    <div><label className="mb-1.5 block text-xs font-semibold text-[#52616b]">Berakhir</label><input type="date" value={selectedDraft.endsAt} onChange={(event) => updateDraft({ endsAt: event.target.value })} className="min-h-11 w-full rounded-lg border border-[#cfd8dc] px-3 text-sm" /></div>
                   </div>
+                  <div><label className="mb-1.5 block text-xs font-semibold text-[#52616b]">Batas grace period</label><input type="date" value={selectedDraft.graceEndsAt} onChange={(event) => updateDraft({ graceEndsAt: event.target.value })} className="min-h-11 w-full rounded-lg border border-[#cfd8dc] px-3 text-sm" /></div>
+                </div>
 
-                  {isExpanded && (
-                    <div className="mt-5 grid grid-cols-1 gap-4 border-t border-border/60 pt-5 lg:grid-cols-[1.1fr_0.9fr]">
-                      <div className="space-y-4">
-                        <div className="rounded-lg border border-border/50 bg-sidebar-bg/40 p-4">
-                          <p className="text-xs uppercase tracking-[0.14em] text-text-muted">Snapshot Pendaftaran</p>
-                          <div className="mt-3 space-y-2 text-sm text-text-muted">
-                            <p>Nama toko: <span className="font-semibold text-text-main">{tenant.name}</span></p>
-                            <p>Owner utama: <span className="font-semibold text-text-main">{tenant.ownerUsernames?.[0] || '-'}</span></p>
-                            <p>Paket saat ini: <span className="font-semibold text-text-main">{tenant.subscription?.plan?.name || 'Belum ada'}</span></p>
-                            <p>Status subscription: <span className="font-semibold text-text-main">{tenant.subscription?.status || 'trial'}</span></p>
-                            <p>Harga paket terpilih: <span className="font-semibold text-text-main">{selectedPlan ? formatCurrency(selectedPlan.priceAmount) : '-'}</span></p>
-                          </div>
-                        </div>
+                <div className="space-y-4">
+                  <h3 className="border-b border-[#edf0f1] pb-2 text-sm font-bold">Paket & akses</h3>
+                  <div><label className="mb-1.5 block text-xs font-semibold text-[#52616b]">Paket langganan</label><select value={selectedDraft.planId} onChange={(event) => updateDraft({ planId: event.target.value })} className="min-h-11 w-full rounded-lg border border-[#cfd8dc] bg-white px-3 text-sm outline-none focus:border-[#2a7c6f]" required>{plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {formatCurrency(plan.priceAmount)}</option>)}</select></div>
+                  <div><label className="mb-1.5 block text-xs font-semibold text-[#52616b]">Status subscription</label><select value={selectedDraft.subscriptionStatus} onChange={(event) => updateDraft({ subscriptionStatus: event.target.value })} className="min-h-11 w-full rounded-lg border border-[#cfd8dc] bg-white px-3 text-sm outline-none focus:border-[#2a7c6f]"><option value="trial">Trial</option><option value="active">Aktif</option><option value="suspended">Suspended</option><option value="expired">Expired</option></select></div>
 
-                        <div className="rounded-lg border border-border/50 bg-sidebar-bg/40 p-4">
-                          <label className="mb-1.5 block text-[0.85rem] text-text-muted">Catatan review sebelumnya</label>
-                          <div className="min-h-[88px] rounded-lg border border-border bg-bg-main/60 p-3 text-sm text-text-muted whitespace-pre-wrap">
-                            {tenant.subscription?.billingNotes || 'Belum ada catatan review.'}
-                          </div>
-                        </div>
+                  {selectedPlan && (
+                    <div className="rounded-lg border border-[#d8e5e2] bg-[#f3f8f7] p-4">
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div><p className="text-[#71808a]">Cabang</p><p className="mt-0.5 font-bold">{getPlanFeature(selectedPlan, 'maxBranches', 0)}</p></div>
+                        <div><p className="text-[#71808a]">User</p><p className="mt-0.5 font-bold">{getPlanFeature(selectedPlan, 'maxTenantUsers', 0)}</p></div>
+                        <div><p className="text-[#71808a]">Item</p><p className="mt-0.5 font-bold">{getPlanFeature(selectedPlan, 'maxItems', 0)}</p></div>
+                        <div><p className="text-[#71808a]">Transaksi/bulan</p><p className="mt-0.5 font-bold">{getPlanFeature(selectedPlan, 'maxMonthlyTransactions', 0)}</p></div>
                       </div>
-
-                      <div className="space-y-4 rounded-lg border border-border/50 bg-sidebar-bg/40 p-4">
-                        <div>
-                          <label className="mb-1.5 block text-[0.85rem] text-text-muted">Paket Awal Tenant</label>
-                          <select
-                            className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
-                            value={draft.planId}
-                            onChange={(event) => updateDraft(tenant.id, { planId: event.target.value })}
-                            disabled={processingTenantId === tenant.id}
-                          >
-                            <option value="">Pilih paket</option>
-                            {plans.map((plan) => (
-                              <option key={plan.id} value={plan.id}>
-                                {plan.name} • {plan.code} • {formatCurrency(plan.priceAmount)}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="mb-1.5 block text-[0.85rem] text-text-muted">Status Subscription Saat Approve</label>
-                          <select
-                            className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
-                            value={draft.subscriptionStatus}
-                            onChange={(event) => updateDraft(tenant.id, { subscriptionStatus: event.target.value })}
-                            disabled={processingTenantId === tenant.id}
-                          >
-                            <option value="trial">trial</option>
-                            <option value="active">active</option>
-                            <option value="suspended">suspended</option>
-                            <option value="expired">expired</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="mb-1.5 block text-[0.85rem] text-text-muted">Catatan Admin</label>
-                          <textarea
-                            className="min-h-[120px] w-full rounded-lg border border-border bg-bg-main p-3 text-text-main outline-none focus:border-accent"
-                            placeholder="Contoh: pembayaran DP sudah masuk, aktifkan trial 14 hari."
-                            value={draft.adminNote}
-                            onChange={(event) => updateDraft(tenant.id, { adminNote: event.target.value })}
-                            disabled={processingTenantId === tenant.id}
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          <button
-                            type="button"
-                            className="min-h-11 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-hover disabled:opacity-60"
-                            onClick={() => handleReviewDecision(tenant, 'approve')}
-                            disabled={processingTenantId === tenant.id}
-                          >
-                            {processingTenantId === tenant.id ? 'Memproses...' : 'Approve & Aktifkan'}
-                          </button>
-                          <button
-                            type="button"
-                            className="min-h-11 rounded-lg border border-[#e74c3c]/40 bg-[#e74c3c]/10 px-4 py-2 text-sm font-semibold text-[#f3b2ad] transition hover:bg-[#e74c3c]/20 disabled:opacity-60"
-                            onClick={() => handleReviewDecision(tenant, 'reject')}
-                            disabled={processingTenantId === tenant.id}
-                          >
-                            {processingTenantId === tenant.id ? 'Memproses...' : 'Tolak / Tetap Suspended'}
-                          </button>
-                        </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {Object.entries(featureLabels).map(([key, label]) => (
+                          <span key={key} className={`rounded-full px-2.5 py-1 text-[0.7rem] font-semibold ${getPlanFeature(selectedPlan, key, false) ? 'bg-[#dff3e7] text-[#267349]' : 'bg-[#e8ecee] text-[#71808a]'}`}>{getPlanFeature(selectedPlan, key, false) ? 'Aktif' : 'Nonaktif'} · {label}</span>
+                        ))}
                       </div>
                     </div>
                   )}
-                </article>
-              )
-            })}
-          </div>
-        )}
-      </section>
 
-      <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-5 sm:p-6">
-        <h3 className="text-[1.05rem] font-bold text-text-main">Tenant Aktif Terbaru</h3>
-        <p className="mt-1 text-sm text-text-muted">Ringkasan cepat tenant yang sudah aktif di platform.</p>
-
-        <div className="mt-4 space-y-3">
-          {activeTenants.length === 0 ? (
-            <div className="rounded-lg border border-border/50 bg-bg-main/30 p-4 text-sm text-text-muted">
-              Belum ada tenant aktif.
-            </div>
-          ) : activeTenants.map((tenant) => (
-            <article key={tenant.id} className="rounded-lg border border-border/50 bg-bg-main/30 p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="font-semibold text-text-main">{tenant.name}</p>
-                  <p className="mt-1 text-xs text-text-muted">slug: {tenant.slug}</p>
-                  <p className="mt-1 text-xs text-text-muted">
-                    Owner: {tenant.ownerUsernames?.length ? tenant.ownerUsernames.join(', ') : '-'}
-                  </p>
-                  <p className="mt-1 text-xs text-text-muted">
-                    Paket: {tenant.subscription?.plan?.name || '-'} • {tenant.subscription?.status || '-'}
-                  </p>
+                  <div><label className="mb-1.5 block text-xs font-semibold text-[#52616b]">Catatan billing</label><textarea value={selectedDraft.billingNotes} onChange={(event) => updateDraft({ billingNotes: event.target.value })} maxLength="300" rows="5" className="w-full rounded-lg border border-[#cfd8dc] p-3 text-sm outline-none focus:border-[#2a7c6f]" placeholder="Catatan pembayaran atau onboarding" /><p className="mt-1 text-right text-xs text-[#85919a]">{selectedDraft.billingNotes.length}/300</p></div>
                 </div>
-                <span className="rounded-full bg-[#2ecc71]/12 px-2.5 py-1 text-[0.72rem] font-semibold uppercase tracking-wide text-[#6ee7a8]">
-                  {tenant.status}
-                </span>
               </div>
-              <p className="mt-2 text-xs text-text-muted">Dibuat: {formatDateTime(tenant.createdAt)}</p>
-            </article>
-          ))}
+            </form>
+          )}
+        </section>
+      </div>
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#17202a]/55 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeDeleteDialog() }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="delete-tenant-title" className="w-full max-w-[500px] rounded-lg border border-[#dce3e6] bg-white shadow-[0_24px_70px_rgba(23,32,42,0.3)]">
+            <div className="flex items-start justify-between gap-4 border-b border-[#e6ebed] p-5">
+              <div className="flex gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#fff0f0] text-[#b52f2f]"><i className="fas fa-triangle-exclamation" /></span>
+                <div>
+                  <h2 id="delete-tenant-title" className="text-lg font-bold text-[#17202a]">Hapus toko secara permanen</h2>
+                  <p className="mt-1 text-sm text-[#71808a]">{deleteTarget.name}</p>
+                </div>
+              </div>
+              <button type="button" aria-label="Tutup dialog" onClick={closeDeleteDialog} disabled={isDeleting} className="flex h-9 w-9 items-center justify-center rounded-lg text-[#71808a] hover:bg-[#f1f3f4]"><i className="fas fa-xmark" /></button>
+            </div>
+
+            <form onSubmit={handleDelete} className="space-y-4 p-5">
+              <div className="rounded-lg border border-[#e9b7b7] bg-[#fff5f5] p-3 text-sm leading-relaxed text-[#8f2d2d]">
+                Seluruh cabang, inventaris, transaksi, customer, user toko, dan pengaturan langganan akan dihapus dan tidak dapat dipulihkan.
+              </div>
+
+              <div>
+                <label htmlFor="delete-tenant-confirmation" className="mb-1.5 block text-sm font-semibold text-[#34434d]">Ketik nama toko untuk konfirmasi</label>
+                <div className="mb-2 rounded-lg bg-[#f3f5f6] px-3 py-2 font-mono text-sm font-bold text-[#17202a]">{deleteTarget.name}</div>
+                <input
+                  id="delete-tenant-confirmation"
+                  value={deleteForm.confirmationText}
+                  onChange={(event) => setDeleteForm((previous) => ({ ...previous, confirmationText: event.target.value }))}
+                  autoComplete="off"
+                  className="min-h-11 w-full rounded-lg border border-[#cfd8dc] px-3 text-sm outline-none focus:border-[#b52f2f] focus:ring-2 focus:ring-[#b52f2f]/10"
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label htmlFor="delete-tenant-password" className="mb-1.5 block text-sm font-semibold text-[#34434d]">Password admin</label>
+                <input
+                  id="delete-tenant-password"
+                  type="password"
+                  value={deleteForm.password}
+                  onChange={(event) => setDeleteForm((previous) => ({ ...previous, password: event.target.value }))}
+                  autoComplete="current-password"
+                  className="min-h-11 w-full rounded-lg border border-[#cfd8dc] px-3 text-sm outline-none focus:border-[#b52f2f] focus:ring-2 focus:ring-[#b52f2f]/10"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+                <button type="button" onClick={closeDeleteDialog} disabled={isDeleting} className="min-h-11 rounded-lg border border-[#cfd8dc] px-4 text-sm font-semibold text-[#52616b] hover:bg-[#f4f6f7] disabled:opacity-60">Batal</button>
+                <button
+                  type="submit"
+                  disabled={isDeleting || deleteForm.confirmationText !== deleteTarget.name || !deleteForm.password}
+                  className="min-h-11 rounded-lg bg-[#b52f2f] px-5 text-sm font-bold text-white hover:bg-[#912525] disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <i className="fas fa-trash-can mr-2" />{isDeleting ? 'Menghapus...' : 'Hapus permanen'}
+                </button>
+              </div>
+            </form>
+          </section>
         </div>
-      </section>
+      )}
+
+      {isOnboardingOpen && (
+        <AdminTenantOnboarding
+          plans={plans}
+          onClose={() => setIsOnboardingOpen(false)}
+          onCreated={handleTenantCreated}
+        />
+      )}
     </div>
   )
 }

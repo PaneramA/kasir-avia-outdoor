@@ -15,6 +15,7 @@ await initDatabase(env);
 
 const server = createServer(async (req, res) => {
   attachRequestLogger(req, res, { enabled: shouldLogRequests });
+  res.__aviaAcceptEncoding = req.headers['accept-encoding'] || '';
 
   try {
     if (withCors(req, res, env.corsOrigin)) {

@@ -1,8 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import useSWRInfinite from 'swr/infinite';
 import ReceiptModal from '../components/ReceiptModal';
 import { openReceiptWhatsApp, printReceipt } from '../lib/receipt';
-import { formatCurrency, getCurrentMonthRangeDateKeys, getFinancialRecap, toJakartaDateKey } from '../lib/financial';
+import { formatCurrency, getCurrentMonthRangeDateKeys } from '../lib/financial';
 import { compareRentalsByClosestReturnDate, getRentalReturnTimelineDate } from '../lib/rentalTime';
+import { fetchRentalHistoryPage, getActiveTenantContext } from '../lib/api';
+import { APP_CACHE_KEYS } from '../lib/appCache';
 
 function formatReturnTimelineLabel(rental) {
     const returnDate = getRentalReturnTimelineDate(rental);
@@ -22,13 +25,13 @@ function formatPaymentSummary(rental) {
 }
 
 const History = ({
-    rentals,
     currentUser,
     onVerifyRentalDelete,
     onDeleteRentalByAdmin,
 }) => {
     const currentMonthRange = useMemo(() => getCurrentMonthRangeDateKeys(), []);
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
     const [startDate, setStartDate] = useState(currentMonthRange.startDate);
     const [endDate, setEndDate] = useState(currentMonthRange.endDate);
@@ -42,6 +45,66 @@ const History = ({
     const [deleteErrorMessage, setDeleteErrorMessage] = useState('');
     const [deleteSuccessMessage, setDeleteSuccessMessage] = useState('');
     const [receiptRental, setReceiptRental] = useState(null);
+    const { tenantId, branchId } = getActiveTenantContext();
+
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery.trim());
+        }, 300);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [searchQuery]);
+
+    const historyFilters = useMemo(() => ({
+        status: statusFilter === 'All' ? '' : statusFilter,
+        query: debouncedSearchQuery,
+        startDate,
+        endDate,
+    }), [debouncedSearchQuery, endDate, startDate, statusFilter]);
+    const {
+        data: rentalPages = [],
+        error: historyError,
+        isLoading: isHistoryLoading,
+        isValidating: isHistoryValidating,
+        mutate: mutateHistory,
+        setSize,
+    } = useSWRInfinite(
+        (pageIndex, previousPageData) => {
+            if (!tenantId || !branchId) {
+                return null;
+            }
+
+            if (pageIndex > 0 && !previousPageData?.nextCursor) {
+                return null;
+            }
+
+            return APP_CACHE_KEYS.rentalHistory(
+                tenantId,
+                branchId,
+                historyFilters,
+                pageIndex === 0 ? '' : previousPageData.nextCursor,
+            );
+        },
+        ([, , , filters, cursor]) => fetchRentalHistoryPage({ ...filters, cursor }),
+        { keepPreviousData: true },
+    );
+
+    useEffect(() => {
+        void setSize(1);
+    }, [historyFilters, setSize]);
+
+    const rentals = useMemo(
+        () => rentalPages.flatMap((page) => (Array.isArray(page?.items) ? page.items : [])),
+        [rentalPages],
+    );
+    const historySummary = rentalPages[0]?.summary || {
+        totalTransactions: 0,
+        activeTransactions: 0,
+        returnedTransactions: 0,
+        totalRevenue: 0,
+    };
+    const hasMoreHistory = Boolean(rentalPages.at(-1)?.nextCursor);
+    const isLoadingMoreHistory = isHistoryValidating && rentalPages.length > 0;
 
     const isAdmin = useMemo(() => {
         const role = String(currentUser?.role || '').trim().toLowerCase();
@@ -119,6 +182,7 @@ const History = ({
                 reason: deleteReason.trim(),
                 confirmationText: deleteConfirmationText.trim(),
             });
+            await mutateHistory();
             setDeleteSuccessMessage(`Transaksi ${selectedRental.id} berhasil dihapus.`);
             closeDeleteModal();
         } catch (error) {
@@ -168,45 +232,11 @@ const History = ({
         }
     };
 
-    const filteredRentals = rentals.filter(rental => {
-        if (statusFilter !== 'All' && rental.status !== statusFilter) {
-            return false;
-        }
-
-        const query = searchQuery.toLowerCase();
-        const matchesQuery = rental.id.toLowerCase().includes(query) ||
-                             rental.customer.name.toLowerCase().includes(query);
-        if (!matchesQuery) {
-            return false;
-        }
-
-        if (startDate || endDate) {
-            const transactionDateKey = toJakartaDateKey(rental.date);
-            if (!transactionDateKey) {
-                return false;
-            }
-
-            if (startDate && transactionDateKey < startDate) {
-                return false;
-            }
-
-            if (endDate && transactionDateKey > endDate) {
-                return false;
-            }
-        }
-
-        return true;
-    });
-    const sortedFilteredRentals = [...filteredRentals].sort((a, b) => compareRentalsByClosestReturnDate(a, b));
-
-    const periodRecap = useMemo(
-        () => getFinancialRecap(rentals, { startDate, endDate }),
-        [endDate, rentals, startDate],
-    );
-    const totalTransactions = filteredRentals.length;
-    const activeTransactions = filteredRentals.filter(r => r.status === 'Active').length;
-    const returnedTransactions = filteredRentals.filter(r => r.status === 'Returned').length;
-    const totalRevenue = periodRecap.totalRevenue;
+    const sortedFilteredRentals = [...rentals].sort((a, b) => compareRentalsByClosestReturnDate(a, b));
+    const totalTransactions = historySummary.totalTransactions;
+    const activeTransactions = historySummary.activeTransactions;
+    const returnedTransactions = historySummary.returnedTransactions;
+    const totalRevenue = historySummary.totalRevenue;
 
     return (
         <div className="flex h-full flex-col pt-0 pb-4 sm:pb-5">
@@ -300,7 +330,9 @@ const History = ({
 
             <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-sidebar-bg/50">
                 <div className="custom-scrollbar flex-1 overflow-x-auto">
-                    {sortedFilteredRentals.length === 0 ? (
+                    {isHistoryLoading ? (
+                        <div className="h-full py-12 text-center text-text-muted">Memuat riwayat transaksi...</div>
+                    ) : sortedFilteredRentals.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-text-muted py-12">
                             <i className="fas fa-folder-open text-[3rem] mb-4 opacity-30"></i>
                             <p>Tidak ada transaksi yang sesuai dengan pencarian Anda.</p>
@@ -492,6 +524,23 @@ const History = ({
                         </>
                     )}
                 </div>
+                {historyError && (
+                    <p className="border-t border-[#e74c3c]/30 px-4 py-3 text-sm text-[#e74c3c]">
+                        Gagal memuat riwayat: {historyError instanceof Error ? historyError.message : 'Terjadi kesalahan.'}
+                    </p>
+                )}
+                {hasMoreHistory && (
+                    <div className="border-t border-border p-3 text-center">
+                        <button
+                            type="button"
+                            disabled={isLoadingMoreHistory}
+                            className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-2 text-sm font-semibold text-accent hover:bg-accent/20 disabled:cursor-wait disabled:opacity-60"
+                            onClick={() => setSize((currentSize) => currentSize + 1)}
+                        >
+                            {isLoadingMoreHistory ? 'Memuat...' : 'Muat transaksi berikutnya'}
+                        </button>
+                    </div>
+                )}
             </div>
 
             {selectedRental && (

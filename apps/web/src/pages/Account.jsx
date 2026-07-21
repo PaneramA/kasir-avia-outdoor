@@ -13,10 +13,25 @@ function formatQuota(quota) {
     return `${quota.used} / ${quota.limit} dipakai • sisa ${quota.remaining}`
 }
 
+function formatQuota(quota) {
+    if (!quota || typeof quota !== 'object') {
+        return '-'
+    }
+
+    if (quota.isUnlimited) {
+        return `${quota.used} dipakai / tak terbatas`
+    }
+
+    return `${quota.used} / ${quota.limit} dipakai • sisa ${quota.remaining}`
+}
+
 const Account = ({
     currentUser,
     tenantSettings,
     branchSettings,
+    subscriptionSummary,
+    isSubscriptionLoading = false,
+    subscriptionErrorMessage = '',
     onUpdateTenantSettings,
     onUpdateBranchSettings,
 }) => {

@@ -3,10 +3,14 @@ import { NavLink } from 'react-router-dom'
 import ThemeToggle from './ThemeToggle'
 import { APP_ROUTES } from '../lib/routes'
 
-const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
+const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onCloseMobile }) => {
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
     const normalizedRole = String(currentUser?.role || '').toLowerCase()
     const isAdminLike = normalizedRole === 'admin' || normalizedRole === 'superuser'
+    const features = subscriptionSummary?.features || {}
+    const canUseFinancialRecap = features.canUseFinancialRecap !== false
+    const canManageBranches = features.canManageBranches !== false
+    const canManageStaff = features.canManageStaff !== false
 
     const menuItems = [
         { path: APP_ROUTES.dashboard, icon: 'fas fa-th-large', label: 'Dashboard' },
@@ -15,7 +19,7 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
         { path: APP_ROUTES.return, icon: 'fas fa-undo', label: 'Pengembalian' },
         { path: APP_ROUTES.inventory, icon: 'fas fa-boxes-stacked', label: 'Inventaris' },
         { path: APP_ROUTES.customers, icon: 'fas fa-address-book', label: 'Customer' },
-        { path: APP_ROUTES.financial, icon: 'fas fa-chart-line', label: 'Keuangan' },
+        ...(canUseFinancialRecap ? [{ path: APP_ROUTES.financial, icon: 'fas fa-chart-line', label: 'Keuangan' }] : []),
         { path: APP_ROUTES.history, icon: 'fas fa-history', label: 'Riwayat' },
     ]
 
@@ -104,31 +108,20 @@ const Sidebar = ({ currentUser, onLogout, isMobileOpen, onCloseMobile }) => {
                                     <i className="fas fa-user-cog mr-2"></i>
                                     Akun Saya
                                 </NavLink>
-                                {isAdminLike && (
+                                {!isAdminLike && canManageBranches && (
                                     <NavLink
-                                        to={APP_ROUTES.adminRegistrations}
+                                        to={APP_ROUTES.settingsBranches}
                                         onClick={onCloseMobile}
                                         className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
                                             ? 'bg-accent text-white'
                                             : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
                                         }`}
                                     >
-                                        <i className="fas fa-user-clock mr-2"></i>
-                                        Approval Toko
+                                        <i className="fas fa-code-branch mr-2"></i>
+                                        Cabang Toko
                                     </NavLink>
                                 )}
-                                <NavLink
-                                    to={isAdminLike ? APP_ROUTES.adminPlans : APP_ROUTES.settingsBranches}
-                                    onClick={onCloseMobile}
-                                    className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
-                                        ? 'bg-accent text-white'
-                                        : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
-                                    }`}
-                                >
-                                    <i className={`${isAdminLike ? 'fas fa-layer-group' : 'fas fa-code-branch'} mr-2`}></i>
-                                    {isAdminLike ? 'Paket & Limit' : 'Cabang Toko'}
-                                </NavLink>
-                                {!isAdminLike && (
+                                {!isAdminLike && canManageStaff && (
                                     <NavLink
                                         to={APP_ROUTES.settingsTeam}
                                         onClick={onCloseMobile}

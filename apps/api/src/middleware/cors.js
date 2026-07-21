@@ -21,7 +21,7 @@ export function withCors(req, res, allowedOrigin) {
 
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-tenant-id, x-branch-id');
 
   if (!requestOrigin) {
     if (req.method === 'OPTIONS') {

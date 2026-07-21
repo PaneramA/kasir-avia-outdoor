@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import useSWR from 'swr';
 import { fetchCustomers } from '../lib/api';
+import { APP_CACHE_KEYS } from '../lib/appCache';
 import ViewModeToggle from '../components/ViewModeToggle';
 import ReceiptModal from '../components/ReceiptModal';
 import { openReceiptWhatsApp, printReceipt } from '../lib/receipt';
@@ -90,8 +92,7 @@ const Rental = ({
     const [duration, setDuration] = useState(1);
     const [rentalTimeRange, setRentalTimeRange] = useState(() => getDefaultRentalTimeRange());
     const [customerSearch, setCustomerSearch] = useState('');
-    const [customerSuggestions, setCustomerSuggestions] = useState([]);
-    const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
+    const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState('');
     const [payment, setPayment] = useState(INITIAL_PAYMENT);
     const [mobileStep, setMobileStep] = useState(1);
     const [customerErrors, setCustomerErrors] = useState(INITIAL_CUSTOMER_ERRORS);
@@ -103,9 +104,9 @@ const Rental = ({
     const [receiptRental, setReceiptRental] = useState(null);
     const [isFinalReviewOpen, setIsFinalReviewOpen] = useState(false);
     const [isFinalReviewChecked, setIsFinalReviewChecked] = useState(false);
-    const latestSearchRequestRef = useRef(0);
     const focusTimeoutRef = useRef(null);
     const hasRestoredDraftRef = useRef(false);
+    const checkoutInFlightRef = useRef(false);
 
     const getActiveLayout = useCallback(() => {
         if (typeof window === 'undefined') {
@@ -165,38 +166,20 @@ const Rental = ({
 
     useEffect(() => {
         const keyword = customerSearch.trim();
-        if (keyword.length < 2) {
-            setCustomerSuggestions([]);
-            setIsSearchingCustomer(false);
-            return undefined;
-        }
-
-        const requestId = latestSearchRequestRef.current + 1;
-        latestSearchRequestRef.current = requestId;
-        const timeoutId = setTimeout(async () => {
-            try {
-                setIsSearchingCustomer(true);
-                const data = await fetchCustomers(keyword);
-                if (requestId !== latestSearchRequestRef.current) {
-                    return;
-                }
-
-                setCustomerSuggestions(data);
-            } catch {
-                if (requestId !== latestSearchRequestRef.current) {
-                    return;
-                }
-
-                setCustomerSuggestions([]);
-            } finally {
-                if (requestId === latestSearchRequestRef.current) {
-                    setIsSearchingCustomer(false);
-                }
-            }
-        }, 250);
+        const timeoutId = setTimeout(() => setDebouncedCustomerSearch(keyword), 250);
 
         return () => clearTimeout(timeoutId);
     }, [customerSearch]);
+
+    const customerSuggestionQuery = useSWR(
+        debouncedCustomerSearch.length >= 2 ? APP_CACHE_KEYS.customers(debouncedCustomerSearch) : null,
+        ([, keyword]) => fetchCustomers(keyword),
+    );
+    const customerSuggestions = useMemo(
+        () => (Array.isArray(customerSuggestionQuery.data) ? customerSuggestionQuery.data : []),
+        [customerSuggestionQuery.data],
+    );
+    const isSearchingCustomer = customerSuggestionQuery.isLoading;
 
     const normalizedInventorySearch = inventorySearch.trim().toLowerCase();
     const filteredItems = safeInventory.filter((item) => {
@@ -783,7 +766,7 @@ const Rental = ({
     };
 
     const handleConfirmCheckout = async () => {
-        if (isSubmitting) {
+        if (isSubmitting || checkoutInFlightRef.current) {
             return;
         }
 
@@ -812,13 +795,15 @@ const Rental = ({
         };
 
         try {
+            checkoutInFlightRef.current = true;
             setIsSubmitting(true);
             const createdRental = await onCheckout(payload);
             setCart([]);
+            clearSavedDraft();
             setCustomer(INITIAL_CUSTOMER);
             setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
             setCustomerSearch('');
-            setCustomerSuggestions([]);
+            setDebouncedCustomerSearch('');
             setDuration(1);
             setRentalTimeRange(getDefaultRentalTimeRange());
             setPayment(INITIAL_PAYMENT);
@@ -838,6 +823,7 @@ const Rental = ({
             const message = error instanceof Error ? error.message : 'Gagal menyimpan transaksi sewa.';
             alert(message);
         } finally {
+            checkoutInFlightRef.current = false;
             setIsSubmitting(false);
         }
     };
@@ -896,8 +882,8 @@ const Rental = ({
             idNumber: sanitizeDigits(pickedCustomer.idNumber || ''),
         });
         setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
-        setCustomerSearch(`${pickedCustomer.name} (${pickedCustomer.phone})`);
-        setCustomerSuggestions([]);
+        setCustomerSearch('');
+        setDebouncedCustomerSearch('');
         setMobileStepHint('');
     };
 

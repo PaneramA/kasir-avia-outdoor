@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import useSWR from 'swr'
 import {
   createOrUpdateBranchAccess,
   createOrUpdateTenantMembership,
@@ -7,10 +8,12 @@ import {
   fetchBranches,
   fetchTenantMemberships,
   fetchTenantUsers,
+  getActiveTenantContext,
   getStoredSession,
   removeBranchAccess,
   updateTenantMembership,
 } from '../lib/api'
+import { APP_CACHE_KEYS } from '../lib/appCache'
 
 const initialMembershipForm = {
   userId: '',
@@ -32,64 +35,44 @@ const initialTenantUserForm = {
 
 const TeamSettings = () => {
   const currentUser = getStoredSession().user
-  const [branches, setBranches] = useState([])
-  const [memberships, setMemberships] = useState([])
-  const [accesses, setAccesses] = useState([])
-  const [users, setUsers] = useState([])
+  const tenantId = getActiveTenantContext().tenantId || 'current'
 
   const [membershipForm, setMembershipForm] = useState(initialMembershipForm)
   const [accessForm, setAccessForm] = useState(initialAccessForm)
   const [tenantUserForm, setTenantUserForm] = useState(initialTenantUserForm)
 
-  const [isLoading, setIsLoading] = useState(true)
   const [isSubmittingMembership, setIsSubmittingMembership] = useState(false)
   const [isSubmittingAccess, setIsSubmittingAccess] = useState(false)
   const [isSubmittingTenantUser, setIsSubmittingTenantUser] = useState(false)
   const [message, setMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true)
-    setErrorMessage('')
-
-    try {
-      const [branchesData, membershipsData, accessData, usersData] = await Promise.all([
-        fetchBranches('current'),
-        fetchTenantMemberships('current'),
-        fetchBranchAccess('current'),
-        fetchTenantUsers('current'),
-      ])
-
-      const safeBranches = Array.isArray(branchesData) ? branchesData : []
-      const safeMemberships = Array.isArray(membershipsData) ? membershipsData : []
-      const safeAccesses = Array.isArray(accessData) ? accessData : []
-      const safeUsers = Array.isArray(usersData) ? usersData : []
-
-      setBranches(safeBranches)
-      setMemberships(safeMemberships)
-      setAccesses(safeAccesses)
-      setUsers(safeUsers)
-
-      setMembershipForm((prev) => ({
-        ...prev,
-        userId: prev.userId || safeUsers[0]?.id || '',
-      }))
-      setAccessForm((prev) => ({
-        ...prev,
-        userId: prev.userId || safeUsers[0]?.id || '',
-        branchId: prev.branchId || safeBranches[0]?.id || '',
-      }))
-    } catch (error) {
-      const messageText = error instanceof Error ? error.message : 'Gagal memuat data tim tenant.'
-      setErrorMessage(messageText)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
+  const branchQuery = useSWR(APP_CACHE_KEYS.branches(tenantId), () => fetchBranches(tenantId))
+  const membershipQuery = useSWR(
+    APP_CACHE_KEYS.tenantMemberships(tenantId),
+    () => fetchTenantMemberships(tenantId),
+  )
+  const accessQuery = useSWR(APP_CACHE_KEYS.branchAccess(tenantId), () => fetchBranchAccess(tenantId))
+  const userQuery = useSWR(APP_CACHE_KEYS.tenantUsers(tenantId), () => fetchTenantUsers(tenantId))
+  const branches = useMemo(() => (Array.isArray(branchQuery.data) ? branchQuery.data : []), [branchQuery.data])
+  const memberships = useMemo(
+    () => (Array.isArray(membershipQuery.data) ? membershipQuery.data : []),
+    [membershipQuery.data],
+  )
+  const accesses = useMemo(() => (Array.isArray(accessQuery.data) ? accessQuery.data : []), [accessQuery.data])
+  const users = useMemo(() => (Array.isArray(userQuery.data) ? userQuery.data : []), [userQuery.data])
+  const isLoading = branchQuery.isLoading || membershipQuery.isLoading || accessQuery.isLoading || userQuery.isLoading
+  const queryError = branchQuery.error || membershipQuery.error || accessQuery.error || userQuery.error
+  const displayedErrorMessage = errorMessage || (queryError instanceof Error ? queryError.message : '')
 
   useEffect(() => {
-    void loadData()
-  }, [loadData])
+    setMembershipForm((prev) => ({ ...prev, userId: prev.userId || users[0]?.id || '' }))
+    setAccessForm((prev) => ({
+      ...prev,
+      userId: prev.userId || users[0]?.id || '',
+      branchId: prev.branchId || branches[0]?.id || '',
+    }))
+  }, [branches, users])
 
   const membershipUsers = useMemo(() => {
     const existingUserIds = new Set(memberships.map((item) => item.userId))
@@ -127,13 +110,19 @@ const TeamSettings = () => {
       if (membershipForm.role === 'owner' && !canManageOwnerMembership) {
         throw new Error('Hanya owner tenant yang dapat menambah role owner.')
       }
-      await createOrUpdateTenantMembership(membershipForm)
+      const saved = await createOrUpdateTenantMembership(membershipForm)
+      await membershipQuery.mutate((current = []) => {
+        const exists = current.some((membership) => membership.id === saved.id)
+        return exists
+          ? current.map((membership) => (membership.id === saved.id ? saved : membership))
+          : [...current, saved]
+      }, { revalidate: false })
       setMessage('Membership tenant berhasil disimpan.')
       setMembershipForm((prev) => ({
         ...initialMembershipForm,
         userId: membershipUsers[0]?.id || prev.userId,
       }))
-      await loadData()
+      void membershipQuery.mutate()
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'Gagal menyimpan membership.'
       setErrorMessage(messageText)
@@ -147,9 +136,12 @@ const TeamSettings = () => {
     setErrorMessage('')
 
     try {
-      await updateTenantMembership(membershipId, payload)
+      const updated = await updateTenantMembership(membershipId, payload)
+      await membershipQuery.mutate((current = []) => current.map((membership) => (
+        membership.id === membershipId ? updated : membership
+      )), { revalidate: false })
       setMessage('Membership tenant berhasil diperbarui.')
-      await loadData()
+      void membershipQuery.mutate()
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'Gagal update membership.'
       setErrorMessage(messageText)
@@ -171,7 +163,7 @@ const TeamSettings = () => {
       await createTenantUserAccount(tenantUserForm)
       setMessage('User toko baru berhasil dibuat dan langsung aktif di tenant ini.')
       setTenantUserForm(initialTenantUserForm)
-      await loadData()
+      void Promise.all([userQuery.mutate(), membershipQuery.mutate()])
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'Gagal membuat user toko baru.'
       setErrorMessage(messageText)
@@ -205,9 +197,13 @@ const TeamSettings = () => {
 
     try {
       setIsSubmittingAccess(true)
-      await createOrUpdateBranchAccess(accessForm)
+      const saved = await createOrUpdateBranchAccess(accessForm)
+      await accessQuery.mutate((current = []) => {
+        const exists = current.some((access) => access.id === saved.id)
+        return exists ? current.map((access) => (access.id === saved.id ? saved : access)) : [...current, saved]
+      }, { revalidate: false })
       setMessage('Akses cabang user berhasil disimpan.')
-      await loadData()
+      void accessQuery.mutate()
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'Gagal menyimpan akses cabang.'
       setErrorMessage(messageText)
@@ -227,7 +223,8 @@ const TeamSettings = () => {
     try {
       await removeBranchAccess(access.id)
       setMessage('Akses cabang berhasil dihapus.')
-      await loadData()
+      await accessQuery.mutate((current = []) => current.filter((item) => item.id !== access.id), { revalidate: false })
+      void accessQuery.mutate()
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'Gagal menghapus akses cabang.'
       setErrorMessage(messageText)
@@ -240,8 +237,8 @@ const TeamSettings = () => {
         <div className="rounded-lg border border-[#2ecc71]/40 bg-[#2ecc71]/10 p-3 text-sm text-[#6ee7a8]">{message}</div>
       )}
 
-      {errorMessage && (
-        <div className="rounded-lg border border-[#e74c3c]/40 bg-[#e74c3c]/10 p-3 text-sm text-[#f3b2ad]">{errorMessage}</div>
+      {displayedErrorMessage && (
+        <div className="rounded-lg border border-[#e74c3c]/40 bg-[#e74c3c]/10 p-3 text-sm text-[#f3b2ad]">{displayedErrorMessage}</div>
       )}
 
       <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">

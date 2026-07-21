@@ -16,9 +16,11 @@ dist
 dist-ssr
 **/dist
 **/.vite
+coverage
 
 # API runtime data
 apps/api/data/db.json
+backups/
 
 # Env and local files
 .env

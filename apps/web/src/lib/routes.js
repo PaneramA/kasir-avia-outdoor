@@ -5,6 +5,7 @@ export const APP_ROUTES = {
   settingsBranches: '/settings/branches',
   settingsTeam: '/settings/team',
   admin: '/admin',
+  adminStores: '/admin/stores',
   adminRegistrations: '/admin/registrations',
   adminPlans: '/admin/plans',
   adminUsers: '/admin/users',
@@ -46,9 +47,13 @@ export const PAGE_INFO = {
     title: 'Admin • Pendaftaran Toko',
     subtitle: 'Pantau tenant baru yang mendaftar dan berikan approval.',
   },
+  [APP_ROUTES.adminStores]: {
+    title: 'Kelola Toko',
+    subtitle: 'Atur status toko, paket langganan, dan masa aktif subscription.',
+  },
   [APP_ROUTES.adminPlans]: {
-    title: 'Admin • Paket & Limit',
-    subtitle: 'Rancangan kontrol paket, kuota, dan fitur per tenant.',
+    title: 'Paket & Fitur',
+    subtitle: 'Atur harga, kuota, dan fitur yang tersedia untuk setiap paket.',
   },
   [APP_ROUTES.adminUsers]: {
     title: 'Admin • User',
@@ -59,8 +64,8 @@ export const PAGE_INFO = {
     subtitle: 'Kelola cabang, membership tenant, dan approval tenant baru.',
   },
   [APP_ROUTES.adminAccount]: {
-    title: 'Admin • Akun Saya',
-    subtitle: 'Kelola akun login dan pengaturan toko dari area admin.',
+    title: 'Akun Admin',
+    subtitle: 'Kelola keamanan akun administrator platform.',
   },
   [APP_ROUTES.rental]: {
     title: 'Sewa Barang',
@@ -125,6 +130,10 @@ export function resolvePageInfo(pathname) {
 
   if (normalizedPath.startsWith(`${APP_ROUTES.adminRegistrations}/`)) {
     return PAGE_INFO[APP_ROUTES.adminRegistrations];
+  }
+
+  if (normalizedPath.startsWith(`${APP_ROUTES.adminStores}/`)) {
+    return PAGE_INFO[APP_ROUTES.adminStores];
   }
 
   if (normalizedPath.startsWith(`${APP_ROUTES.adminPlans}/`)) {

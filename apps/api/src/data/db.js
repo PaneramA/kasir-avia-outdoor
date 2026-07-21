@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { prisma } from './prisma.js';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 
@@ -95,7 +96,7 @@ const DEFAULT_PLAN_CATALOG = [
 ];
 
 function createId(prefix) {
-  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  return `${prefix}-${Date.now()}-${randomUUID().slice(0, 12)}`;
 }
 
 function normalizeRole(rawRole) {
@@ -885,6 +886,33 @@ export async function listItems(context) {
   return items.map(toItemDto);
 }
 
+export async function listItemsPage({ query, cursor, limit = 50 } = {}, context) {
+  const keyword = String(query || '').trim();
+  const pageSize = Math.min(100, Math.max(1, Math.trunc(Number(limit) || 50)));
+  const where = withTenantBranchScope({
+    ...(keyword ? {
+      OR: [
+        { name: { contains: keyword, mode: 'insensitive' } },
+        { category: { name: { contains: keyword, mode: 'insensitive' } } },
+      ],
+    } : {}),
+  }, context);
+  const items = await prisma.item.findMany({
+    where,
+    ...(cursor ? { cursor: { id: String(cursor) }, skip: 1 } : {}),
+    take: pageSize + 1,
+    include: { category: true },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  });
+  const hasNextPage = items.length > pageSize;
+  const pageItems = hasNextPage ? items.slice(0, pageSize) : items;
+
+  return {
+    items: pageItems.map(toItemDto),
+    nextCursor: hasNextPage ? pageItems.at(-1)?.id || null : null,
+  };
+}
+
 export async function createItem(payload, context) {
   const tenantId = requireTenantId(context);
   const branchId = String(context?.branchId || '').trim() || null;
@@ -1091,6 +1119,340 @@ export async function listRentals({ status } = {}, context) {
   return rentals.map(toRentalDto);
 }
 
+function parseJakartaDateBoundary(value, boundary) {
+  const dateKey = String(value || '').trim();
+  if (!dateKey) {
+    return null;
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+    throw new Error('Date filter must use YYYY-MM-DD');
+  }
+
+  const suffix = boundary === 'end' ? 'T23:59:59.999+07:00' : 'T00:00:00.000+07:00';
+  const parsed = new Date(`${dateKey}${suffix}`);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error('Date filter is invalid');
+  }
+
+  return parsed;
+}
+
+function getJakartaDateParts(dateValue = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = formatter.formatToParts(dateValue);
+  const year = Number(parts.find((part) => part.type === 'year')?.value);
+  const month = Number(parts.find((part) => part.type === 'month')?.value);
+  const day = Number(parts.find((part) => part.type === 'day')?.value);
+  return { year, month, day };
+}
+
+function toDateKey(year, month, day) {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function getDaysInMonth(year, month) {
+  return new Date(year, month, 0).getDate();
+}
+
+function getCurrentFinancialPeriod(financialClosingDay, now = new Date()) {
+  const { year, month, day } = getJakartaDateParts(now);
+  const closingDay = Math.min(31, Math.max(1, Number(financialClosingDay) || 31));
+  const periodMonth = day <= Math.min(closingDay, getDaysInMonth(year, month)) ? month : month + 1;
+  const periodYear = periodMonth === 13 ? year + 1 : year;
+  const normalizedPeriodMonth = periodMonth === 13 ? 1 : periodMonth;
+  const previousMonth = normalizedPeriodMonth === 1 ? 12 : normalizedPeriodMonth - 1;
+  const previousYear = normalizedPeriodMonth === 1 ? periodYear - 1 : periodYear;
+  const previousClosingDay = Math.min(closingDay, getDaysInMonth(previousYear, previousMonth));
+  const currentClosingDay = Math.min(closingDay, getDaysInMonth(periodYear, normalizedPeriodMonth));
+  const startDateValue = new Date(previousYear, previousMonth - 1, previousClosingDay);
+  startDateValue.setDate(startDateValue.getDate() + 1);
+
+  return {
+    monthKey: `${periodYear}-${String(normalizedPeriodMonth).padStart(2, '0')}`,
+    startDate: toDateKey(startDateValue.getFullYear(), startDateValue.getMonth() + 1, startDateValue.getDate()),
+    endDate: toDateKey(periodYear, normalizedPeriodMonth, currentClosingDay),
+  };
+}
+
+export async function getDashboardSummary({ recentStatus } = {}, context) {
+  const tenantId = requireTenantId(context);
+  const tenantSettings = await prisma.tenantSettings.findUnique({
+    where: { tenantId },
+    select: { financialClosingDay: true },
+  });
+  const financialPeriod = getCurrentFinancialPeriod(tenantSettings?.financialClosingDay);
+  const activeRentalWhere = withTenantBranchScope({
+    deletedAt: null,
+    status: { notIn: ['Returned', 'returned', 'selesai', 'completed', 'done'] },
+  }, context, { includeBranchNull: false });
+  const monthlyRentalWhere = withTenantBranchScope({
+    deletedAt: null,
+    date: {
+      gte: parseJakartaDateBoundary(financialPeriod.startDate, 'start'),
+      lte: parseJakartaDateBoundary(financialPeriod.endDate, 'end'),
+    },
+  }, context, { includeBranchNull: false });
+  const normalizedRecentStatus = String(recentStatus || '').trim().toLowerCase();
+  const recentWhere = normalizedRecentStatus === 'active'
+    ? activeRentalWhere
+    : normalizedRecentStatus === 'returned'
+      ? withTenantBranchScope({
+          deletedAt: null,
+          status: { in: ['Returned', 'returned', 'selesai', 'completed', 'done'] },
+        }, context, { includeBranchNull: false })
+      : withTenantBranchScope({ deletedAt: null }, context, { includeBranchNull: false });
+
+  const [stock, activeRentals, itemsOut, finalTotal, originalTotal, recentRentals] = await Promise.all([
+    prisma.item.aggregate({
+      where: withTenantBranchScope({}, context),
+      _sum: { stock: true },
+    }),
+    prisma.rental.count({ where: activeRentalWhere }),
+    prisma.rentalItem.aggregate({
+      where: { rental: activeRentalWhere },
+      _sum: { qty: true },
+    }),
+    prisma.rental.aggregate({
+      where: { ...monthlyRentalWhere, finalTotal: { not: null } },
+      _sum: { finalTotal: true },
+    }),
+    prisma.rental.aggregate({
+      where: { ...monthlyRentalWhere, finalTotal: null },
+      _sum: { total: true },
+    }),
+    prisma.rental.findMany({
+      where: recentWhere,
+      include: { items: true },
+      take: 5,
+      orderBy: normalizedRecentStatus === 'active'
+        ? [{ plannedReturnDate: 'asc' }, { id: 'desc' }]
+        : [{ date: 'desc' }, { id: 'desc' }],
+    }),
+  ]);
+
+  return {
+    period: financialPeriod,
+    stats: {
+      availableStock: Number(stock._sum.stock || 0),
+      activeRentals,
+      itemsOut: Number(itemsOut._sum.qty || 0),
+      revenue: Number(finalTotal._sum.finalTotal || 0) + Number(originalTotal._sum.total || 0),
+    },
+    recentRentals: recentRentals.map(toRentalDto),
+  };
+}
+
+function getRentalAmount(rental) {
+  return Math.max(0, Number(rental?.finalTotal ?? rental?.total ?? 0) || 0);
+}
+
+async function getFinancialRecapSummary({ startDate, endDate } = {}, context) {
+  const startAt = parseJakartaDateBoundary(startDate, 'start');
+  const endAt = parseJakartaDateBoundary(endDate, 'end');
+  const date = {
+    ...(startAt ? { gte: startAt } : {}),
+    ...(endAt ? { lte: endAt } : {}),
+  };
+  const where = withTenantBranchScope({
+    deletedAt: null,
+    ...(Object.keys(date).length > 0 ? { date } : {}),
+  }, context, { includeBranchNull: false });
+  const tenantRentalWhere = withTenantBranchScope({ deletedAt: null }, context, { includeBranchNull: false });
+  const [rentals, rentalItems, tenantRentalDates] = await Promise.all([
+    prisma.rental.findMany({
+      where,
+      select: {
+        id: true,
+        date: true,
+        total: true,
+        finalTotal: true,
+        paymentMethod: true,
+      },
+    }),
+    prisma.rentalItem.findMany({
+      where: { rental: where },
+      select: {
+        itemName: true,
+        categoryName: true,
+        price: true,
+        qty: true,
+        rental: { select: { duration: true } },
+      },
+    }),
+    prisma.rental.findMany({
+      where: tenantRentalWhere,
+      select: { date: true },
+    }),
+  ]);
+
+  const methodBuckets = new Map();
+  const monthBuckets = new Map();
+  let totalRevenue = 0;
+
+  for (const rental of rentals) {
+    const amount = getRentalAmount(rental);
+    totalRevenue += amount;
+    const method = String(rental.paymentMethod || 'TUNAI').toUpperCase();
+    const methodBucket = methodBuckets.get(method) || { method, count: 0, revenue: 0 };
+    methodBucket.count += 1;
+    methodBucket.revenue += amount;
+    methodBuckets.set(method, methodBucket);
+
+    const { year, month } = getJakartaDateParts(rental.date);
+    const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+    const monthBucket = monthBuckets.get(monthKey) || { monthKey, revenue: 0, transactions: 0 };
+    monthBucket.revenue += amount;
+    monthBucket.transactions += 1;
+    monthBuckets.set(monthKey, monthBucket);
+  }
+
+  const itemBuckets = new Map();
+  for (const item of rentalItems) {
+    const key = `${item.categoryName || ''}:${item.itemName || ''}`;
+    const bucket = itemBuckets.get(key) || {
+      key,
+      name: item.itemName || '-',
+      category: item.categoryName || '',
+      qty: 0,
+      estimatedRevenue: 0,
+    };
+    const qty = Math.max(0, Number(item.qty || 0));
+    bucket.qty += qty;
+    bucket.estimatedRevenue += Math.max(0, Number(item.price || 0)) * qty * Math.max(1, Number(item.rental?.duration || 1));
+    itemBuckets.set(key, bucket);
+  }
+
+  const availableMonths = [...new Set(tenantRentalDates.map((rental) => {
+    const { year, month } = getJakartaDateParts(rental.date);
+    return `${year}-${String(month).padStart(2, '0')}`;
+  }))].sort((a, b) => b.localeCompare(a));
+
+  return {
+    startDate: String(startDate || ''),
+    endDate: String(endDate || ''),
+    totalRevenue,
+    totalTransactions: rentals.length,
+    averageTransaction: rentals.length > 0 ? totalRevenue / rentals.length : 0,
+    methods: [...methodBuckets.values()].sort((a, b) => b.revenue - a.revenue),
+    topItems: [...itemBuckets.values()].sort((a, b) => b.estimatedRevenue - a.estimatedRevenue),
+    monthlyTrend: [...monthBuckets.values()].sort((a, b) => a.monthKey.localeCompare(b.monthKey)),
+    availableMonths,
+  };
+}
+
+export async function getFinancialRecapPage({ startDate, endDate, cursor, limit = 50 } = {}, context) {
+  const startAt = parseJakartaDateBoundary(startDate, 'start');
+  const endAt = parseJakartaDateBoundary(endDate, 'end');
+  const date = {
+    ...(startAt ? { gte: startAt } : {}),
+    ...(endAt ? { lte: endAt } : {}),
+  };
+  const where = withTenantBranchScope({
+    deletedAt: null,
+    ...(Object.keys(date).length > 0 ? { date } : {}),
+  }, context, { includeBranchNull: false });
+  const pageSize = Math.min(100, Math.max(1, Math.trunc(Number(limit) || 50)));
+  const [rentals, summary] = await Promise.all([
+    prisma.rental.findMany({
+      where,
+      ...(cursor ? { cursor: { id: String(cursor) }, skip: 1 } : {}),
+      take: pageSize + 1,
+      include: { items: true },
+      orderBy: [{ date: 'desc' }, { id: 'desc' }],
+    }),
+    cursor ? Promise.resolve(null) : getFinancialRecapSummary({ startDate, endDate }, context),
+  ]);
+  const hasNextPage = rentals.length > pageSize;
+  const pageRentals = hasNextPage ? rentals.slice(0, pageSize) : rentals;
+
+  return {
+    summary,
+    items: pageRentals.map(toRentalDto),
+    nextCursor: hasNextPage ? pageRentals.at(-1)?.id || null : null,
+  };
+}
+
+export async function listRentalHistoryPage({
+  status,
+  query,
+  startDate,
+  endDate,
+  cursor,
+  limit = 50,
+} = {}, context) {
+  const normalizedStatus = String(status || '').trim();
+  const keyword = String(query || '').trim();
+  const pageSize = Math.min(100, Math.max(1, Math.trunc(Number(limit) || 50)));
+  const startAt = parseJakartaDateBoundary(startDate, 'start');
+  const endAt = parseJakartaDateBoundary(endDate, 'end');
+  const date = {
+    ...(startAt ? { gte: startAt } : {}),
+    ...(endAt ? { lte: endAt } : {}),
+  };
+  const where = withTenantBranchScope({
+    deletedAt: null,
+    ...(normalizedStatus ? { status: normalizedStatus } : {}),
+    ...(Object.keys(date).length > 0 ? { date } : {}),
+    ...(keyword ? {
+      OR: [
+        { id: { contains: keyword, mode: 'insensitive' } },
+        { customerName: { contains: keyword, mode: 'insensitive' } },
+        { customerPhone: { contains: keyword, mode: 'insensitive' } },
+      ],
+    } : {}),
+  }, context, { includeBranchNull: false });
+
+  const rentals = await prisma.rental.findMany({
+    where,
+    ...(cursor ? { cursor: { id: String(cursor) }, skip: 1 } : {}),
+    take: pageSize + 1,
+    include: { items: true },
+    orderBy: [{ date: 'desc' }, { id: 'desc' }],
+  });
+
+  const hasNextPage = rentals.length > pageSize;
+  const pageRentals = hasNextPage ? rentals.slice(0, pageSize) : rentals;
+  let summary = null;
+  if (!cursor) {
+    const [statusCounts, finalTotal, originalTotal] = await Promise.all([
+      prisma.rental.groupBy({
+        by: ['status'],
+        where,
+        _count: { id: true },
+      }),
+      prisma.rental.aggregate({
+        where: { ...where, finalTotal: { not: null } },
+        _sum: { finalTotal: true },
+      }),
+      prisma.rental.aggregate({
+        where: { ...where, finalTotal: null },
+        _sum: { total: true },
+      }),
+    ]);
+    const countByStatus = new Map(statusCounts.map((entry) => [normalizeRentalStatus(entry.status), entry._count.id]));
+    summary = {
+      totalTransactions: statusCounts.reduce((sum, entry) => sum + entry._count.id, 0),
+      activeTransactions: countByStatus.get('active') || 0,
+      returnedTransactions: [...countByStatus.entries()]
+        .filter(([entryStatus]) => isReturnedRentalStatus(entryStatus))
+        .reduce((sum, [, count]) => sum + count, 0),
+      totalRevenue: Number(finalTotal._sum.finalTotal || 0) + Number(originalTotal._sum.total || 0),
+    };
+  }
+
+  return {
+    items: pageRentals.map(toRentalDto),
+    nextCursor: hasNextPage ? pageRentals.at(-1)?.id || null : null,
+    summary,
+  };
+}
+
 export async function createRental(payload, context) {
   const tenantId = requireTenantId(context);
   const branchId = requireBranchId(context);
@@ -1230,11 +1592,17 @@ export async function createRental(payload, context) {
       }
     }
 
+    const requestedItemIds = [...itemRequests.keys()];
+    const storedItems = await tx.item.findMany({
+      where: {
+        id: { in: requestedItemIds },
+      },
+      include: { category: true },
+    });
+    const itemsById = new Map(storedItems.map((item) => [item.id, item]));
+
     for (const [itemId, request] of itemRequests.entries()) {
-      const item = await tx.item.findUnique({
-        where: { id: itemId },
-        include: { category: true },
-      });
+      const item = itemsById.get(itemId);
 
       if (!item) {
         throw new Error(`Item ${itemId} not found`);
@@ -1975,8 +2343,6 @@ async function resolveTenantSubscriptionForTenant(tenantId, client = prisma) {
     throw new Error('Tenant id is required');
   }
 
-  await ensureDefaultPlanCatalog(client);
-
   const tenant = await client.tenant.findUnique({
     where: { id: targetTenantId },
     include: {
@@ -2000,6 +2366,9 @@ async function resolveTenantSubscriptionForTenant(tenantId, client = prisma) {
     return tenant.subscription;
   }
 
+  // The catalog is seeded at startup. Repair it only for a legacy tenant
+  // without a subscription instead of doing catalog upserts on every request.
+  await ensureDefaultPlanCatalog(client);
   await ensureTenantSubscriptionForTenant(client, tenant.id, {
     planCode: 'basic',
     status: tenant.status === 'active' ? 'active' : 'trial',
@@ -2022,6 +2391,27 @@ async function resolveTenantSubscriptionForTenant(tenantId, client = prisma) {
   }
 
   return subscription;
+}
+
+async function assertTenantSubscriptionUsable(tenantId) {
+  const subscription = await resolveTenantSubscriptionForTenant(tenantId);
+  const status = String(subscription.status || '').trim().toLowerCase();
+  if (status !== 'active' && status !== 'trial') {
+    throw new Error('Tenant subscription is not active');
+  }
+
+  const now = new Date();
+  if (subscription.startsAt instanceof Date && subscription.startsAt > now) {
+    throw new Error('Tenant subscription has not started');
+  }
+
+  if (subscription.endsAt instanceof Date && subscription.endsAt < now) {
+    const isWithinGracePeriod = subscription.graceEndsAt instanceof Date
+      && subscription.graceEndsAt >= now;
+    if (!isWithinGracePeriod) {
+      throw new Error('Tenant subscription has expired');
+    }
+  }
 }
 
 function getEntitlementValue(subscription, key, fallback = null) {
@@ -2059,11 +2449,15 @@ async function assertTenantCanCreateBranch(tenantId) {
   }
 
   const maxBranches = getIntegerEntitlement(subscription, 'maxBranches', 0);
-  if (maxBranches > 0) {
-    const currentCount = await prisma.branch.count({
-      where: { tenantId },
-    });
+  const currentCount = await prisma.branch.count({
+    where: { tenantId },
+  });
 
+  if (!getBooleanEntitlement(subscription, 'canUseMultiBranch', false) && currentCount >= 1) {
+    throw createFeatureDisabledError('multi branch');
+  }
+
+  if (maxBranches > 0) {
     if (currentCount >= maxBranches) {
       throw createPlanLimitExceededError('cabang', maxBranches);
     }
@@ -2198,125 +2592,6 @@ export async function getTenantSubscriptionSummaryForUser({
   };
 }
 
-export async function createTenantForSuperuser(payload) {
-  const tenantName = String(payload?.name || '').trim();
-  const tenantStatus = String(payload?.status || 'active').trim().toLowerCase();
-  const slugFromPayload = String(payload?.slug || '').trim().toLowerCase();
-  const ownerUserId = String(payload?.ownerUserId || '').trim();
-  const initialBranchCode = String(payload?.initialBranchCode || DEFAULT_BRANCH_CODE).trim().toLowerCase();
-  const initialBranchName = String(payload?.initialBranchName || DEFAULT_BRANCH_NAME).trim();
-
-  if (!tenantName) {
-    throw new Error('Tenant name is required');
-  }
-
-  if (!TENANT_STATUSES.has(tenantStatus)) {
-    throw new Error('Tenant status is invalid');
-  }
-
-  const tenantSlug = slugifyTenant(slugFromPayload || tenantName);
-  if (!tenantSlug) {
-    throw new Error('Tenant slug is invalid');
-  }
-
-  if (!initialBranchCode) {
-    throw new Error('Initial branch code is required');
-  }
-
-  if (!initialBranchName) {
-    throw new Error('Initial branch name is required');
-  }
-
-  if (ownerUserId) {
-    const owner = await prisma.user.findUnique({
-      where: { id: ownerUserId },
-    });
-
-    if (!owner) {
-      throw new Error('Owner user not found');
-    }
-  }
-
-  const duplicate = await prisma.tenant.findUnique({
-    where: { slug: tenantSlug },
-  });
-
-  if (duplicate) {
-    throw new Error('Tenant slug already exists');
-  }
-
-  const result = await prisma.$transaction(async (tx) => {
-    const createdTenant = await tx.tenant.create({
-      data: {
-        slug: tenantSlug,
-        name: tenantName,
-        status: tenantStatus,
-      },
-    });
-
-    const createdBranch = await tx.branch.create({
-      data: {
-        tenantId: createdTenant.id,
-        code: initialBranchCode,
-        name: initialBranchName,
-        status: 'active',
-      },
-    });
-
-    await tx.tenantSettings.create({
-      data: {
-        tenantId: createdTenant.id,
-        storeName: tenantName,
-        addressLines: DEFAULT_TENANT_SETTINGS.addressLines,
-        phone: DEFAULT_TENANT_SETTINGS.phone,
-        legalFooterLines: DEFAULT_TENANT_SETTINGS.legalFooterLines,
-        timezone: DEFAULT_TENANT_SETTINGS.timezone,
-        currency: DEFAULT_TENANT_SETTINGS.currency,
-        rentalDayCountMode: DEFAULT_TENANT_SETTINGS.rentalDayCountMode,
-        rentalCutoffHour: DEFAULT_TENANT_SETTINGS.rentalCutoffHour,
-        rentalCutoffMinute: DEFAULT_TENANT_SETTINGS.rentalCutoffMinute,
-      },
-    });
-
-    await ensureTenantSubscriptionForTenant(tx, createdTenant.id, {
-      planCode: 'basic',
-      status: tenantStatus === 'active' ? 'active' : 'trial',
-      forceStatusUpdate: true,
-    });
-
-    if (ownerUserId) {
-      await tx.userMembership.upsert({
-        where: {
-          userId_tenantId: {
-            userId: ownerUserId,
-            tenantId: createdTenant.id,
-          },
-        },
-        update: {
-          role: 'owner',
-          status: 'active',
-        },
-        create: {
-          userId: ownerUserId,
-          tenantId: createdTenant.id,
-          role: 'owner',
-          status: 'active',
-        },
-      });
-    }
-
-    return {
-      tenant: createdTenant,
-      initialBranch: createdBranch,
-    };
-  });
-
-  return {
-    ...toTenantDto(result.tenant),
-    initialBranch: toBranchDto(result.initialBranch),
-  };
-}
-
 export async function updateTenantForSuperuser(tenantId, payload) {
   const targetTenantId = String(tenantId || '').trim();
   if (!targetTenantId) {
@@ -2367,6 +2642,91 @@ export async function updateTenantForSuperuser(tenantId, payload) {
   });
 
   return toTenantDto(updated);
+}
+
+export async function deleteTenantForPlatformAdmin(tenantId, expectedName = '') {
+  const targetTenantId = String(tenantId || '').trim();
+  if (!targetTenantId) {
+    throw new Error('Tenant id is required');
+  }
+
+  const existing = await prisma.tenant.findUnique({
+    where: { id: targetTenantId },
+    include: {
+      memberships: {
+        select: { userId: true },
+      },
+      _count: {
+        select: {
+          branches: true,
+          memberships: true,
+        },
+      },
+    },
+  });
+
+  if (!existing) {
+    throw new Error('Tenant not found');
+  }
+
+  if (String(expectedName || '').trim() !== existing.name.trim()) {
+    throw new Error(`Confirmation text must be exactly: ${existing.name}`);
+  }
+
+  const memberUserIds = [...new Set(existing.memberships.map((membership) => membership.userId))];
+
+  const deleted = await prisma.$transaction(async (tx) => {
+    const [auditLogs, returns, rentals, customers, items, categories] = await Promise.all([
+      tx.auditLog.count({ where: { tenantId: existing.id } }),
+      tx.returnRecord.count({ where: { tenantId: existing.id } }),
+      tx.rental.count({ where: { tenantId: existing.id } }),
+      tx.customer.count({ where: { tenantId: existing.id } }),
+      tx.item.count({ where: { tenantId: existing.id } }),
+      tx.category.count({ where: { tenantId: existing.id } }),
+    ]);
+
+    await tx.auditLog.deleteMany({ where: { tenantId: existing.id } });
+    await tx.returnRecord.deleteMany({ where: { tenantId: existing.id } });
+    await tx.rental.deleteMany({ where: { tenantId: existing.id } });
+    await tx.customer.deleteMany({ where: { tenantId: existing.id } });
+    await tx.item.deleteMany({ where: { tenantId: existing.id } });
+    await tx.category.deleteMany({ where: { tenantId: existing.id } });
+    await tx.tenant.delete({ where: { id: existing.id } });
+
+    let orphanUsers = 0;
+    if (memberUserIds.length > 0) {
+      const removedUsers = await tx.user.deleteMany({
+        where: {
+          id: { in: memberUserIds },
+          role: 'kasir',
+          memberships: { none: {} },
+          branchAccesses: { none: {} },
+          deletedRentals: { none: {} },
+          auditLogs: { none: {} },
+        },
+      });
+      orphanUsers = removedUsers.count;
+    }
+
+    return {
+      auditLogs,
+      returns,
+      rentals,
+      customers,
+      items,
+      categories,
+      branches: existing._count.branches,
+      memberships: existing._count.memberships,
+      orphanUsers,
+    };
+  });
+
+  return {
+    id: existing.id,
+    name: existing.name,
+    slug: existing.slug,
+    deleted,
+  };
 }
 
 export async function listBranchesForUser({ userId, role, tenantId }) {
@@ -2930,6 +3290,10 @@ export async function resolveTenantBranchContextForUser({
 
   const normalizedRole = normalizeRole(role);
   const isAdminLike = normalizedRole === 'admin' || normalizedRole === 'superuser';
+  if (!isAdminLike) {
+    await assertTenantSubscriptionUsable(tenant.id);
+  }
+
   const branchId = String(requestedBranchId || '').trim();
   const hasAccessRules = await prisma.userBranchAccess.count({
     where: { userId },
@@ -3988,16 +4352,24 @@ export async function createTenantUserForUser({
   };
 }
 
-export async function createSelfRegisteredTenantUser({
-  payload,
-  passwordPepper,
-}) {
-  const normalizedUsername = String(payload?.username || '').trim().toLowerCase();
-  const password = String(payload?.password || '');
+export async function onboardTenantForPlatformAdmin(payload, passwordPepper) {
+  const normalizedUsername = String(payload?.ownerUsername || '').trim().toLowerCase();
+  const password = String(payload?.ownerPassword || '');
   const storeName = String(payload?.storeName || '').trim();
   const storeSlugInput = String(payload?.storeSlug || '').trim().toLowerCase();
+  const tenantStatus = String(payload?.tenantStatus || 'active').trim().toLowerCase();
   const initialBranchCode = String(payload?.initialBranchCode || DEFAULT_BRANCH_CODE).trim().toLowerCase();
   const initialBranchName = String(payload?.initialBranchName || DEFAULT_BRANCH_NAME).trim();
+  const planId = String(payload?.planId || '').trim();
+  const subscriptionStatus = String(payload?.subscriptionStatus || 'active').trim().toLowerCase();
+  const startsAt = payload?.startsAt ? parseIsoDate(payload.startsAt, 'startsAt') : new Date();
+  const endsAt = Object.prototype.hasOwnProperty.call(payload || {}, 'endsAt')
+    ? parseOptionalIsoDate(payload.endsAt, 'endsAt')
+    : null;
+  const graceEndsAt = Object.prototype.hasOwnProperty.call(payload || {}, 'graceEndsAt')
+    ? parseOptionalIsoDate(payload.graceEndsAt, 'graceEndsAt')
+    : null;
+  const billingNotes = String(payload?.billingNotes || '').trim();
   const tenantSlug = slugifyTenant(storeSlugInput || storeName);
 
   if (!normalizedUsername) {
@@ -4028,6 +4400,18 @@ export async function createSelfRegisteredTenantUser({
     throw new Error('Initial branch name is required');
   }
 
+  if (!TENANT_STATUSES.has(tenantStatus)) {
+    throw new Error('Tenant status is invalid');
+  }
+
+  if (!SUBSCRIPTION_STATUSES.has(subscriptionStatus)) {
+    throw new Error('Subscription status is invalid');
+  }
+
+  if (!planId) {
+    throw new Error('Plan id is required');
+  }
+
   const existingUser = await prisma.user.findUnique({
     where: { username: normalizedUsername },
   });
@@ -4045,11 +4429,18 @@ export async function createSelfRegisteredTenantUser({
   }
 
   const created = await prisma.$transaction(async (tx) => {
+    const selectedPlan = await tx.plan.findUnique({
+      where: { id: planId },
+    });
+    if (!selectedPlan) {
+      throw new Error('Plan not found');
+    }
+
     const tenant = await tx.tenant.create({
       data: {
         slug: tenantSlug,
         name: storeName,
-        status: 'suspended',
+        status: tenantStatus,
       },
     });
 
@@ -4077,9 +4468,21 @@ export async function createSelfRegisteredTenantUser({
       },
     });
 
+    await tx.category.createMany({
+      data: DEFAULT_CATEGORIES.map((name) => ({
+        tenantId: tenant.id,
+        name,
+      })),
+    });
+
     await ensureTenantSubscriptionForTenant(tx, tenant.id, {
-      planCode: 'basic',
-      status: 'trial',
+      planId: selectedPlan.id,
+      status: subscriptionStatus,
+      startsAt,
+      endsAt,
+      graceEndsAt,
+      billingNotes,
+      forcePlanUpdate: true,
       forceStatusUpdate: true,
     });
 
@@ -4100,20 +4503,41 @@ export async function createSelfRegisteredTenantUser({
       },
     });
 
-    return { user, membership, tenant, branch };
+    await tx.userBranchAccess.create({
+      data: {
+        userId: user.id,
+        branchId: branch.id,
+        role: 'admin',
+      },
+    });
+
+    const subscription = await tx.tenantSubscription.findUnique({
+      where: { tenantId: tenant.id },
+      include: {
+        plan: {
+          include: { features: true },
+        },
+      },
+    });
+
+    return { user, membership, tenant, branch, subscription };
   });
 
   return {
-    ...toUserDto(created.user),
-    tenantId: created.tenant.id,
-    tenantSlug: created.tenant.slug,
-    tenantName: created.tenant.name,
-    initialBranchId: created.branch.id,
-    initialBranchCode: created.branch.code,
-    initialBranchName: created.branch.name,
-    tenantMembershipId: created.membership.id,
-    tenantRole: created.membership.role,
-    tenantStatus: created.membership.status,
+    tenant: {
+      ...toTenantDto(created.tenant),
+      ownerUsernames: [created.user.username],
+      branchCount: 1,
+      membershipCount: 1,
+      subscription: created.subscription ? toTenantSubscriptionDto(created.subscription) : null,
+    },
+    owner: {
+      ...toUserDto(created.user),
+      tenantMembershipId: created.membership.id,
+      tenantRole: created.membership.role,
+      membershipStatus: created.membership.status,
+    },
+    initialBranch: toBranchDto(created.branch),
   };
 }
 

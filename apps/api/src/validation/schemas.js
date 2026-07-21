@@ -26,15 +26,6 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-export const selfRegisterSchema = z.object({
-  username: z.string().trim().min(3).max(50),
-  password: z.string().min(8).max(128),
-  storeName: z.string().trim().min(2).max(120),
-  storeSlug: z.string().trim().min(2).max(80).optional(),
-  initialBranchCode: z.string().trim().min(2).max(40).optional(),
-  initialBranchName: z.string().trim().min(2).max(120).optional(),
-});
-
 export const createCategorySchema = z.object({
   name: z.string().trim().min(1),
 });
@@ -69,19 +60,61 @@ export const updateTenantSettingsSchema = z.object({
   financialClosingDay: z.coerce.number().int().min(1).max(31).optional(),
 });
 
-export const createTenantSchema = z.object({
-  name: z.string().trim().min(2).max(120),
-  slug: z.string().trim().min(2).max(80).optional(),
-  status: z.enum(['active', 'suspended']).optional().default('active'),
-  ownerUserId: z.string().trim().min(1).optional(),
-  initialBranchCode: z.string().trim().min(2).max(40).optional(),
-  initialBranchName: z.string().trim().min(2).max(120).optional(),
-});
-
 export const updateTenantSchema = z.object({
   name: z.string().trim().min(2).max(120).optional(),
   slug: z.string().trim().min(2).max(80).optional(),
   status: z.enum(['active', 'suspended']).optional(),
+});
+
+export const onboardTenantSchema = z.object({
+  storeName: z.string().trim().min(2).max(120),
+  storeSlug: z.string().trim().min(2).max(80).optional(),
+  tenantStatus: z.enum(['active', 'suspended']).default('active'),
+  ownerUsername: z.string().trim().min(3).max(50),
+  ownerPassword: z.string().min(8).max(128),
+  initialBranchCode: z.string().trim().min(2).max(40).default('pusat'),
+  initialBranchName: z.string().trim().min(2).max(120).default('Toko Pusat'),
+  planId: z.string().trim().min(1),
+  subscriptionStatus: z.enum(['trial', 'active', 'suspended', 'expired']).default('active'),
+  startsAt: z.string().datetime().optional(),
+  endsAt: z.union([z.string().datetime(), z.null()]).optional(),
+  graceEndsAt: z.union([z.string().datetime(), z.null()]).optional(),
+  billingNotes: z.string().trim().max(300).optional().default(''),
+}).superRefine((payload, context) => {
+  if (
+    payload.tenantStatus === 'active'
+    && payload.subscriptionStatus !== 'active'
+    && payload.subscriptionStatus !== 'trial'
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['subscriptionStatus'],
+      message: 'Toko aktif harus menggunakan subscription aktif atau trial',
+    });
+  }
+
+  const startsAt = payload.startsAt ? new Date(payload.startsAt) : null;
+  const endsAt = payload.endsAt ? new Date(payload.endsAt) : null;
+  const graceEndsAt = payload.graceEndsAt ? new Date(payload.graceEndsAt) : null;
+  if (startsAt && endsAt && endsAt < startsAt) {
+    context.addIssue({
+      code: 'custom',
+      path: ['endsAt'],
+      message: 'Tanggal berakhir tidak boleh sebelum tanggal mulai',
+    });
+  }
+  if (endsAt && graceEndsAt && graceEndsAt < endsAt) {
+    context.addIssue({
+      code: 'custom',
+      path: ['graceEndsAt'],
+      message: 'Grace period tidak boleh sebelum tanggal berakhir',
+    });
+  }
+});
+
+export const deleteTenantSchema = z.object({
+  password: z.string().min(1).max(128),
+  confirmationText: z.string().trim().min(1).max(120),
 });
 
 const planFeatureSchema = z.object({

@@ -1,18 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import useSWR from 'swr'
 import { createUserAccount, fetchUsers, getStoredSession, removeUserAccount, resetUserPassword, updateUserAccount } from '../lib/api'
+import { APP_CACHE_KEYS } from '../lib/appCache'
 
 const Users = () => {
-    const [users, setUsers] = useState([])
-    const [isLoading, setIsLoading] = useState(true)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isSavingEdit, setIsSavingEdit] = useState(false)
     const [deletingUserId, setDeletingUserId] = useState('')
     const [message, setMessage] = useState('')
     const [errorMessage, setErrorMessage] = useState('')
     const [editingUserId, setEditingUserId] = useState('')
-    const latestLoadRequestRef = useRef(0)
     const usersSyncChannelRef = useRef(null)
-    const isBackgroundSyncingRef = useRef(false)
     const [form, setForm] = useState({
         username: '',
         password: '',
@@ -23,35 +21,10 @@ const Users = () => {
         role: 'kasir',
     })
     const currentUser = getStoredSession().user
-
-    const loadUsers = async () => {
-        const requestId = latestLoadRequestRef.current + 1
-        latestLoadRequestRef.current = requestId
-        setIsLoading(true)
-        setErrorMessage('')
-
-        try {
-            const data = await fetchUsers()
-            if (requestId !== latestLoadRequestRef.current) {
-                return
-            }
-            setUsers(data)
-        } catch (error) {
-            if (requestId !== latestLoadRequestRef.current) {
-                return
-            }
-            const messageText = error instanceof Error ? error.message : 'Gagal memuat daftar user.'
-            setErrorMessage(messageText)
-        } finally {
-            if (requestId === latestLoadRequestRef.current) {
-                setIsLoading(false)
-            }
-        }
-    }
-
-    useEffect(() => {
-        loadUsers()
-    }, [])
+    const userQuery = useSWR(APP_CACHE_KEYS.users, fetchUsers)
+    const users = useMemo(() => (Array.isArray(userQuery.data) ? userQuery.data : []), [userQuery.data])
+    const isLoading = userQuery.isLoading
+    const queryErrorMessage = userQuery.error instanceof Error ? userQuery.error.message : ''
 
     const notifyUsersChanged = () => {
         const payload = {
@@ -79,17 +52,8 @@ const Users = () => {
             usersSyncChannelRef.current = new BroadcastChannel('avia-users-sync')
         }
 
-        const handleSync = async () => {
-            if (isBackgroundSyncingRef.current || editingUserId) {
-                return
-            }
-
-            isBackgroundSyncingRef.current = true
-            try {
-                await loadUsers()
-            } finally {
-                isBackgroundSyncingRef.current = false
-            }
+        const handleSync = () => {
+            if (!editingUserId) void userQuery.mutate()
         }
 
         const channel = usersSyncChannelRef.current
@@ -105,39 +69,18 @@ const Users = () => {
             }
         }
 
-        const onVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                void handleSync()
-            }
-        }
-
-        const onFocus = () => {
-            void handleSync()
-        }
-
-        const intervalId = window.setInterval(() => {
-            if (document.visibilityState === 'visible') {
-                void handleSync()
-            }
-        }, 15000)
-
         if (channel) {
             channel.addEventListener('message', onChannelMessage)
         }
         window.addEventListener('storage', onStorage)
-        window.addEventListener('focus', onFocus)
-        document.addEventListener('visibilitychange', onVisibilityChange)
 
         return () => {
             if (channel) {
                 channel.removeEventListener('message', onChannelMessage)
             }
             window.removeEventListener('storage', onStorage)
-            window.removeEventListener('focus', onFocus)
-            document.removeEventListener('visibilitychange', onVisibilityChange)
-            window.clearInterval(intervalId)
         }
-    }, [editingUserId])
+    }, [editingUserId, userQuery])
 
     useEffect(() => () => {
         if (usersSyncChannelRef.current) {
@@ -153,10 +96,11 @@ const Users = () => {
 
         try {
             setIsSubmitting(true)
-            await createUserAccount(form)
+            const created = await createUserAccount(form)
+            await userQuery.mutate((current = []) => [...current, created], { revalidate: false })
             setForm({ username: '', password: '', role: 'kasir' })
             setMessage('User baru berhasil dibuat.')
-            await loadUsers()
+            void userQuery.mutate()
             notifyUsersChanged()
         } catch (error) {
             const messageText = error instanceof Error ? error.message : 'Gagal membuat user.'
@@ -214,10 +158,13 @@ const Users = () => {
 
         try {
             setIsSavingEdit(true)
-            await updateUserAccount(userId, editForm)
+            const updated = await updateUserAccount(userId, editForm)
+            await userQuery.mutate((current = []) => current.map((user) => (
+                user.id === userId ? updated : user
+            )), { revalidate: false })
             setMessage('Data user berhasil diperbarui.')
             setEditingUserId('')
-            await loadUsers()
+            void userQuery.mutate()
             notifyUsersChanged()
         } catch (error) {
             const messageText = error instanceof Error ? error.message : 'Gagal memperbarui user.'
@@ -238,8 +185,9 @@ const Users = () => {
         try {
             setDeletingUserId(user.id)
             await removeUserAccount(user.id)
+            await userQuery.mutate((current = []) => current.filter((item) => item.id !== user.id), { revalidate: false })
             setMessage(`User ${user.username} berhasil dihapus.`)
-            await loadUsers()
+            void userQuery.mutate()
             notifyUsersChanged()
         } catch (error) {
             const messageText = error instanceof Error ? error.message : 'Gagal menghapus user.'
@@ -303,8 +251,8 @@ const Users = () => {
                 <div className="rounded-lg border border-[#2ecc71]/40 bg-[#2ecc71]/10 p-3 text-sm text-[#6ee7a8]">{message}</div>
             )}
 
-            {errorMessage && (
-                <div className="rounded-lg border border-[#e74c3c]/40 bg-[#e74c3c]/10 p-3 text-sm text-[#f3b2ad]">{errorMessage}</div>
+            {(errorMessage || queryErrorMessage) && (
+                <div className="rounded-lg border border-[#e74c3c]/40 bg-[#e74c3c]/10 p-3 text-sm text-[#f3b2ad]">{errorMessage || queryErrorMessage}</div>
             )}
 
             <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">

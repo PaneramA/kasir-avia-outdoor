@@ -1,11 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
+import useSWR from 'swr'
 import {
   createBranch,
   fetchBranches,
   fetchTenantMemberships,
+  getActiveTenantContext,
   getStoredSession,
   updateBranch,
 } from '../lib/api'
+import { APP_CACHE_KEYS } from '../lib/appCache'
 
 const initialBranchForm = {
   code: '',
@@ -15,37 +18,25 @@ const initialBranchForm = {
 
 const Branches = () => {
   const currentUser = getStoredSession().user
-  const [branches, setBranches] = useState([])
-  const [memberships, setMemberships] = useState([])
+  const tenantId = getActiveTenantContext().tenantId || 'current'
   const [branchForm, setBranchForm] = useState(initialBranchForm)
-  const [isLoading, setIsLoading] = useState(true)
   const [isSubmittingBranch, setIsSubmittingBranch] = useState(false)
   const [message, setMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true)
-    setErrorMessage('')
-
-    try {
-      const [branchesData, membershipsData] = await Promise.all([
-        fetchBranches('current'),
-        fetchTenantMemberships('current'),
-      ])
-
-      setBranches(Array.isArray(branchesData) ? branchesData : [])
-      setMemberships(Array.isArray(membershipsData) ? membershipsData : [])
-    } catch (error) {
-      const messageText = error instanceof Error ? error.message : 'Gagal memuat data cabang tenant.'
-      setErrorMessage(messageText)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void loadData()
-  }, [loadData])
+  const branchQuery = useSWR(APP_CACHE_KEYS.branches(tenantId), () => fetchBranches(tenantId))
+  const membershipQuery = useSWR(
+    APP_CACHE_KEYS.tenantMemberships(tenantId),
+    () => fetchTenantMemberships(tenantId),
+  )
+  const branches = useMemo(() => (Array.isArray(branchQuery.data) ? branchQuery.data : []), [branchQuery.data])
+  const memberships = useMemo(
+    () => (Array.isArray(membershipQuery.data) ? membershipQuery.data : []),
+    [membershipQuery.data],
+  )
+  const isLoading = branchQuery.isLoading || membershipQuery.isLoading
+  const queryError = branchQuery.error || membershipQuery.error
+  const displayedErrorMessage = errorMessage || (queryError instanceof Error ? queryError.message : '')
 
   const currentMembership = useMemo(() => (
     memberships.find((membership) => membership.userId === currentUser?.id) || null
@@ -66,10 +57,11 @@ const Branches = () => {
 
     try {
       setIsSubmittingBranch(true)
-      await createBranch(branchForm)
+      const created = await createBranch(branchForm)
+      await branchQuery.mutate((current = []) => [...current, created], { revalidate: false })
       setMessage('Cabang baru berhasil ditambahkan.')
       setBranchForm(initialBranchForm)
-      await loadData()
+      void branchQuery.mutate()
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'Gagal menambah cabang.'
       setErrorMessage(messageText)
@@ -83,9 +75,12 @@ const Branches = () => {
     setErrorMessage('')
 
     try {
-      await updateBranch(branch.id, { status: nextStatus })
+      const updated = await updateBranch(branch.id, { status: nextStatus })
+      await branchQuery.mutate((current = []) => current.map((item) => (
+        item.id === updated.id ? updated : item
+      )), { revalidate: false })
       setMessage(`Status cabang ${branch.name} diperbarui ke ${nextStatus}.`)
-      await loadData()
+      void branchQuery.mutate()
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'Gagal update status cabang.'
       setErrorMessage(messageText)
@@ -98,8 +93,8 @@ const Branches = () => {
         <div className="rounded-lg border border-[#2ecc71]/40 bg-[#2ecc71]/10 p-3 text-sm text-[#6ee7a8]">{message}</div>
       )}
 
-      {errorMessage && (
-        <div className="rounded-lg border border-[#e74c3c]/40 bg-[#e74c3c]/10 p-3 text-sm text-[#f3b2ad]">{errorMessage}</div>
+      {displayedErrorMessage && (
+        <div className="rounded-lg border border-[#e74c3c]/40 bg-[#e74c3c]/10 p-3 text-sm text-[#f3b2ad]">{displayedErrorMessage}</div>
       )}
 
       <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">
