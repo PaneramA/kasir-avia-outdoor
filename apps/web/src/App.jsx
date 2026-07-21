@@ -878,6 +878,18 @@ function App() {
                 />
               )}
             />
+            <Route
+              path={APP_ROUTES.adminAccount}
+              element={isAdminLikeUser ? (
+                <Account
+                  currentUser={currentUser}
+                  tenantSettings={tenantSettings}
+                  branchSettings={branchSettings}
+                  onUpdateTenantSettings={handleUpdateTenantSettings}
+                  onUpdateBranchSettings={handleUpdateBranchSettings}
+                />
+              ) : <Navigate to={APP_ROUTES.account} replace />}
+            />
             <Route path="*" element={<NotFoundPage />} />
             </Routes>
             </Suspense>

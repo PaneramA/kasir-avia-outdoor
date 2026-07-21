@@ -14,6 +14,7 @@ const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onC
 
     const menuItems = [
         { path: APP_ROUTES.dashboard, icon: 'fas fa-th-large', label: 'Dashboard' },
+        ...(isAdminLike ? [{ path: APP_ROUTES.admin, icon: 'fas fa-user-shield', label: 'Admin Panel' }] : []),
         { path: APP_ROUTES.rental, icon: 'fas fa-handshake', label: 'Sewa Barang' },
         { path: APP_ROUTES.return, icon: 'fas fa-undo', label: 'Pengembalian' },
         { path: APP_ROUTES.inventory, icon: 'fas fa-boxes-stacked', label: 'Inventaris' },
