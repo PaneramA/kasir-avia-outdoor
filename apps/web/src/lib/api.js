@@ -428,35 +428,6 @@ export function updateTenantSubscription(tenantId, payload) {
   }, { auth: true });
 }
 
-export function fetchPlans() {
-  return request('/api/plans', {}, { auth: true });
-}
-
-export function createPlanDefinition(payload) {
-  return request('/api/plans', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  }, { auth: true });
-}
-
-export function updatePlanDefinition(planId, payload) {
-  return request(`/api/plans/${encodeURIComponent(planId)}`, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  }, { auth: true });
-}
-
-export function fetchTenantSubscriptions() {
-  return request('/api/subscriptions', {}, { auth: true });
-}
-
-export function updateTenantSubscription(tenantId, payload) {
-  return request(`/api/subscriptions/${encodeURIComponent(tenantId)}`, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  }, { auth: true });
-}
-
 export function fetchBranches(tenantId = 'current') {
   const suffix = `?tenantId=${encodeURIComponent(tenantId)}`;
   return request(`/api/branches${suffix}`, {}, { auth: true });
