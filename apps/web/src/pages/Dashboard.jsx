@@ -1,17 +1,19 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import useSWR from 'swr';
 import { APP_ROUTES } from '../lib/routes';
-import {
-    formatCurrency,
-    formatMonthLabel,
-    getCurrentFinancialMonthRangeDateKeys,
-    getFinancialClosingDay,
-    getFinancialRecap,
-} from '../lib/financial';
-import { compareRentalsByClosestReturnDate, getPlannedReturnDate, toDate } from '../lib/rentalTime';
+import { formatCurrency, formatMonthLabel } from '../lib/financial';
+import { getPlannedReturnDate } from '../lib/rentalTime';
+import { fetchDashboardSummary } from '../lib/api';
+import { APP_CACHE_KEYS } from '../lib/appCache';
 
-const Dashboard = ({ inventory, rentals, tenantSettings }) => {
+const Dashboard = ({ tenantId = '', branchId = '' }) => {
     const [statusFilter, setStatusFilter] = React.useState('all');
+    const { data: dashboardSummary, error: dashboardError, isLoading } = useSWR(
+        tenantId && branchId ? APP_CACHE_KEYS.dashboard(tenantId, branchId, statusFilter) : null,
+        ([, , , recentStatus]) => fetchDashboardSummary(recentStatus),
+        { keepPreviousData: true },
+    );
 
     const filterOptions = [
         { value: 'all', label: 'Semua' },
@@ -19,31 +21,16 @@ const Dashboard = ({ inventory, rentals, tenantSettings }) => {
         { value: 'returned', label: 'Returned' },
     ];
 
-    const calculateStats = () => {
-        const financialClosingDay = getFinancialClosingDay(tenantSettings);
-        const { monthKey, startDate, endDate } = getCurrentFinancialMonthRangeDateKeys(financialClosingDay);
-        const recap = getFinancialRecap(rentals, { startDate, endDate, financialClosingDay });
-        const available = inventory.reduce((sum, item) => sum + parseInt(item.stock || 0), 0);
-        const activeRentals = rentals.filter((r) => r.status === 'Active').length;
-        const itemsOut = rentals
-            .filter((r) => r.status === 'Active')
-            .reduce((sum, r) => sum + r.items.reduce((iSum, item) => iSum + item.qty, 0), 0);
-        const revenue = recap.totalRevenue;
-
-        return { available, activeRentals, itemsOut, revenue, monthLabel: formatMonthLabel(monthKey) };
+    const stats = dashboardSummary?.stats || {
+        availableStock: 0,
+        activeRentals: 0,
+        itemsOut: 0,
+        revenue: 0,
     };
-
-    const stats = calculateStats();
-    const filteredRecent = rentals
-        .filter((r) => statusFilter === 'all' || (r.status || '').toLowerCase() === statusFilter)
-        .sort((a, b) => {
-            if (statusFilter === 'active') {
-                return compareRentalsByClosestReturnDate(a, b);
-            }
-
-            return (toDate(b?.date)?.getTime() || 0) - (toDate(a?.date)?.getTime() || 0);
-        })
-        .slice(0, 5);
+    const monthLabel = formatMonthLabel(dashboardSummary?.period?.monthKey || '');
+    const filteredRecent = Array.isArray(dashboardSummary?.recentRentals)
+        ? dashboardSummary.recentRentals
+        : [];
 
     const formatReturnDateLabel = (rental) => {
         const actualReturnDate = rental?.returnDate ? new Date(rental.returnDate) : null;
@@ -76,7 +63,7 @@ const Dashboard = ({ inventory, rentals, tenantSettings }) => {
                     </div>
                     <div className="flex flex-col">
                         <span className="text-[0.8rem] text-text-muted uppercase tracking-wider font-semibold mb-1">Stok Tersedia</span>
-                        <span className="text-[1.5rem] font-bold text-text-main">{stats.available}</span>
+                        <span className="text-[1.5rem] font-bold text-text-main">{stats.availableStock}</span>
                     </div>
                 </div>
                 <div className="flex items-center gap-4 rounded-DEFAULT border border-border bg-card-bg p-5 transition-all hover:border-accent sm:gap-5 sm:p-6">
@@ -104,7 +91,7 @@ const Dashboard = ({ inventory, rentals, tenantSettings }) => {
                     <div className="flex flex-col">
                         <span className="text-[0.8rem] text-text-muted uppercase tracking-wider font-semibold mb-1">Pendapatan Bulanan</span>
                         <span className="text-[1.5rem] font-bold text-text-main">{formatCurrency(stats.revenue)}</span>
-                        <span className="text-[0.72rem] text-text-muted">{stats.monthLabel}</span>
+                        <span className="text-[0.72rem] text-text-muted">{monthLabel}</span>
                     </div>
                 </div>
             </div>
@@ -144,7 +131,11 @@ const Dashboard = ({ inventory, rentals, tenantSettings }) => {
                     </div>
                 </div>
                 <div className="mt-5 sm:mt-6">
-                    {filteredRecent.length === 0 ? (
+                    {isLoading ? (
+                        <div className="py-10 text-center text-text-muted">Memuat ringkasan operasional...</div>
+                    ) : dashboardError ? (
+                        <div className="py-10 text-center text-[#e74c3c]">Gagal memuat ringkasan Dashboard.</div>
+                    ) : filteredRecent.length === 0 ? (
                         <div className="text-center py-10 text-text-muted">Belum ada transaksi untuk filter ini.</div>
                     ) : (
                         <>

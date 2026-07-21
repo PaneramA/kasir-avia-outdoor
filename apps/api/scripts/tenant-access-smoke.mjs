@@ -1,5 +1,7 @@
 import { prisma } from '../src/data/prisma.js';
+import { pathToFileURL } from 'node:url';
 import {
+  deleteTenantForPlatformAdmin,
   listTenantsForUser,
   resolveTenantBranchContextForUser,
   updateTenantMembershipForUser,
@@ -11,7 +13,7 @@ function assert(condition, message) {
   }
 }
 
-async function main() {
+export async function runTenantAccessSmoke() {
   const suffix = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
   const ids = {
     users: [],
@@ -65,7 +67,7 @@ async function main() {
       data: {
         username: `smoke-admin-${suffix}`,
         passwordHash: 'smoke',
-        role: 'admin',
+        role: 'kasir',
       },
     });
     ids.users.push(tenantAdmin.id);
@@ -110,7 +112,7 @@ async function main() {
 
     const tenantsForTenantAdmin = await listTenantsForUser({
       userId: tenantAdmin.id,
-      role: 'admin',
+      role: 'kasir',
     });
 
     assert(
@@ -127,7 +129,7 @@ async function main() {
     try {
       await resolveTenantBranchContextForUser({
         userId: tenantAdmin.id,
-        role: 'admin',
+        role: 'kasir',
         requestedTenantId: tenantB.id,
         requestedBranchId: branchB.id,
       });
@@ -140,11 +142,45 @@ async function main() {
       'Tenant admin must be forbidden to resolve tenant B context',
     );
 
+    await resolveTenantBranchContextForUser({
+      userId: tenantAdmin.id,
+      role: 'kasir',
+      requestedTenantId: tenantA.id,
+      requestedBranchId: branchA.id,
+    });
+
+    await prisma.tenantSubscription.update({
+      where: { tenantId: tenantA.id },
+      data: { status: 'suspended' },
+    });
+
+    let subscriptionError = '';
+    try {
+      await resolveTenantBranchContextForUser({
+        userId: tenantAdmin.id,
+        role: 'kasir',
+        requestedTenantId: tenantA.id,
+        requestedBranchId: branchA.id,
+      });
+    } catch (error) {
+      subscriptionError = error instanceof Error ? error.message : String(error);
+    }
+
+    assert(
+      subscriptionError.toLowerCase().includes('subscription'),
+      'Tenant user must be blocked when subscription is suspended',
+    );
+
+    await prisma.tenantSubscription.update({
+      where: { tenantId: tenantA.id },
+      data: { status: 'active' },
+    });
+
     let ownerProtectionError = '';
     try {
       await updateTenantMembershipForUser({
         actorUserId: tenantAdmin.id,
-        actorRole: 'admin',
+        actorRole: 'kasir',
         membershipId: ownerMembership.id,
         payload: {
           role: 'kasir',
@@ -169,6 +205,19 @@ async function main() {
     });
 
     assert(updatedBySuperuser.role === 'admin', 'Superuser should be able to update owner membership');
+
+    const deletedTenant = await deleteTenantForPlatformAdmin(tenantB.id, tenantB.name);
+    assert(deletedTenant.id === tenantB.id, 'Platform admin deletion should return deleted tenant');
+
+    const tenantBAfterDelete = await prisma.tenant.findUnique({
+      where: { id: tenantB.id },
+    });
+    assert(tenantBAfterDelete === null, 'Deleted tenant must no longer exist');
+
+    const branchBAfterDelete = await prisma.branch.findUnique({
+      where: { id: branchB.id },
+    });
+    assert(branchBAfterDelete === null, 'Deleting a tenant must cascade its branches');
 
     console.log('[tenant-access-smoke] All checks passed');
   } finally {
@@ -221,8 +270,13 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  const message = error instanceof Error ? error.stack || error.message : String(error);
-  console.error('[tenant-access-smoke] Failed:', message);
-  process.exitCode = 1;
-});
+const isDirectExecution = process.argv[1]
+  && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isDirectExecution) {
+  runTenantAccessSmoke().catch((error) => {
+    const message = error instanceof Error ? error.stack || error.message : String(error);
+    console.error('[tenant-access-smoke] Failed:', message);
+    process.exitCode = 1;
+  });
+}

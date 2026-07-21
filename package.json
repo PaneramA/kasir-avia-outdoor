@@ -1,4 +1,3 @@
-
 {
   "name": "kasir-aviaoutdoor-monorepo",
   "private": true,
@@ -18,9 +17,20 @@
     "lint": "npm run lint --workspace @avia/web && npm run lint --workspace @avia/api",
     "lint:web": "npm run lint --workspace @avia/web",
     "lint:api": "npm run lint --workspace @avia/api",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "preview:web": "npm run preview --workspace @avia/web"
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "jsdom": "^29.1.1",
+    "vitest": "^4.1.10"
   }
 }

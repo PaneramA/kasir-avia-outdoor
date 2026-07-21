@@ -1,7 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import useSWRInfinite from 'swr/infinite';
 import ItemModal from '../components/ItemModal';
 import CategoryModal from '../components/CategoryModal';
 import ViewModeToggle from '../components/ViewModeToggle';
+import { fetchItemsPage } from '../lib/api';
+import { APP_CACHE_KEYS } from '../lib/appCache';
 
 const INVENTORY_VIEW_STORAGE_KEY = 'avia_inventory_view_mode';
 
@@ -99,7 +102,8 @@ const escapeCsvCell = (value) => {
 };
 
 const Inventory = ({
-    inventory,
+    tenantId,
+    branchId,
     categories,
     onSaveItem,
     onImportItems,
@@ -113,7 +117,52 @@ const Inventory = ({
     const [inventoryViewMode, setInventoryViewMode] = useState(getInitialInventoryViewMode);
     const [isImporting, setIsImporting] = useState(false);
     const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
     const importFileInputRef = useRef(null);
+
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => setDebouncedSearchQuery(searchQuery.trim()), 250);
+        return () => window.clearTimeout(timeoutId);
+    }, [searchQuery]);
+
+    const {
+        data: inventoryPages = [],
+        error: inventoryError,
+        isLoading: isInventoryLoading,
+        isValidating: isInventoryValidating,
+        setSize,
+    } = useSWRInfinite(
+        (pageIndex, previousPageData) => {
+            if (!tenantId || !branchId) {
+                return null;
+            }
+
+            if (pageIndex > 0 && !previousPageData?.nextCursor) {
+                return null;
+            }
+
+            return APP_CACHE_KEYS.inventoryPage(
+                tenantId,
+                branchId,
+                debouncedSearchQuery,
+                pageIndex === 0 ? '' : previousPageData.nextCursor,
+            );
+        },
+        ([, , , query, cursor]) => fetchItemsPage({ query, cursor }),
+        { keepPreviousData: true },
+    );
+
+    useEffect(() => {
+        void setSize(1);
+    }, [debouncedSearchQuery, setSize]);
+
+    const inventory = useMemo(
+        () => inventoryPages.flatMap((page) => (Array.isArray(page?.items) ? page.items : [])),
+        [inventoryPages],
+    );
+    const hasMoreInventory = Boolean(inventoryPages.at(-1)?.nextCursor);
+    const isLoadingMoreInventory = isInventoryValidating && inventoryPages.length > 0;
 
     useEffect(() => {
         if (typeof window === 'undefined') {
@@ -323,6 +372,13 @@ const Inventory = ({
                             containerClassName="min-h-11 rounded-DEFAULT"
                             buttonClassName="px-3 py-2 text-xs"
                         />
+                        <input
+                            type="search"
+                            className="min-h-11 w-full rounded-DEFAULT border border-border bg-sidebar-bg px-3 text-sm text-text-main outline-none placeholder:text-text-muted focus:border-accent sm:w-56"
+                            value={searchQuery}
+                            onChange={(event) => setSearchQuery(event.target.value)}
+                            placeholder="Cari barang atau kategori"
+                        />
                         <button
                             className="flex min-h-11 w-full items-center justify-center gap-2 rounded-DEFAULT border border-border bg-sidebar-bg px-5 py-2.5 font-semibold text-text-main transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
                             onClick={() => { void handleDownloadTemplate(); }}
@@ -351,9 +407,13 @@ const Inventory = ({
             </div>
 
             <div className="custom-scrollbar lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-y-contain lg:pr-2">
-                {inventory.length === 0 ? (
+                {inventoryError ? (
+                    <div className="py-10 text-center text-[#e74c3c]">{inventoryError.message || 'Gagal memuat inventaris.'}</div>
+                ) : isInventoryLoading ? (
+                    <div className="py-10 text-center text-text-muted">Memuat inventaris...</div>
+                ) : inventory.length === 0 ? (
                     <div className="text-center py-10 text-text-muted">
-                        Belum ada barang di inventaris. Silakan tambah barang baru.
+                        {debouncedSearchQuery ? 'Barang tidak ditemukan.' : 'Belum ada barang di inventaris. Silakan tambah barang baru.'}
                     </div>
                 ) : inventoryViewMode === 'grid' ? (
                     <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 sm:gap-5 lg:grid-cols-[repeat(auto-fill,minmax(260px,1fr))] lg:gap-[25px]">
@@ -429,6 +489,19 @@ const Inventory = ({
                     </div>
                 )}
             </div>
+
+            {hasMoreInventory && (
+                <div className="mt-4 flex justify-center lg:shrink-0">
+                    <button
+                        type="button"
+                        className="rounded-DEFAULT border border-border bg-sidebar-bg px-4 py-2 text-sm font-semibold text-text-main transition hover:border-accent disabled:cursor-wait disabled:opacity-60"
+                        onClick={() => { void setSize((size) => size + 1); }}
+                        disabled={isLoadingMoreInventory}
+                    >
+                        {isLoadingMoreInventory ? 'Memuat...' : 'Muat barang berikutnya'}
+                    </button>
+                </div>
+            )}
 
             {isItemModalOpen && (
                 <ItemModal

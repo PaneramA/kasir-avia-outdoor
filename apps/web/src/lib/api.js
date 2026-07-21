@@ -111,11 +111,11 @@ async function request(path, options = {}, config = { auth: false }) {
     headers.Authorization = `Bearer ${accessToken}`;
   }
 
-  if (activeTenantId) {
+  if (config.auth && activeTenantId) {
     headers['x-tenant-id'] = activeTenantId;
   }
 
-  if (activeBranchId) {
+  if (config.auth && activeBranchId) {
     headers['x-branch-id'] = activeBranchId;
   }
 
@@ -185,13 +185,6 @@ export function fetchPublicTenants() {
   return request('/api/public/tenants');
 }
 
-export function registerSelfUser(payload) {
-  return request('/api/auth/register', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
 export function logout() {
   setSession('', null);
 }
@@ -252,6 +245,14 @@ export function removeCategory(name) {
 
 export function fetchItems() {
   return request('/api/items', {}, { auth: true });
+}
+
+export function fetchItemsPage({ query = '', cursor = '', limit = 50 } = {}) {
+  const params = new URLSearchParams();
+  if (query) params.set('query', query);
+  if (cursor) params.set('cursor', cursor);
+  params.set('limit', String(limit));
+  return request(`/api/items/page?${params.toString()}`, {}, { auth: true });
 }
 
 export function createItem(item) {
@@ -331,16 +332,69 @@ export function fetchTenants() {
   return request('/api/tenants', {}, { auth: true });
 }
 
-export function createTenant(payload) {
-  return request('/api/tenants', {
+export function updateTenant(tenantId, payload) {
+  return request(`/api/tenants/${encodeURIComponent(tenantId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
+export function fetchDashboardSummary(recentStatus = '') {
+  const params = new URLSearchParams();
+  if (recentStatus) params.set('recentStatus', recentStatus);
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  return request(`/api/dashboard/summary${suffix}`, {}, { auth: true }).then((summary) => ({
+    ...summary,
+    recentRentals: Array.isArray(summary?.recentRentals)
+      ? summary.recentRentals.map(normalizeRentalRecord)
+      : [],
+  }));
+}
+
+export function fetchFinancialRecapPage({ startDate = '', endDate = '', cursor = '', limit = 50 } = {}) {
+  const params = new URLSearchParams();
+  if (startDate) params.set('startDate', startDate);
+  if (endDate) params.set('endDate', endDate);
+  if (cursor) params.set('cursor', cursor);
+  params.set('limit', String(limit));
+  return request(`/api/financial/recap?${params.toString()}`, {}, { auth: true }).then((page) => ({
+    ...page,
+    items: Array.isArray(page?.items) ? page.items.map(normalizeRentalRecord) : [],
+  }));
+}
+
+export function fetchRentalHistoryPage({
+  status = '',
+  query = '',
+  startDate = '',
+  endDate = '',
+  cursor = '',
+  limit = 50,
+} = {}) {
+  const params = new URLSearchParams();
+  if (status) params.set('status', status);
+  if (query) params.set('q', query);
+  if (startDate) params.set('startDate', startDate);
+  if (endDate) params.set('endDate', endDate);
+  if (cursor) params.set('cursor', cursor);
+  params.set('limit', String(limit));
+
+  return request(`/api/rentals/history?${params.toString()}`, {}, { auth: true }).then((page) => ({
+    ...page,
+    items: Array.isArray(page?.items) ? page.items.map(normalizeRentalRecord) : [],
+  }));
+}
+
+export function onboardTenant(payload) {
+  return request('/api/admin/tenants/onboard', {
     method: 'POST',
     body: JSON.stringify(payload),
   }, { auth: true });
 }
 
-export function updateTenant(tenantId, payload) {
+export function deleteTenant(tenantId, payload) {
   return request(`/api/tenants/${encodeURIComponent(tenantId)}`, {
-    method: 'PATCH',
+    method: 'DELETE',
     body: JSON.stringify(payload),
   }, { auth: true });
 }

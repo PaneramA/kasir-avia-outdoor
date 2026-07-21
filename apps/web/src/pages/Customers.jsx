@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
+import useSWR from 'swr'
 import {
     createCustomerRecord,
     fetchCustomers,
     removeCustomerRecord,
     updateCustomerRecord,
 } from '../lib/api'
+import { APP_CACHE_KEYS } from '../lib/appCache'
 
 const initialForm = {
     name: '',
@@ -16,10 +18,8 @@ const initialForm = {
 }
 
 const Customers = () => {
-    const [customers, setCustomers] = useState([])
     const [query, setQuery] = useState('')
-    const [isLoading, setIsLoading] = useState(true)
-    const [errorMessage, setErrorMessage] = useState('')
+    const [debouncedQuery, setDebouncedQuery] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [message, setMessage] = useState('')
     const [messageError, setMessageError] = useState('')
@@ -27,48 +27,21 @@ const Customers = () => {
     const [modalMode, setModalMode] = useState('create')
     const [editingCustomerId, setEditingCustomerId] = useState('')
     const [form, setForm] = useState(initialForm)
-    const latestRequestRef = useRef(0)
-
-    const loadCustomers = useCallback(async (searchValue = '', requestId = 0) => {
-        try {
-            setIsLoading(true)
-            setErrorMessage('')
-            const data = await fetchCustomers(searchValue)
-
-            if (requestId !== latestRequestRef.current) {
-                return
-            }
-
-            setCustomers(data)
-        } catch (error) {
-            if (requestId !== latestRequestRef.current) {
-                return
-            }
-
-            const messageText = error instanceof Error ? error.message : 'Gagal memuat data customer.'
-            setErrorMessage(messageText)
-        } finally {
-            if (requestId === latestRequestRef.current) {
-                setIsLoading(false)
-            }
-        }
-    }, [])
-
-    const refreshCustomers = useCallback(async (searchValue = query) => {
-        const requestId = latestRequestRef.current + 1
-        latestRequestRef.current = requestId
-        await loadCustomers(searchValue, requestId)
-    }, [loadCustomers, query])
-
     useEffect(() => {
-        const requestId = latestRequestRef.current + 1
-        latestRequestRef.current = requestId
-        const timeoutId = setTimeout(() => {
-            loadCustomers(query, requestId)
-        }, 300)
-
+        const timeoutId = setTimeout(() => setDebouncedQuery(query.trim()), 300)
         return () => clearTimeout(timeoutId)
-    }, [query, loadCustomers])
+    }, [query])
+
+    const customerQuery = useSWR(
+        APP_CACHE_KEYS.customers(debouncedQuery),
+        ([, searchValue]) => fetchCustomers(searchValue),
+    )
+    const customers = useMemo(
+        () => (Array.isArray(customerQuery.data) ? customerQuery.data : []),
+        [customerQuery.data],
+    )
+    const isLoading = customerQuery.isLoading
+    const queryErrorMessage = customerQuery.error instanceof Error ? customerQuery.error.message : ''
 
     const closeModal = () => {
         setIsModalOpen(false)
@@ -130,14 +103,18 @@ const Customers = () => {
             setIsSubmitting(true)
 
             if (modalMode === 'edit' && editingCustomerId) {
-                await updateCustomerRecord(editingCustomerId, payload)
+                const updated = await updateCustomerRecord(editingCustomerId, payload)
+                await customerQuery.mutate((current = []) => current.map((customer) => (
+                    customer.id === editingCustomerId ? updated : customer
+                )), { revalidate: false })
                 setMessage('Data customer berhasil diperbarui.')
             } else {
-                await createCustomerRecord(payload)
+                const created = await createCustomerRecord(payload)
+                await customerQuery.mutate((current = []) => [...current, created], { revalidate: false })
                 setMessage('Data customer berhasil disimpan dan siap dipakai di halaman sewa.')
             }
 
-            await refreshCustomers(query)
+            void customerQuery.mutate()
             closeModal()
         } catch (error) {
             const messageText = error instanceof Error ? error.message : 'Gagal menyimpan data customer.'
@@ -158,7 +135,8 @@ const Customers = () => {
         try {
             await removeCustomerRecord(customer.id)
             setMessage('Data customer berhasil dihapus.')
-            await refreshCustomers(query)
+            await customerQuery.mutate((current = []) => current.filter((item) => item.id !== customer.id), { revalidate: false })
+            void customerQuery.mutate()
         } catch (error) {
             const messageText = error instanceof Error ? error.message : 'Gagal menghapus customer.'
             setMessageError(messageText)
@@ -209,9 +187,9 @@ const Customers = () => {
                 <div className="rounded-lg border border-[#2ecc71]/40 bg-[#2ecc71]/10 p-3 text-sm text-[#6ee7a8]">{message}</div>
             )}
 
-            {(messageError || errorMessage) && (
+            {(messageError || queryErrorMessage) && (
                 <div className="rounded-lg border border-[#e74c3c]/40 bg-[#e74c3c]/10 p-3 text-sm text-[#f3b2ad]">
-                    {messageError || errorMessage}
+                    {messageError || queryErrorMessage}
                 </div>
             )}
 

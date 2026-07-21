@@ -180,6 +180,7 @@ model Item {
   rentalItems RentalItem[]
 
   @@index([tenantId, branchId])
+  @@index([tenantId, branchId, createdAt])
 }
 
 model Rental {
@@ -216,6 +217,7 @@ model Rental {
 
   @@index([customerId])
   @@index([tenantId, branchId])
+  @@index([tenantId, branchId, deletedAt, date])
   @@index([deletedAt])
   @@index([deletedByUserId])
 }
@@ -253,6 +255,7 @@ model ReturnRecord {
   rental        Rental   @relation(fields: [rentalId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, branchId])
+  @@index([tenantId, branchId, returnDate])
 }
 
 model User {
@@ -284,6 +287,7 @@ model Customer {
 
   @@unique([tenantId, phone])
   @@index([tenantId, branchId])
+  @@index([tenantId, branchId, updatedAt])
 }
 
 model AuditLog {

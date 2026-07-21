@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { changeMyPassword, fetchCurrentTenantSubscriptionSummary } from '../lib/api'
+import { changeMyPassword } from '../lib/api'
 
 function formatQuota(quota) {
     if (!quota || typeof quota !== 'object') {
@@ -17,6 +17,9 @@ const Account = ({
     currentUser,
     tenantSettings,
     branchSettings,
+    subscriptionSummary,
+    isSubscriptionLoading = false,
+    subscriptionErrorMessage = '',
     onUpdateTenantSettings,
     onUpdateBranchSettings,
 }) => {
@@ -49,9 +52,6 @@ const Account = ({
     const [isSubmittingBranchStore, setIsSubmittingBranchStore] = useState(false)
     const [branchStoreMessage, setBranchStoreMessage] = useState('')
     const [branchStoreErrorMessage, setBranchStoreErrorMessage] = useState('')
-    const [subscriptionSummary, setSubscriptionSummary] = useState(null)
-    const [isSubscriptionLoading, setIsSubscriptionLoading] = useState(true)
-    const [subscriptionErrorMessage, setSubscriptionErrorMessage] = useState('')
 
     useEffect(() => {
         setStoreForm({
@@ -87,41 +87,6 @@ const Account = ({
                 : '',
         })
     }, [branchSettings])
-
-    useEffect(() => {
-        let isActive = true
-
-        const loadSubscriptionSummary = async () => {
-            setIsSubscriptionLoading(true)
-            setSubscriptionErrorMessage('')
-
-            try {
-                const summary = await fetchCurrentTenantSubscriptionSummary()
-                if (!isActive) {
-                    return
-                }
-
-                setSubscriptionSummary(summary || null)
-            } catch (error) {
-                if (!isActive) {
-                    return
-                }
-
-                const messageText = error instanceof Error ? error.message : 'Gagal memuat paket tenant.'
-                setSubscriptionErrorMessage(messageText)
-            } finally {
-                if (isActive) {
-                    setIsSubscriptionLoading(false)
-                }
-            }
-        }
-
-        void loadSubscriptionSummary()
-
-        return () => {
-            isActive = false
-        }
-    }, [tenantSettings?.tenantId])
 
     const handleSubmit = async (event) => {
         event.preventDefault()

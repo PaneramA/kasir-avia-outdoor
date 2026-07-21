@@ -6,23 +6,25 @@ import {
   upsertCustomer,
   createItem,
   createRental,
-  createSelfRegisteredTenantUser,
+  onboardTenantForPlatformAdmin,
   createTenantUserForUser,
   createUser,
   deleteRentalByAdmin,
   deleteCategory,
   deleteItem,
   deleteUserByAdmin,
+  deleteTenantForPlatformAdmin,
   findUserById,
   findUserByUsername,
   getTenantSettingsForUser,
   getTenantSubscriptionSummaryForUser,
   getBranchSettingsForUser,
+  getDashboardSummary,
+  getFinancialRecapPage,
   updateBranchSettingsByIdForUser,
   getSchemaSummary,
   getUserTenantMembershipSummary,
   createBranchForUser,
-  createTenantForSuperuser,
   createPlanForPlatformAdmin,
   updateBranchForUser,
   updatePlanForPlatformAdmin,
@@ -42,7 +44,9 @@ import {
   listCategories,
   listCustomers,
   listItems,
+  listItemsPage,
   listRentals,
+  listRentalHistoryPage,
   listReturns,
   listUsers,
   listTenantUsersForUser,
@@ -66,16 +70,16 @@ import {
   createItemSchema,
   createUserSchema,
   createTenantUserSchema,
-  createTenantSchema,
   createRentalSchema,
   loginSchema,
   processReturnSchema,
-  selfRegisterSchema,
+  onboardTenantSchema,
   deleteRentalByAdminSchema,
   verifyRentalDeleteSchema,
   selfChangePasswordSchema,
   updateUserSchema,
   updateTenantSchema,
+  deleteTenantSchema,
   updateTenantSettingsSchema,
   updateBranchSettingsSchema,
   createBranchSchema,
@@ -234,7 +238,7 @@ function isWriteMethod(method) {
 }
 
 function shouldSkipAuth(pathname) {
-  return pathname === '/api/auth/login' || pathname === '/api/auth/register';
+  return pathname === '/api/auth/login';
 }
 
 function getTenantIdFromSettingsPath(pathname) {
@@ -367,6 +371,11 @@ export async function apiRoute(req, res, env) {
   };
 
   try {
+    if (req.method === 'POST' && pathname === '/api/auth/register') {
+      sendError(res, 404, 'Route not found');
+      return true;
+    }
+
     if (req.method === 'POST' && pathname === '/api/auth/login') {
       const loginIpKey = createLoginRateLimitKey('ip', getRequestClientIp(req));
       const ipRetryAfterSeconds = getLoginRateLimitRetrySeconds(loginIpKey, env);
@@ -464,14 +473,6 @@ export async function apiRoute(req, res, env) {
         role: user.role,
       });
       sendSuccess(res, 200, tenants);
-      return true;
-    }
-
-    if (req.method === 'POST' && pathname === '/api/tenants') {
-      await ensurePlatformAdmin();
-      const body = createTenantSchema.parse(await readJsonBody(req));
-      const created = await createTenantForSuperuser(body);
-      sendSuccess(res, 201, created);
       return true;
     }
 
@@ -694,9 +695,17 @@ export async function apiRoute(req, res, env) {
       const settings = await getTenantSettingsForUser({
         userId: user.id,
         role: user.role,
-        requestedTenantId: 'current',
+        requestedTenantId: getHeaderValue(req, 'x-tenant-id') || 'current',
       });
       sendSuccess(res, 200, settings);
+      return true;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/admin/tenants/onboard') {
+      await ensurePlatformAdmin();
+      const body = onboardTenantSchema.parse(await readJsonBody(req));
+      const created = await onboardTenantForPlatformAdmin(body, env.passwordPepper);
+      sendSuccess(res, 201, created);
       return true;
     }
 
@@ -705,7 +714,7 @@ export async function apiRoute(req, res, env) {
       const subscriptionSummary = await getTenantSubscriptionSummaryForUser({
         userId: user.id,
         role: user.role,
-        requestedTenantId: 'current',
+        requestedTenantId: getHeaderValue(req, 'x-tenant-id') || 'current',
       });
       sendSuccess(res, 200, subscriptionSummary);
       return true;
@@ -716,7 +725,7 @@ export async function apiRoute(req, res, env) {
       const currentSettings = await getTenantSettingsForUser({
         userId: user.id,
         role: user.role,
-        requestedTenantId: 'current',
+        requestedTenantId: getHeaderValue(req, 'x-tenant-id') || 'current',
       });
       const body = updateTenantSettingsSchema.parse(await readJsonBody(req));
       const updated = await updateTenantSettingsByTenantId(currentSettings.tenantId, body, {
@@ -776,23 +785,44 @@ export async function apiRoute(req, res, env) {
       return true;
     }
 
-    if (req.method === 'GET' && pathname === '/api/users') {
-      await ensureAdmin();
-      sendSuccess(res, 200, await listUsers());
+    if (
+      req.method === 'DELETE'
+      && pathname.startsWith('/api/tenants/')
+      && !pathname.endsWith('/settings')
+    ) {
+      const adminUser = await ensurePlatformAdmin();
+      const tenantId = decodeURIComponent(pathname.replace('/api/tenants/', ''));
+      if (!tenantId) {
+        throw new Error('Tenant id is required');
+      }
+
+      const body = deleteTenantSchema.parse(await readJsonBody(req));
+      const tenantList = await listTenantsForUser({
+        userId: adminUser.id,
+        role: adminUser.role,
+      });
+      const targetTenant = tenantList.find((tenant) => tenant.id === tenantId);
+      if (!targetTenant) {
+        throw new Error('Tenant not found');
+      }
+
+      if (body.confirmationText.trim() !== targetTenant.name.trim()) {
+        throw new Error(`Confirmation text must be exactly: ${targetTenant.name}`);
+      }
+
+      const validPassword = await verifyUserPasswordById(adminUser.id, body.password, env.passwordPepper);
+      if (!validPassword) {
+        throw new Error('Invalid password');
+      }
+
+      const removed = await deleteTenantForPlatformAdmin(tenantId, body.confirmationText);
+      sendSuccess(res, 200, removed);
       return true;
     }
 
-    if (req.method === 'POST' && pathname === '/api/auth/register') {
-      const body = selfRegisterSchema.parse(await readJsonBody(req));
-      const created = await createSelfRegisteredTenantUser({
-        payload: body,
-        passwordPepper: env.passwordPepper,
-      });
-
-      sendSuccess(res, 201, {
-        ...created,
-        message: 'Pendaftaran berhasil. Toko baru kamu berstatus pending dan menunggu approval admin.',
-      });
+    if (req.method === 'GET' && pathname === '/api/users') {
+      await ensureAdmin();
+      sendSuccess(res, 200, await listUsers());
       return true;
     }
 
@@ -970,6 +1000,55 @@ export async function apiRoute(req, res, env) {
       return true;
     }
 
+    if (req.method === 'GET' && pathname === '/api/rentals/history') {
+      await ensureAuth();
+      const context = await ensureRequestContext();
+      const history = await listRentalHistoryPage({
+        status: searchParams.get('status') || undefined,
+        query: searchParams.get('q') || undefined,
+        startDate: searchParams.get('startDate') || undefined,
+        endDate: searchParams.get('endDate') || undefined,
+        cursor: searchParams.get('cursor') || undefined,
+        limit: searchParams.get('limit') || undefined,
+      }, context);
+      sendSuccess(res, 200, history);
+      return true;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/items/page') {
+      await ensureAuth();
+      const context = await ensureRequestContext();
+      sendSuccess(res, 200, await listItemsPage({
+        query: searchParams.get('query') || undefined,
+        cursor: searchParams.get('cursor') || undefined,
+        limit: searchParams.get('limit') || undefined,
+      }, context));
+      return true;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/dashboard/summary') {
+      await ensureAuth();
+      const context = await ensureRequestContext();
+      const summary = await getDashboardSummary({
+        recentStatus: searchParams.get('recentStatus') || undefined,
+      }, context);
+      sendSuccess(res, 200, summary);
+      return true;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/financial/recap') {
+      await ensureAuth();
+      const context = await ensureRequestContext();
+      const recap = await getFinancialRecapPage({
+        startDate: searchParams.get('startDate') || undefined,
+        endDate: searchParams.get('endDate') || undefined,
+        cursor: searchParams.get('cursor') || undefined,
+        limit: searchParams.get('limit') || undefined,
+      }, context);
+      sendSuccess(res, 200, recap);
+      return true;
+    }
+
     if (req.method === 'GET' && pathname === '/api/rentals') {
       await ensureAuth();
       const context = await ensureRequestContext();
@@ -1070,6 +1149,11 @@ export async function apiRoute(req, res, env) {
 
     if (message === 'Tenant is not active') {
       sendError(res, 403, 'Tenant belum aktif. Menunggu approval admin.');
+      return true;
+    }
+
+    if (message.startsWith('Tenant subscription')) {
+      sendError(res, 403, 'Langganan toko tidak aktif atau sudah berakhir. Hubungi administrator.');
       return true;
     }
 

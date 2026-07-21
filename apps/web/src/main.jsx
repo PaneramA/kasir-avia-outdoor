@@ -1,8 +1,10 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
+import { SWRConfig } from 'swr'
 import './index.css'
 import App from './App.jsx'
+import { APP_SWR_OPTIONS } from './lib/appCache'
 import { getTheme } from './lib/storage'
 
 if (typeof window !== 'undefined') {
@@ -38,7 +40,9 @@ if ('serviceWorker' in navigator) {
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
-      <App />
+      <SWRConfig value={APP_SWR_OPTIONS}>
+        <App />
+      </SWRConfig>
     </BrowserRouter>
   </StrictMode>,
 )
