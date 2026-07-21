@@ -98,6 +98,24 @@ const loginRateLimitBuckets = new Map();
 const rentalDeleteVerificationBuckets = new Map();
 const RENTAL_DELETE_VERIFICATION_TTL_MS = 5 * 60 * 1000;
 
+function normalizeUsername(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isConfiguredPlatformAdmin(user, env) {
+  return normalizeRole(user?.role) === 'superuser'
+    && normalizeUsername(user?.username) === normalizeUsername(env.adminUsername);
+}
+
+function getEffectiveUserRole(user, env) {
+  const role = normalizeRole(user?.role);
+  if (role === 'superuser' && !isConfiguredPlatformAdmin(user, env)) {
+    return 'kasir';
+  }
+
+  return role;
+}
+
 function cleanupLoginRateLimitEntry(key, entry, env, now) {
   const maxIdleMs = Math.max(env.loginRateLimitWindowMs, env.loginRateLimitBlockMs);
   if (now - entry.updatedAtMs > maxIdleMs) {
@@ -303,7 +321,7 @@ async function authenticateRequest(req, env) {
   return {
     id: user.id,
     username: user.username,
-    role: normalizeRole(user.role),
+    role: getEffectiveUserRole(user, env),
   };
 }
 
@@ -411,7 +429,7 @@ export async function apiRoute(req, res, env) {
       if (
         membershipSummary.total > 0
         && membershipSummary.activeOnActiveTenant === 0
-        && normalizeRole(user.role) !== 'superuser'
+        && getEffectiveUserRole(user, env) !== 'superuser'
       ) {
         sendError(
           res,
@@ -434,7 +452,7 @@ export async function apiRoute(req, res, env) {
         {
           sub: user.id,
           username: user.username,
-          role: normalizeRole(user.role),
+          role: getEffectiveUserRole(user, env),
         },
         env,
       );
@@ -444,7 +462,7 @@ export async function apiRoute(req, res, env) {
         user: {
           id: user.id,
           username: user.username,
-          role: normalizeRole(user.role),
+          role: getEffectiveUserRole(user, env),
         },
       });
       return true;

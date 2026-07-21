@@ -1,6 +1,5 @@
 import { Readable } from 'node:stream';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { hashPassword } from '../auth/password.js';
 import { getEnv } from '../config/env.js';
 import { deleteTenantForPlatformAdmin, initDatabase } from '../data/db.js';
 import { prisma } from '../data/prisma.js';
@@ -57,25 +56,15 @@ afterAll(async () => {
 describe('critical API workflow integration', () => {
   it('onboards a tenant, survives three sequential rentals, and deletes all tenant data', async () => {
     const suffix = `${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
-    const adminUsername = `vitest-super-${suffix}`;
-    const adminPassword = `Vitest!${suffix}`;
+    const adminUsername = env.adminUsername;
+    const adminPassword = env.adminPassword;
     const storeName = `Vitest Store ${suffix}`;
     const ownerUsername = `vitest-owner-${suffix}`;
     const ownerPassword = `Owner!${suffix}`;
-    let adminUserId = '';
     let tenantId = '';
     let ownerUserId = '';
 
     try {
-      const temporaryAdmin = await prisma.user.create({
-        data: {
-          username: adminUsername,
-          passwordHash: hashPassword(adminPassword, env.passwordPepper),
-          role: 'superuser',
-        },
-      });
-      adminUserId = temporaryAdmin.id;
-
       const removedRegister = await callApi('POST', '/api/auth/register', {
         body: { username: 'blocked', password: 'blocked-password' },
       });
@@ -271,9 +260,6 @@ describe('critical API workflow integration', () => {
       }
       if (ownerUserId) {
         await prisma.user.deleteMany({ where: { id: ownerUserId } });
-      }
-      if (adminUserId) {
-        await prisma.user.deleteMany({ where: { id: adminUserId } });
       }
     }
   }, 90_000);
