@@ -114,7 +114,7 @@ describe('application state orchestration', () => {
   });
 
   it('routes platform administrators into the isolated admin shell', async () => {
-    const admin = { id: 'admin-1', username: 'platform', role: 'superuser' };
+    const admin = { id: 'admin-1', username: 'admin@gmail.com', role: 'superuser' };
     getStoredSession.mockReturnValue({ token: 'admin-token', user: admin });
     fetchCurrentUser.mockResolvedValue(admin);
     fetchTenants.mockResolvedValue([]);
@@ -128,7 +128,7 @@ describe('application state orchestration', () => {
   });
 
   it('redirects platform administrators away from the cashier shell', async () => {
-    const admin = { id: 'admin-1', username: 'platform', role: 'superuser' };
+    const admin = { id: 'admin-1', username: 'admin@gmail.com', role: 'superuser' };
     getStoredSession.mockReturnValue({ token: 'admin-token', user: admin });
     fetchCurrentUser.mockResolvedValue(admin);
     fetchPlans.mockResolvedValue([]);
@@ -153,6 +153,20 @@ describe('application state orchestration', () => {
     expect(screen.queryByText('Avia Admin')).not.toBeInTheDocument();
     await waitFor(() => expect(fetchDashboardSummary).toHaveBeenCalledWith('all'));
     expect(fetchItems).not.toHaveBeenCalled();
+  });
+
+  it('treats legacy non-admin superuser sessions as cashier sessions', async () => {
+    const cashier = { id: 'cashier-1', username: 'aviaoutdoor2022', role: 'superuser' };
+    getStoredSession.mockReturnValue({ token: 'cashier-token', user: cashier });
+    fetchCurrentUser.mockResolvedValue({ ...cashier, role: 'kasir' });
+    fetchTenants.mockResolvedValue([{ id: 'tenant-1', name: 'AviaOutdoor' }]);
+    fetchBranches.mockResolvedValue([{ id: 'branch-1', tenantId: 'tenant-1', name: 'Pusat' }]);
+    renderApp('/dashboard');
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(screen.queryByText('Avia Admin')).not.toBeInTheDocument();
+    expect(screen.queryByText('Admin Panel')).not.toBeInTheDocument();
+    expect(await screen.findByText('kasir')).toBeInTheDocument();
   });
 
   it('does not allow tenant admin accounts into the platform admin panel', async () => {
