@@ -36,8 +36,8 @@ describe('environment configuration', () => {
       corsOrigin: '*,http://localhost:5173',
       jwtSecret: 'short',
       passwordPepper: 'short',
-      adminUsername: 'admin',
-      adminPassword: 'admin123',
+      adminUsername: 'admin@gmail.com',
+      adminPassword: 'adminavo123',
       loginRateLimitMaxAttempts: 20,
     });
 

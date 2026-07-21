@@ -50,13 +50,14 @@ const AdminLogin = ({ onLogin, isSubmitting, errorMessage, currentUser, onClearS
 
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-[#34434d]" htmlFor="admin-username">Username</label>
+              <label className="mb-1.5 block text-sm font-semibold text-[#34434d]" htmlFor="admin-username">Email admin</label>
               <input
                 id="admin-username"
                 type="text"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 autoComplete="username"
+                placeholder="admin@gmail.com"
                 className="min-h-11 w-full rounded-lg border border-[#cfd8dc] bg-white px-3 text-sm outline-none transition focus:border-[#2a7c6f] focus:ring-2 focus:ring-[#2a7c6f]/15"
                 required
                 autoFocus

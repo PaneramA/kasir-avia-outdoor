@@ -6,7 +6,7 @@ import { APP_ROUTES } from '../lib/routes'
 const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onCloseMobile }) => {
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
     const normalizedRole = String(currentUser?.role || '').toLowerCase()
-    const isAdminLike = normalizedRole === 'admin' || normalizedRole === 'superuser'
+    const isPlatformAdmin = normalizedRole === 'superuser'
     const features = subscriptionSummary?.features || {}
     const canUseFinancialRecap = features.canUseFinancialRecap !== false
     const canManageBranches = features.canManageBranches !== false
@@ -14,7 +14,6 @@ const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onC
 
     const menuItems = [
         { path: APP_ROUTES.dashboard, icon: 'fas fa-th-large', label: 'Dashboard' },
-        ...(isAdminLike ? [{ path: APP_ROUTES.admin, icon: 'fas fa-user-shield', label: 'Admin Panel' }] : []),
         { path: APP_ROUTES.rental, icon: 'fas fa-handshake', label: 'Sewa Barang' },
         { path: APP_ROUTES.return, icon: 'fas fa-undo', label: 'Pengembalian' },
         { path: APP_ROUTES.inventory, icon: 'fas fa-boxes-stacked', label: 'Inventaris' },
@@ -98,7 +97,7 @@ const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onC
                         {isProfileMenuOpen && (
                             <div className="mt-3 flex flex-col gap-1 rounded-DEFAULT border border-border bg-bg-main/80 p-2">
                                 <NavLink
-                                    to={isAdminLike ? APP_ROUTES.adminAccount : APP_ROUTES.settingsAccount}
+                                    to={isPlatformAdmin ? APP_ROUTES.adminAccount : APP_ROUTES.settingsAccount}
                                     onClick={onCloseMobile}
                                     className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
                                         ? 'bg-accent text-white'
@@ -108,7 +107,7 @@ const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onC
                                     <i className="fas fa-user-cog mr-2"></i>
                                     Akun Saya
                                 </NavLink>
-                                {!isAdminLike && canManageBranches && (
+                                {!isPlatformAdmin && canManageBranches && (
                                     <NavLink
                                         to={APP_ROUTES.settingsBranches}
                                         onClick={onCloseMobile}
@@ -121,7 +120,7 @@ const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onC
                                         Cabang Toko
                                     </NavLink>
                                 )}
-                                {!isAdminLike && canManageStaff && (
+                                {!isPlatformAdmin && canManageStaff && (
                                     <NavLink
                                         to={APP_ROUTES.settingsTeam}
                                         onClick={onCloseMobile}

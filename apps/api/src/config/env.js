@@ -1,7 +1,7 @@
 const DEFAULT_JWT_SECRET = 'change-me-jwt-secret';
 const DEFAULT_PASSWORD_PEPPER = 'change-me-pepper';
-const DEFAULT_ADMIN_USERNAME = 'admin';
-const DEFAULT_ADMIN_PASSWORD = 'admin123';
+const DEFAULT_ADMIN_USERNAME = 'admin@gmail.com';
+const DEFAULT_ADMIN_PASSWORD = 'adminavo123';
 const INSECURE_JWT_SECRETS = new Set([DEFAULT_JWT_SECRET, 'change-this-in-production']);
 const INSECURE_PASSWORD_PEPPERS = new Set([DEFAULT_PASSWORD_PEPPER, 'change-this-too']);
 

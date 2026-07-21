@@ -9,8 +9,8 @@ function hashPassword(password, pepper) {
 }
 
 async function main() {
-  const adminUsername = process.env.ADMIN_USERNAME || 'admin';
-  const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
+  const adminUsername = process.env.ADMIN_USERNAME || 'admin@gmail.com';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'adminavo123';
   const pepper = process.env.PASSWORD_PEPPER || 'change-me-pepper';
   const seedUsers = getSeedUsers({ adminUsername, adminPassword });
   const duplicateUsernames = seedUsers.reduce((accumulator, user) => {

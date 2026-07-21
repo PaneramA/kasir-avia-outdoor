@@ -38,15 +38,15 @@ function toSeedUser(input, defaults = {}) {
 
 export function getSeedUsers({ adminUsername, adminPassword } = {}) {
   const defaults = {
-    adminUsername: String(adminUsername || 'admin').trim() || 'admin',
-    adminPassword: String(adminPassword || 'admin123').trim() || 'admin123',
+    adminUsername: String(adminUsername || 'admin@gmail.com').trim() || 'admin@gmail.com',
+    adminPassword: String(adminPassword || 'adminavo123').trim() || 'adminavo123',
   };
 
   return [
     toSeedUser({
       username: defaults.adminUsername,
       password: defaults.adminPassword,
-      role: 'admin',
+      role: 'superuser',
       membershipRole: 'owner',
     }),
 
