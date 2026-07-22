@@ -7,6 +7,12 @@ export function attachRequestLogger(req, res, { enabled }) {
 
   const startedAt = Date.now();
   const { method, url } = req;
+  let pathname = '/';
+  try {
+    pathname = new URL(url || '/', 'http://localhost').pathname;
+  } catch {
+    pathname = '/invalid-url';
+  }
 
   res.on('finish', () => {
     const durationMs = Date.now() - startedAt;
@@ -16,6 +22,6 @@ export function attachRequestLogger(req, res, { enabled }) {
     const sizeSummary = rawResponseBytes > responseBytes
       ? `${responseBytes}b gzip (raw ${rawResponseBytes}b)`
       : `${responseBytes}b`;
-    console.log(`[api] ${method} ${url} -> ${status} (${durationMs}ms, ${sizeSummary})`);
+    console.log(`[api] ${method} ${pathname} -> ${status} (${durationMs}ms, ${sizeSummary})`);
   });
 }

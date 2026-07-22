@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import {
   buildCyclePlan,
   buildRecoveryManifest,
+  assertRecoveryManifestOldEnough,
   createCleanupController,
   evaluateLoadGate,
   fetchWithTimeout,
@@ -25,6 +26,13 @@ const iterations = boundedInteger(process.env.LOAD_TEST_ITERATIONS, 10, 1, 1_000
 const cycleCount = boundedInteger(process.env.LOAD_TEST_CYCLE_COUNT, 0, 0, 25);
 const requestTimeoutMs = boundedInteger(process.env.LOAD_TEST_REQUEST_TIMEOUT_MS, 10_000, 100, 60_000);
 const cleanupTimeoutMs = boundedInteger(process.env.LOAD_TEST_CLEANUP_TIMEOUT_MS, 20_000, 2_000, 120_000);
+const recoveryMinimumAgeMs = boundedInteger(
+  process.env.LOAD_TEST_RECOVERY_MINIMUM_AGE_MS,
+  130_000,
+  130_000,
+  3_600_000,
+);
+const finalizeRecovery = parseBoolean(process.env.LOAD_TEST_RECOVERY_FINALIZE, false);
 const expectGzip = parseBoolean(process.env.LOAD_TEST_EXPECT_GZIP, false);
 const gzipPath = normalizeApiPath(process.env.LOAD_TEST_GZIP_PATH || '/api/items');
 const requestedRecoveryFile = String(process.env.LOAD_TEST_RECOVERY_FILE || '').trim();
@@ -229,9 +237,17 @@ async function runRentalCycles(token, item, runPrefix, cyclePlan, tracking) {
 
   const { measurements } = tracking;
   const jobs = cyclePlan.map(async ({ suffix, rentalId, customerPhone }) => {
-    let checkout;
-    try {
-      checkout = await requestEndpoint('/api/rentals', token, {
+    const requestMutation = async (path, options) => {
+      try {
+        const response = await requestEndpoint(path, token, options);
+        if (response.status >= 500) mutationOutcomeUncertain = true;
+        return response;
+      } catch (error) {
+        mutationOutcomeUncertain = true;
+        throw error;
+      }
+    };
+    const checkout = await requestMutation('/api/rentals', {
         method: 'POST',
         body: JSON.stringify({
           id: rentalId,
@@ -245,17 +261,12 @@ async function runRentalCycles(token, item, runPrefix, cyclePlan, tracking) {
           payment: { status: 'LUNAS', method: 'TUNAI' },
         }),
       });
-    } catch (error) {
-      mutationOutcomeUncertain = true;
-      throw error;
-    }
     measurements.push(checkout);
     if (checkout.status !== 201) {
-      if (checkout.status >= 500) mutationOutcomeUncertain = true;
       throw new Error(`checkout ${rentalId} gagal (${checkout.status}): ${checkout.message}`);
     }
 
-    const returned = await requestEndpoint('/api/returns', token, {
+    const returned = await requestMutation('/api/returns', {
       method: 'POST',
       body: JSON.stringify({ rentalId, additionalFee: 0, returnNotes: runPrefix }),
     });
@@ -359,7 +370,7 @@ async function persistRecoveryManifest(manifest) {
   return recoveryFile;
 }
 
-function configureCleanup(token, manifest, recoveryFile) {
+function configureCleanup(token, manifest, recoveryFile, { recoveryMode = false } = {}) {
   activeRecoveryFile = recoveryFile;
   activeCleanupController = createCleanupController({
     timeoutMs: cleanupTimeoutMs,
@@ -367,6 +378,14 @@ function configureCleanup(token, manifest, recoveryFile) {
     cleanup: async (reason) => {
       console.error(`[api-load-smoke] Cleanup dimulai (${reason}) untuk ${manifest.runPrefix}.`);
       await cleanupCycles(token, manifest, reason);
+      const mayRemoveManifest = recoveryMode ? finalizeRecovery : !mutationOutcomeUncertain;
+      if (!mayRemoveManifest) {
+        throw new Error(
+          recoveryMode
+            ? 'Recovery cleanup verified, but finalization was not requested. Manifest retained.'
+            : 'Mutation outcome was uncertain. Manifest retained for delayed recovery.',
+        );
+      }
       await unlink(recoveryFile).catch((error) => {
         if (error?.code !== 'ENOENT') throw error;
       });
@@ -427,8 +446,11 @@ process.on('SIGTERM', () => void handleTermination('SIGTERM'));
 
 async function runRecovery(token) {
   const { manifest, recoveryFile } = await loadRecoveryManifest();
+  if (finalizeRecovery) {
+    assertRecoveryManifestOldEnough(manifest, { minimumAgeMs: recoveryMinimumAgeMs });
+  }
   console.error(`[api-load-smoke] Recovery prefix: ${manifest.runPrefix}`);
-  const cleanupController = configureCleanup(token, manifest, recoveryFile);
+  const cleanupController = configureCleanup(token, manifest, recoveryFile, { recoveryMode: true });
   try {
     await cleanupController.run('recovery');
   } catch (error) {

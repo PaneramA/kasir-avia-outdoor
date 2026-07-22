@@ -618,10 +618,17 @@ describe('critical API workflow integration', () => {
             },
           })),
         );
-        expect(concurrentMembershipResults.map((result) => result.status).sort()).toEqual([
-          201,
-          409,
-        ]);
+        const concurrentMembershipStatuses = concurrentMembershipResults
+          .map((result) => result.status)
+          .sort();
+        const concurrentMembershipDiagnostics = concurrentMembershipResults.map((result) => ({
+          status: result.status,
+          message: result.body?.message,
+        }));
+        expect(
+          concurrentMembershipStatuses,
+          JSON.stringify(concurrentMembershipDiagnostics),
+        ).toEqual([201, 409]);
         expect(tenantLockCount).toBe(2);
         membershipCountSpy.mockRestore();
         transactionSpy.mockRestore();

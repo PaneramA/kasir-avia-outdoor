@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { prisma } from '../data/prisma.js';
-import { apiRoute } from './api.js';
+import { apiRoute, isSafeClientErrorMessage } from './api.js';
 import { healthRoute } from './health.js';
 
 function createResponse() {
@@ -13,6 +13,13 @@ afterAll(async () => {
 });
 
 describe('top-level API routes', () => {
+  it('exposes only recognized business errors to clients', () => {
+    expect(isSafeClientErrorMessage('Stock must be a number >= 0')).toBe(true);
+    expect(isSafeClientErrorMessage('Rental already returned')).toBe(true);
+    expect(isSafeClientErrorMessage('Prisma transaction failed at db.internal:5432')).toBe(false);
+    expect(isSafeClientErrorMessage('Unexpected invariant details')).toBe(false);
+  });
+
   it('keeps public registration removed', async () => {
     const req = { method: 'POST', url: '/api/auth/register', headers: {} };
     const res = createResponse();

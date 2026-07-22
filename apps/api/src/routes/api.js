@@ -65,7 +65,7 @@ import {
 import { createAccessToken, verifyAccessToken } from '../auth/jwt.js';
 import { assertFeatureEnabled, assertTenantManager } from '../auth/authorization.js';
 import { createLoginRateLimiter, resolveLoginClientIp } from '../auth/loginRateLimiter.js';
-import { needsPasswordRehash, verifyPassword } from '../auth/password.js';
+import { hashPassword, needsPasswordRehash, verifyPassword } from '../auth/password.js';
 import { createExpiringVerificationStore } from '../auth/verificationStore.js';
 import {
   adminChangePasswordSchema,
@@ -108,9 +108,47 @@ let loginRateLimiter;
 let loginRateLimiterSignature = '';
 let inFlightLoginHashes = 0;
 const inFlightLoginHashesByKey = new Map();
+let dummyPasswordHashPromise;
+let dummyPasswordHashPepper = '';
+
+function getDummyPasswordHash(passwordPepper) {
+  if (!dummyPasswordHashPromise || dummyPasswordHashPepper !== passwordPepper) {
+    dummyPasswordHashPepper = passwordPepper;
+    dummyPasswordHashPromise = hashPassword(
+      'avia-invalid-login-dummy-password',
+      passwordPepper,
+    );
+  }
+  return dummyPasswordHashPromise;
+}
 
 function normalizeUsername(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function isSafeNotFoundMessage(message) {
+  return /^(?:Plan|Tenant|Category|Branch|User|Membership|Customer|Rental|Branch access) not found$/
+    .test(message)
+    || /^Item(?: .+)? not found$/.test(message)
+    || message === 'Category does not exist';
+}
+
+export function isSafeClientErrorMessage(message) {
+  const value = String(message || '');
+  return value.includes(' is required')
+    || value.includes(' is invalid')
+    || value.includes(' already exists')
+    || value.includes(' must ')
+    || value.startsWith('Invalid ')
+    || value.startsWith('Confirmation text must ')
+    || value.startsWith('Password verification expired')
+    || value.startsWith('Category is used by ')
+    || value.startsWith('Item ') && value.includes(' not available')
+    || value.startsWith('Insufficient stock for ')
+    || value.startsWith('Rental already ')
+    || value.startsWith('Transaksi belum lunas')
+    || value === 'Current password is incorrect'
+    || value === 'You cannot delete your own account';
 }
 
 function isConfiguredPlatformAdmin(user, env) {
@@ -425,10 +463,15 @@ export async function apiRoute(req, res, env) {
       }
 
       try {
+        const dummyHashPromise = getDummyPasswordHash(env.passwordPepper);
         const user = await findUserByUsername(normalizedUsername);
-        const passwordMatches = user
-          ? await verifyPassword(body.password, user.passwordHash, env.passwordPepper)
-          : false;
+        const candidateHash = user?.passwordHash || await dummyHashPromise;
+        const passwordVerified = await verifyPassword(
+          body.password,
+          candidateHash,
+          env.passwordPepper,
+        );
+        const passwordMatches = Boolean(user) && passwordVerified;
         if (!passwordMatches) {
           const nextIpRetryAfterSeconds = limiter.registerFailure(loginIpKey);
           const nextUserRetryAfterSeconds = limiter.registerFailure(loginUserKey);
@@ -1266,15 +1309,18 @@ export async function apiRoute(req, res, env) {
       return true;
     }
 
-    if (
-      message.includes('not found') ||
-      message.includes('does not exist')
-    ) {
+    if (isSafeNotFoundMessage(message)) {
       sendError(res, 404, message);
       return true;
     }
 
-    sendError(res, 400, message);
+    if (isSafeClientErrorMessage(message)) {
+      sendError(res, 400, message);
+      return true;
+    }
+
+    console.error(`[api] unhandled ${req.method} ${pathname}:`, error);
+    sendError(res, 500, 'Internal server error');
     return true;
   }
 

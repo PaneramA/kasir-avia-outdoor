@@ -96,7 +96,7 @@ export function getEnv() {
       process.env.SERVER_MAX_REQUESTS_PER_SOCKET,
       1_000,
     ),
-    trustProxy: toStrictBoolean(process.env.TRUST_PROXY, false),
+    trustProxy: toStrictBoolean(process.env.TRUST_PROXY, nodeEnv === 'production'),
     allowInsecureLoopbackCors: toStrictBoolean(
       process.env.ALLOW_INSECURE_LOOPBACK_CORS,
       false,

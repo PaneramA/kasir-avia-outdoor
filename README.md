@@ -86,12 +86,22 @@ npm run test:load --workspace @avia/api
 
 Mode transaksi hanya memakai `API_BASE_URL`: pembacaan stok, checkout, return cleanup, dan verifikasi stok akhir tidak mengakses `DATABASE_URL`. Ini mencegah cleanup berjalan pada database yang berbeda dari API yang sedang diuji. Transaksi `LOAD-...` yang sudah dikembalikan tetap ada di riwayat sebagai audit trail.
 
-Sebelum checkout pertama, skrip mencetak run prefix dan menyimpan manifest tanpa token/password di `.load-smoke-recovery/`. `SIGINT`, `SIGTERM`, request timeout, dan kegagalan lain memicu cleanup terbatas waktu. Manifest hanya dihapus setelah return cleanup berhasil dan stok kembali ke nilai awal. Bila manifest tertinggal, jangan mulai mode transaksi baru; pulihkan dengan konfigurasi API dan kredensial yang sama:
+Sebelum checkout pertama, skrip mencetak run prefix dan menyimpan manifest tanpa token/password di `.load-smoke-recovery/`. `SIGINT`, `SIGTERM`, request timeout, dan kegagalan lain memicu cleanup terbatas waktu. Manifest hanya dihapus otomatis bila seluruh mutation request selesai dengan hasil pasti dan stok kembali ke nilai awal. Bila manifest tertinggal, jangan mulai mode transaksi baru. Jalankan cleanup recovery pertama dengan konfigurasi API dan kredensial yang sama; command ini sengaja mempertahankan manifest dan keluar nonzero karena request backend yang terlambat masih mungkin selesai:
 
 ```bash
 LOAD_TEST_RECOVERY_FILE="<path-manifest>" \
 npm run test:load --workspace @avia/api
 ```
+
+Setelah umur manifest minimal 130 detik, jalankan finalisasi. Finalisasi mengulang cleanup dan verifikasi stok sebelum menghapus manifest:
+
+```bash
+LOAD_TEST_RECOVERY_FILE="<path-manifest>" \
+LOAD_TEST_RECOVERY_FINALIZE=true \
+npm run test:load --workspace @avia/api
+```
+
+`LOAD_TEST_RECOVERY_MINIMUM_AGE_MS` dapat dinaikkan, tetapi tidak dapat diturunkan di bawah 130000 ms.
 
 Gunakan `LOAD_TEST_CLEANUP_TIMEOUT_MS` untuk batas cleanup (default 20000 ms). Gate gagal bila error rate di atas 1%, p95 pembacaan di atas 1500 ms, cleanup gagal, atau stok akhir berbeda dari stok awal.
 

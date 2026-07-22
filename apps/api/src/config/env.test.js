@@ -34,7 +34,10 @@ describe('environment configuration', () => {
     process.env.NODE_ENV = 'production';
     delete process.env.HOST;
 
-    expect(getEnv().host).toBe('127.0.0.1');
+    expect(getEnv()).toMatchObject({
+      host: '127.0.0.1',
+      trustProxy: true,
+    });
   });
 
   it('reads explicit deployment values', () => {

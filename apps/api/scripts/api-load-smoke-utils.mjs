@@ -121,6 +121,20 @@ export function buildRecoveryManifest({
   };
 }
 
+export function assertRecoveryManifestOldEnough(manifest, {
+  minimumAgeMs,
+  nowMs = Date.now(),
+} = {}) {
+  const createdAtMs = Date.parse(String(manifest?.createdAt || ''));
+  if (!Number.isFinite(createdAtMs)) {
+    throw new Error('Recovery manifest creation time is invalid.');
+  }
+  const remainingMs = createdAtMs + minimumAgeMs - nowMs;
+  if (remainingMs > 0) {
+    throw new Error(`Wait before finalizing recovery (${remainingMs}ms remaining).`);
+  }
+}
+
 export function validateRecoveryManifest(manifest, { baseUrl, tenantId, branchId }) {
   if (!manifest || manifest.version !== 1) {
     throw new Error('Unsupported load-smoke recovery manifest.');

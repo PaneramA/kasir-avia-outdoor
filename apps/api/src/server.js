@@ -14,7 +14,7 @@ import { sendJson } from './utils/http.js';
 
 const env = getEnv();
 assertSecureProductionConfig(env);
-const shouldLogRequests = env.nodeEnv !== 'production';
+const shouldLogRequests = env.nodeEnv !== 'test';
 const securityWarnings = getSecurityWarnings(env);
 
 await initDatabase(env);
@@ -40,10 +40,11 @@ const server = createServer(async (req, res) => {
       message: 'Route not found',
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
+    const pathname = new URL(req.url || '/', 'http://localhost').pathname;
+    console.error(`[api] unhandled ${req.method} ${pathname}:`, error);
     sendJson(res, 500, {
       ok: false,
-      message,
+      message: 'Internal server error',
     });
   }
 });

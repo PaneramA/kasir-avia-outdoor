@@ -5,6 +5,7 @@ import {
   createCleanupController,
   evaluateLoadGate,
   fetchWithTimeout,
+  assertRecoveryManifestOldEnough,
   isSuccessfulReturnCleanup,
   percentile,
   summarizeMeasurements,
@@ -54,6 +55,18 @@ describe('API load smoke metrics', () => {
 });
 
 describe('API load smoke safety controls', () => {
+  it('requires an old-enough manifest before final recovery cleanup', () => {
+    const manifest = { createdAt: '2026-07-22T00:00:00.000Z' };
+    expect(() => assertRecoveryManifestOldEnough(manifest, {
+      nowMs: Date.parse('2026-07-22T00:02:09.999Z'),
+      minimumAgeMs: 130_000,
+    })).toThrow(/wait before finalizing/i);
+    expect(() => assertRecoveryManifestOldEnough(manifest, {
+      nowMs: Date.parse('2026-07-22T00:02:10.000Z'),
+      minimumAgeMs: 130_000,
+    })).not.toThrow();
+  });
+
   it('treats repeated or never-created return cleanup as idempotent success', () => {
     expect(isSuccessfulReturnCleanup({ status: 200, message: '' })).toBe(true);
     expect(isSuccessfulReturnCleanup({ status: 400, message: 'Rental already returned' })).toBe(true);
