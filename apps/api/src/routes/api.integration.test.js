@@ -217,6 +217,26 @@ describe('critical API workflow integration', () => {
         expect.objectContaining({ id: itemId, archivedAt: expect.any(String) }),
       ]);
 
+      const archivedCheckout = await callApi('POST', '/api/rentals', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          customer: {
+            name: 'Customer Archived',
+            phone: '081299999999',
+            address: 'Alamat Arsip',
+            guarantee: 'KTP',
+          },
+          items: [{ id: itemId, qty: 1 }],
+          duration: 1,
+          payment: { status: 'LUNAS', method: 'TUNAI', paidAmount: 50_000 },
+        },
+      });
+      expect(archivedCheckout.status).toBe(409);
+      expect(archivedCheckout.body.message).toContain('archived');
+      expect(await prisma.rental.count({ where: { tenantId, branchId, deletedAt: null } })).toBe(3);
+
       const restored = await callApi('POST', `/api/items/${itemId}/restore`, {
         token: ownerToken, tenantId, branchId,
       });

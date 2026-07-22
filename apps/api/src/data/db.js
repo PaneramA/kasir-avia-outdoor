@@ -1668,9 +1668,16 @@ export async function createRental(payload, context) {
         throw new Error(`Item ${itemId} not available in current branch`);
       }
 
+      if (item.archivedAt) {
+        throw new Error(`Item ${item.name} is archived`);
+      }
+
       const decrementResult = await tx.item.updateMany({
         where: {
           id: item.id,
+          tenantId,
+          branchId,
+          archivedAt: null,
           stock: { gte: request.qty },
         },
         data: {
@@ -1681,6 +1688,13 @@ export async function createRental(payload, context) {
       });
 
       if (decrementResult.count === 0) {
+        const latestItem = await tx.item.findUnique({
+          where: { id: item.id },
+          select: { archivedAt: true },
+        });
+        if (latestItem?.archivedAt) {
+          throw new Error(`Item ${item.name} is archived`);
+        }
         throw new Error(`Insufficient stock for ${item.name}`);
       }
 
