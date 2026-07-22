@@ -44,25 +44,55 @@ export function parsePath(req) {
   };
 }
 
-export async function readJsonBody(req) {
+function httpError(statusCode, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+export async function readJsonBody(req, {
+  limitBytes = 1_048_576,
+  timeoutMs = 10_000,
+} = {}) {
   const chunks = [];
+  let size = 0;
+  let timeoutId;
 
-  for await (const chunk of req) {
-    chunks.push(chunk);
-  }
+  const read = (async () => {
+    for await (const chunk of req) {
+      const buffer = Buffer.from(chunk);
+      size += buffer.byteLength;
+      if (size > limitBytes) {
+        throw httpError(413, 'Request body too large');
+      }
+      chunks.push(buffer);
+    }
 
-  if (chunks.length === 0) {
-    return {};
-  }
+    if (chunks.length === 0) {
+      return {};
+    }
 
-  const raw = Buffer.concat(chunks).toString('utf8').trim();
-  if (!raw) {
-    return {};
-  }
+    const raw = Buffer.concat(chunks).toString('utf8').trim();
+    if (!raw) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw httpError(400, 'Invalid JSON body');
+    }
+  })();
+
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(httpError(408, 'Request body timeout'));
+    }, timeoutMs);
+  });
 
   try {
-    return JSON.parse(raw);
-  } catch {
-    throw new Error('Invalid JSON body');
+    return await Promise.race([read, timeout]);
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

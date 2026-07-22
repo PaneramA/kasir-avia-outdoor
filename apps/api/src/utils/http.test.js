@@ -1,4 +1,4 @@
-import { Readable } from 'node:stream';
+import { PassThrough, Readable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import { parsePath, readJsonBody, sendJson } from './http.js';
 
@@ -15,7 +15,38 @@ describe('HTTP utilities', () => {
   });
 
   it('rejects malformed JSON', async () => {
-    await expect(readJsonBody(Readable.from([Buffer.from('{bad-json}')]))).rejects.toThrow('Invalid JSON body');
+    await expect(readJsonBody(Readable.from([Buffer.from('{bad-json}')]))).rejects.toMatchObject({
+      message: 'Invalid JSON body',
+      statusCode: 400,
+    });
+  });
+
+  it('rejects request bodies larger than the configured byte limit', async () => {
+    await expect(readJsonBody(Readable.from([Buffer.from('123456')]), {
+      limitBytes: 5,
+      timeoutMs: 100,
+    })).rejects.toMatchObject({
+      message: 'Request body too large',
+      statusCode: 413,
+    });
+  });
+
+  it('times out body streams that never finish', async () => {
+    vi.useFakeTimers();
+    const stream = new PassThrough();
+    try {
+      const bodyPromise = readJsonBody(stream, { limitBytes: 100, timeoutMs: 50 });
+      const timeoutAssertion = expect(bodyPromise).rejects.toMatchObject({
+        message: 'Request body timeout',
+        statusCode: 408,
+      });
+      await vi.advanceTimersByTimeAsync(51);
+      stream.end();
+      await timeoutAssertion;
+    } finally {
+      stream.destroy();
+      vi.useRealTimers();
+    }
   });
 
   it('writes no-store JSON responses', () => {

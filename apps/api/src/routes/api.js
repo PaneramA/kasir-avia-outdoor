@@ -330,6 +330,10 @@ export async function apiRoute(req, res, env) {
   const { pathname, searchParams } = parsePath(req);
   let authUser = null;
   let requestContext = null;
+  const readBody = (request) => readJsonBody(request, {
+    limitBytes: env.requestBodyLimitBytes,
+    timeoutMs: env.requestBodyTimeoutMs,
+  });
 
   const ensureAuth = async () => {
     if (authUser) {
@@ -398,7 +402,7 @@ export async function apiRoute(req, res, env) {
         return true;
       }
 
-      const body = loginSchema.parse(await readJsonBody(req));
+      const body = loginSchema.parse(await readBody(req));
       const normalizedUsername = body.username.trim().toLowerCase();
       const loginUserKey = createLoginRateLimitKey('user', normalizedUsername);
       const userRetryAfterSeconds = getLoginRateLimitRetrySeconds(loginUserKey, env);
@@ -497,7 +501,7 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'POST' && pathname === '/api/plans') {
       await ensurePlatformAdmin();
-      const body = createPlanSchema.parse(await readJsonBody(req));
+      const body = createPlanSchema.parse(await readBody(req));
       const created = await createPlanForPlatformAdmin(body);
       sendSuccess(res, 201, created);
       return true;
@@ -506,7 +510,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'PATCH' && pathname.startsWith('/api/plans/')) {
       await ensurePlatformAdmin();
       const planId = decodeURIComponent(pathname.replace('/api/plans/', ''));
-      const body = updatePlanSchema.parse(await readJsonBody(req));
+      const body = updatePlanSchema.parse(await readBody(req));
       const updated = await updatePlanForPlatformAdmin(planId, body);
       sendSuccess(res, 200, updated);
       return true;
@@ -521,7 +525,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'PATCH' && pathname.startsWith('/api/subscriptions/')) {
       await ensurePlatformAdmin();
       const tenantId = decodeURIComponent(pathname.replace('/api/subscriptions/', ''));
-      const body = updateTenantSubscriptionSchema.parse(await readJsonBody(req));
+      const body = updateTenantSubscriptionSchema.parse(await readBody(req));
       const updated = await updateTenantSubscriptionForPlatformAdmin(tenantId, body);
       sendSuccess(res, 200, updated);
       return true;
@@ -554,7 +558,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'PATCH' && pathname === '/api/branches/current/settings') {
       const user = await ensureAuth();
       const context = await ensureRequestContext();
-      const body = updateBranchSettingsSchema.parse(await readJsonBody(req));
+      const body = updateBranchSettingsSchema.parse(await readBody(req));
       const updated = await updateBranchSettingsByIdForUser({
         actorUserId: user.id,
         actorRole: user.role,
@@ -589,7 +593,7 @@ export async function apiRoute(req, res, env) {
         throw new Error('Branch id is required');
       }
 
-      const body = updateBranchSettingsSchema.parse(await readJsonBody(req));
+      const body = updateBranchSettingsSchema.parse(await readBody(req));
       const updated = await updateBranchSettingsByIdForUser({
         actorUserId: user.id,
         actorRole: user.role,
@@ -602,7 +606,7 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'POST' && pathname === '/api/branches') {
       const user = await ensureAuth();
-      const body = createBranchSchema.parse(await readJsonBody(req));
+      const body = createBranchSchema.parse(await readBody(req));
       const created = await createBranchForUser({
         userId: user.id,
         role: user.role,
@@ -616,7 +620,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'PATCH' && pathname.startsWith('/api/branches/')) {
       const user = await ensureAuth();
       const branchId = decodeURIComponent(pathname.replace('/api/branches/', ''));
-      const body = updateBranchSchema.parse(await readJsonBody(req));
+      const body = updateBranchSchema.parse(await readBody(req));
       const updated = await updateBranchForUser({
         userId: user.id,
         role: user.role,
@@ -641,7 +645,7 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'POST' && pathname === '/api/tenant-memberships') {
       const user = await ensureAuth();
-      const body = upsertTenantMembershipSchema.parse(await readJsonBody(req));
+      const body = upsertTenantMembershipSchema.parse(await readBody(req));
       const saved = await upsertTenantMembershipForUser({
         actorUserId: user.id,
         actorRole: user.role,
@@ -655,7 +659,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'PATCH' && pathname.startsWith('/api/tenant-memberships/')) {
       const user = await ensureAuth();
       const membershipId = decodeURIComponent(pathname.replace('/api/tenant-memberships/', ''));
-      const body = updateTenantMembershipSchema.parse(await readJsonBody(req));
+      const body = updateTenantMembershipSchema.parse(await readBody(req));
       const updated = await updateTenantMembershipForUser({
         actorUserId: user.id,
         actorRole: user.role,
@@ -680,7 +684,7 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'POST' && pathname === '/api/branch-access') {
       const user = await ensureAuth();
-      const body = upsertBranchAccessSchema.parse(await readJsonBody(req));
+      const body = upsertBranchAccessSchema.parse(await readBody(req));
       const saved = await upsertBranchAccessForUser({
         actorUserId: user.id,
         actorRole: user.role,
@@ -716,7 +720,7 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'POST' && pathname === '/api/admin/tenants/onboard') {
       await ensurePlatformAdmin();
-      const body = onboardTenantSchema.parse(await readJsonBody(req));
+      const body = onboardTenantSchema.parse(await readBody(req));
       const created = await onboardTenantForPlatformAdmin(body, env.passwordPepper);
       sendSuccess(res, 201, created);
       return true;
@@ -740,7 +744,7 @@ export async function apiRoute(req, res, env) {
         role: user.role,
         requestedTenantId: getHeaderValue(req, 'x-tenant-id') || 'current',
       });
-      const body = updateTenantSettingsSchema.parse(await readJsonBody(req));
+      const body = updateTenantSettingsSchema.parse(await readBody(req));
       const updated = await updateTenantSettingsByTenantId(currentSettings.tenantId, body, {
         userId: user.id,
         role: user.role,
@@ -772,7 +776,7 @@ export async function apiRoute(req, res, env) {
         throw new Error('Tenant id is required');
       }
 
-      const body = updateTenantSettingsSchema.parse(await readJsonBody(req));
+      const body = updateTenantSettingsSchema.parse(await readBody(req));
       const updated = await updateTenantSettingsByTenantId(tenantId, body, {
         userId: user.id,
         role: user.role,
@@ -792,7 +796,7 @@ export async function apiRoute(req, res, env) {
         throw new Error('Tenant id is required');
       }
 
-      const body = updateTenantSchema.parse(await readJsonBody(req));
+      const body = updateTenantSchema.parse(await readBody(req));
       const updated = await updateTenantForSuperuser(tenantId, body);
       sendSuccess(res, 200, updated);
       return true;
@@ -809,7 +813,7 @@ export async function apiRoute(req, res, env) {
         throw new Error('Tenant id is required');
       }
 
-      const body = deleteTenantSchema.parse(await readJsonBody(req));
+      const body = deleteTenantSchema.parse(await readBody(req));
       const tenantList = await listTenantsForUser({
         userId: adminUser.id,
         role: adminUser.role,
@@ -858,7 +862,7 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'POST' && pathname === '/api/users/tenant') {
       const user = await ensureAuth();
-      const body = createTenantUserSchema.parse(await readJsonBody(req));
+      const body = createTenantUserSchema.parse(await readBody(req));
       const created = await createTenantUserForUser({
         actorUserId: user.id,
         actorRole: user.role,
@@ -872,7 +876,7 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'POST' && pathname === '/api/users') {
       await ensurePlatformAdmin();
-      const body = createUserSchema.parse(await readJsonBody(req));
+      const body = createUserSchema.parse(await readBody(req));
       const created = await createUser(body, env.passwordPepper);
       sendSuccess(res, 201, created);
       return true;
@@ -881,7 +885,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'PATCH' && pathname.startsWith('/api/users/') && !pathname.endsWith('/password')) {
       await ensurePlatformAdmin();
       const userId = decodeURIComponent(pathname.replace('/api/users/', ''));
-      const body = updateUserSchema.parse(await readJsonBody(req));
+      const body = updateUserSchema.parse(await readBody(req));
       const updated = await updateUserByAdmin(userId, body);
       sendSuccess(res, 200, updated);
       return true;
@@ -897,7 +901,7 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'PATCH' && pathname === '/api/users/me/password') {
       const user = await ensureAuth();
-      const body = selfChangePasswordSchema.parse(await readJsonBody(req));
+      const body = selfChangePasswordSchema.parse(await readBody(req));
       const result = await changeOwnPassword(user.id, body.currentPassword, body.newPassword, env.passwordPepper);
       sendSuccess(res, 200, result);
       return true;
@@ -906,7 +910,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'PATCH' && pathname.startsWith('/api/users/') && pathname.endsWith('/password')) {
       await ensurePlatformAdmin();
       const userId = decodeURIComponent(pathname.replace('/api/users/', '').replace('/password', ''));
-      const body = adminChangePasswordSchema.parse(await readJsonBody(req));
+      const body = adminChangePasswordSchema.parse(await readBody(req));
       const result = await changeUserPasswordByAdmin(userId, body.newPassword, env.passwordPepper);
       sendSuccess(res, 200, result);
       return true;
@@ -930,7 +934,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'POST' && pathname === '/api/customers') {
       await ensureAuth();
       const context = await ensureRequestContext();
-      const body = createCustomerSchema.parse(await readJsonBody(req));
+      const body = createCustomerSchema.parse(await readBody(req));
       const savedCustomer = await upsertCustomer(body, context);
       sendSuccess(res, 201, savedCustomer);
       return true;
@@ -940,7 +944,7 @@ export async function apiRoute(req, res, env) {
       await ensureAuth();
       const context = await ensureRequestContext();
       const customerId = decodeURIComponent(pathname.replace('/api/customers/', ''));
-      const body = updateCustomerSchema.parse(await readJsonBody(req));
+      const body = updateCustomerSchema.parse(await readBody(req));
       const updatedCustomer = await updateCustomerById(customerId, body, context);
       sendSuccess(res, 200, updatedCustomer);
       return true;
@@ -963,7 +967,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'POST' && pathname === '/api/categories') {
       await ensureAuth();
       const context = await ensureRequestContext();
-      const body = createCategorySchema.parse(await readJsonBody(req));
+      const body = createCategorySchema.parse(await readBody(req));
       const category = await createCategory(body.name, context);
       sendSuccess(res, 201, category);
       return true;
@@ -988,7 +992,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'POST' && pathname === '/api/items') {
       await ensureAuth();
       const context = await ensureRequestContext();
-      const body = createItemSchema.parse(await readJsonBody(req));
+      const body = createItemSchema.parse(await readBody(req));
       const item = await createItem(body, context);
       sendSuccess(res, 201, item);
       return true;
@@ -998,7 +1002,7 @@ export async function apiRoute(req, res, env) {
       await ensureAuth();
       const context = await ensureRequestContext();
       const itemId = decodeURIComponent(pathname.replace('/api/items/', ''));
-      const body = updateItemSchema.parse(await readJsonBody(req));
+      const body = updateItemSchema.parse(await readBody(req));
       const item = await updateItem(itemId, body, context);
       sendSuccess(res, 200, item);
       return true;
@@ -1083,7 +1087,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'POST' && pathname === '/api/rentals') {
       await ensureAuth();
       const context = await ensureRequestContext();
-      const body = createRentalSchema.parse(await readJsonBody(req));
+      const body = createRentalSchema.parse(await readBody(req));
       const rental = await createRental(body, context);
       sendSuccess(res, 201, rental);
       return true;
@@ -1092,7 +1096,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'POST' && pathname.startsWith('/api/rentals/') && pathname.endsWith('/delete-verify')) {
       const adminUser = await ensureAdmin();
       const rentalId = decodeURIComponent(pathname.replace('/api/rentals/', '').replace('/delete-verify', ''));
-      const body = verifyRentalDeleteSchema.parse(await readJsonBody(req));
+      const body = verifyRentalDeleteSchema.parse(await readBody(req));
       const validPassword = await verifyUserPasswordById(adminUser.id, body.password, env.passwordPepper);
 
       if (!validPassword) {
@@ -1108,7 +1112,7 @@ export async function apiRoute(req, res, env) {
       const adminUser = await ensureAdmin();
       const context = await ensureRequestContext();
       const rentalId = decodeURIComponent(pathname.replace('/api/rentals/', ''));
-      const body = deleteRentalByAdminSchema.parse(await readJsonBody(req));
+      const body = deleteRentalByAdminSchema.parse(await readBody(req));
       const expectedConfirmation = `HAPUS ${rentalId}`.toUpperCase();
       const actualConfirmation = body.confirmationText.trim().toUpperCase();
 
@@ -1142,12 +1146,17 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'POST' && pathname === '/api/returns') {
       await ensureAuth();
       const context = await ensureRequestContext();
-      const body = processReturnSchema.parse(await readJsonBody(req));
+      const body = processReturnSchema.parse(await readBody(req));
       const result = await processReturn(body, context);
       sendSuccess(res, 200, result);
       return true;
     }
   } catch (error) {
+    if (Number.isInteger(error?.statusCode)) {
+      sendError(res, error.statusCode, error.message);
+      return true;
+    }
+
     if (error instanceof ZodError) {
       sendError(res, 400, 'Validation failed', error.issues);
       return true;
