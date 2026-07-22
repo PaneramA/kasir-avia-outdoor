@@ -10,6 +10,7 @@
     "lint": "node scripts/check-syntax.mjs",
     "db:audit": "node --env-file=.env scripts/db-audit.mjs",
     "db:backfill:access": "node --env-file=.env scripts/backfill-user-access.mjs",
+    "db:preflight:production": "node --env-file=.env scripts/production-preflight.mjs",
     "db:backfill:tenant": "node --env-file=.env scripts/backfill-tenant-scope.mjs",
     "test:tenant-access": "node --env-file=.env scripts/tenant-access-smoke.mjs",
     "test:load": "node --env-file=.env scripts/api-load-smoke.mjs",
@@ -22,11 +23,11 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@prisma/client": "^6.16.2",
+    "@prisma/client": "^6.19.3",
     "jsonwebtoken": "^9.0.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "prisma": "^6.16.2"
+    "prisma": "^6.19.3"
   }
 }
