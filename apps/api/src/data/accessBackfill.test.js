@@ -8,9 +8,9 @@ describe('planAccessBackfill', () => {
   it('assigns a user to the only active tenant and its only active branch', () => {
     expect(planAccessBackfill({
       users: [{ id: 'user-1', role: 'KASIR', memberships: [], branchAccesses: [] }],
-      tenants: [{ id: 'tenant-1', status: 'ACTIVE' }],
+      tenants: [{ id: 'tenant-1', status: 'active' }],
       branches: [
-        { id: 'branch-1', tenantId: 'tenant-1', status: 'Active' },
+        { id: 'branch-1', tenantId: 'tenant-1', status: 'active' },
         { id: 'branch-2', tenantId: 'tenant-1', status: 'inactive' },
       ],
     })).toEqual({
@@ -24,7 +24,7 @@ describe('planAccessBackfill', () => {
       users: [{ id: 'user-1', role: 'kasir', memberships: [], branchAccesses: [] }],
       tenants: [
         { id: 'tenant-1', status: 'active' },
-        { id: 'tenant-2', status: 'ACTIVE' },
+        { id: 'tenant-2', status: 'active' },
       ],
       branches: [],
     })).toEqual({
@@ -39,7 +39,7 @@ describe('planAccessBackfill', () => {
       tenants: [{ id: 'tenant-1', status: 'active' }],
       branches: [
         { id: 'branch-1', tenantId: 'tenant-1', status: 'active' },
-        { id: 'branch-2', tenantId: 'tenant-1', status: 'ACTIVE' },
+        { id: 'branch-2', tenantId: 'tenant-1', status: 'active' },
       ],
     })).toEqual({
       assignments: [],
@@ -47,27 +47,54 @@ describe('planAccessBackfill', () => {
     });
   });
 
-  it('skips superusers', () => {
+  it('skips only the configured platform superuser', () => {
     expect(planAccessBackfill({
-      users: [{ id: 'user-1', role: ' SuperUser ', memberships: [], branchAccesses: [] }],
+      platformAdminUsername: 'admin@gmail.com',
+      users: [
+        {
+          id: 'platform-1', username: 'admin@gmail.com', role: 'superuser',
+          memberships: [], branchAccesses: [],
+        },
+        {
+          id: 'legacy-1', username: 'legacy-super', role: 'superuser',
+          memberships: [], branchAccesses: [],
+        },
+      ],
       tenants: [{ id: 'tenant-1', status: 'active' }],
       branches: [{ id: 'branch-1', tenantId: 'tenant-1', status: 'active' }],
-    })).toEqual({ assignments: [], unresolved: [] });
+    })).toEqual({
+      assignments: [{ userId: 'legacy-1', tenantId: 'tenant-1', branchId: 'branch-1' }],
+      unresolved: [],
+    });
   });
 
   it('reports partially assigned users instead of silently skipping them', () => {
     expect(planAccessBackfill({
       users: [
-        { id: 'user-1', role: 'kasir', memberships: [{ id: 'membership-1' }], branchAccesses: [] },
-        { id: 'user-2', role: 'kasir', memberships: [], branchAccesses: [{ id: 'access-1' }] },
+        {
+          id: 'user-1', role: 'kasir',
+          memberships: [{ id: 'membership-1', tenantId: 'tenant-1', role: 'kasir', status: 'active' }],
+          branchAccesses: [{ id: 'access-1', branchId: 'branch-2' }],
+        },
+        {
+          id: 'user-2', role: 'kasir', memberships: [],
+          branchAccesses: [{ id: 'access-2', branchId: 'branch-1' }],
+        },
       ],
-      tenants: [{ id: 'tenant-1', status: 'active' }],
-      branches: [{ id: 'branch-1', tenantId: 'tenant-1', status: 'active' }],
+      tenants: [
+        { id: 'tenant-1', status: 'active' },
+        { id: 'tenant-2', status: 'active' },
+      ],
+      branches: [
+        { id: 'branch-1', tenantId: 'tenant-1', status: 'active' },
+        { id: 'branch-2', tenantId: 'tenant-2', status: 'active' },
+      ],
     })).toEqual({
       assignments: [],
       unresolved: [
-        { userId: 'user-1', reason: 'partial-assignment' },
-        { userId: 'user-2', reason: 'partial-assignment' },
+        { userId: 'user-1', tenantId: 'tenant-1', reason: 'missing-active-branch-access' },
+        { userId: 'user-1', tenantId: 'tenant-2', reason: 'branch-access-without-membership' },
+        { userId: 'user-2', tenantId: 'tenant-1', reason: 'branch-access-without-membership' },
       ],
     });
   });
@@ -83,19 +110,60 @@ describe('planAccessBackfill', () => {
         {
           id: 'owner-1',
           role: 'kasir',
-          memberships: [{ id: 'membership-1', role: 'owner', status: 'active' }],
+          memberships: [{ id: 'membership-1', tenantId: 'tenant-1', role: 'owner', status: 'active' }],
           branchAccesses: [],
         },
         {
           id: 'admin-1',
           role: 'kasir',
-          memberships: [{ id: 'membership-2', role: 'admin', status: 'ACTIVE' }],
+          memberships: [{ id: 'membership-2', tenantId: 'tenant-1', role: 'admin', status: 'active' }],
           branchAccesses: [],
         },
       ],
       tenants: [{ id: 'tenant-1', status: 'active' }],
       branches: [{ id: 'branch-1', tenantId: 'tenant-1', status: 'active' }],
     })).toEqual({ assignments: [], unresolved: [] });
+  });
+
+  it('reports inactive and non-runtime status records as unresolved', () => {
+    expect(planAccessBackfill({
+      users: [{
+        id: 'user-1', role: 'kasir',
+        memberships: [{ id: 'membership-1', tenantId: 'tenant-1', role: 'kasir', status: 'ACTIVE' }],
+        branchAccesses: [{ id: 'access-1', branchId: 'branch-1' }],
+      }],
+      tenants: [{ id: 'tenant-1', status: 'ACTIVE' }],
+      branches: [{ id: 'branch-1', tenantId: 'tenant-1', status: 'ACTIVE' }],
+    })).toEqual({
+      assignments: [],
+      unresolved: [{ userId: 'user-1', tenantId: 'tenant-1', reason: 'inactive-membership' }],
+    });
+  });
+
+  it('checks every tenant membership independently', () => {
+    expect(planAccessBackfill({
+      users: [{
+        id: 'user-1', role: 'kasir',
+        memberships: [
+          { id: 'owner-a', tenantId: 'tenant-1', role: 'owner', status: 'active' },
+          { id: 'cashier-b', tenantId: 'tenant-2', role: 'kasir', status: 'active' },
+        ],
+        branchAccesses: [],
+      }],
+      tenants: [
+        { id: 'tenant-1', status: 'active' },
+        { id: 'tenant-2', status: 'active' },
+      ],
+      branches: [
+        { id: 'branch-1', tenantId: 'tenant-1', status: 'active' },
+        { id: 'branch-2', tenantId: 'tenant-2', status: 'active' },
+      ],
+    })).toEqual({
+      assignments: [],
+      unresolved: [{
+        userId: 'user-1', tenantId: 'tenant-2', reason: 'missing-active-branch-access',
+      }],
+    });
   });
 });
 

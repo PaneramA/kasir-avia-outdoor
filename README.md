@@ -40,7 +40,9 @@ Versi ini menolak akses kasir yang belum memiliki membership tenant dan assignme
 npm run db:backfill:access --workspace @avia/api
 ```
 
-2. Periksa bagian `unresolved`. Selesaikan akun `partial-assignment`, `ambiguous-tenant`, atau `ambiguous-branch` secara manual. Jangan restart API selama daftar ini belum kosong.
+2. Periksa bagian `unresolved`. Selesaikan tenant/cabang ambigu, membership inactive, assignment cabang inactive, atau akses cabang tanpa membership secara manual. Jangan restart API selama daftar ini belum kosong.
+
+Command keluar dengan status `2` bila masih ada akun `unresolved`, termasuk pada dry-run, sehingga dapat dipakai sebagai gate deployment.
 
 3. Terapkan assignment yang tidak ambigu:
 

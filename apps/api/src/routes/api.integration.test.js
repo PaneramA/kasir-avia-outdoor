@@ -1,6 +1,7 @@
 import { Readable } from 'node:stream';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { getEnv } from '../config/env.js';
+import { createAccessToken } from '../auth/jwt.js';
 import {
   deleteRentalByAdmin,
   deleteTenantForPlatformAdmin,
@@ -156,6 +157,7 @@ describe('critical API workflow integration', () => {
     const ownerPassword = `Owner!${suffix}`;
     let tenantId = '';
     let ownerUserId = '';
+    let orphanUserId = '';
 
     try {
       const removedRegister = await callApi('POST', '/api/auth/register', {
@@ -168,6 +170,23 @@ describe('critical API workflow integration', () => {
       });
       expect(adminLogin.status).toBe(200);
       const adminToken = adminLogin.body.data.token;
+
+      const orphanUser = await prisma.user.create({
+        data: {
+          username: `vitest-orphan-${suffix}`,
+          passwordHash: 'not-used',
+          role: 'kasir',
+        },
+      });
+      orphanUserId = orphanUser.id;
+      const orphanToken = createAccessToken({
+        sub: orphanUser.id,
+        username: orphanUser.username,
+        role: orphanUser.role,
+      }, env);
+      const orphanInventory = await callApi('GET', '/api/items', { token: orphanToken });
+      expect(orphanInventory.status).toBe(403);
+      expect(orphanInventory.body.message).toBe('Tenant membership is required');
 
       const plans = await callApi('GET', '/api/plans', { token: adminToken });
       expect(plans.status).toBe(200);
@@ -657,6 +676,9 @@ describe('critical API workflow integration', () => {
       }
       if (ownerUserId) {
         await prisma.user.deleteMany({ where: { id: ownerUserId } });
+      }
+      if (orphanUserId) {
+        await prisma.user.deleteMany({ where: { id: orphanUserId } });
       }
     }
   }, 90_000);

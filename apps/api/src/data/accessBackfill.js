@@ -1,31 +1,92 @@
 const normalize = (value) => String(value || '').trim().toLowerCase();
+const isRuntimeActive = (value) => String(value || '') === 'active';
 
-export function planAccessBackfill({ users = [], tenants = [], branches = [] } = {}) {
+export function planAccessBackfill({
+  users = [],
+  tenants = [],
+  branches = [],
+  platformAdminUsername = '',
+} = {}) {
   const assignments = [];
   const unresolved = [];
+  const tenantById = new Map(
+    (Array.isArray(tenants) ? tenants : []).map((tenant) => [tenant.id, tenant]),
+  );
+  const branchById = new Map(
+    (Array.isArray(branches) ? branches : []).map((branch) => [branch.id, branch]),
+  );
+  const configuredAdmin = normalize(platformAdminUsername);
+  const addUnresolved = (entry) => {
+    if (!unresolved.some((candidate) => (
+      candidate.userId === entry.userId
+      && candidate.tenantId === entry.tenantId
+      && candidate.reason === entry.reason
+    ))) {
+      unresolved.push(entry);
+    }
+  };
 
   for (const user of Array.isArray(users) ? users : []) {
-    if (normalize(user?.role) === 'superuser') {
+    if (
+      normalize(user?.role) === 'superuser'
+      && configuredAdmin
+      && normalize(user?.username) === configuredAdmin
+    ) {
       continue;
     }
 
     const memberships = Array.isArray(user?.memberships) ? user.memberships : [];
     const branchAccesses = Array.isArray(user?.branchAccesses) ? user.branchAccesses : [];
-    const hasPrivilegedMembership = memberships.some((membership) => (
-      normalize(membership?.status) === 'active'
-      && ['owner', 'admin'].includes(normalize(membership?.role))
-    ));
-    if (hasPrivilegedMembership || (memberships.length > 0 && branchAccesses.length > 0)) {
-      continue;
-    }
 
     if (memberships.length > 0 || branchAccesses.length > 0) {
-      unresolved.push({ userId: user.id, reason: 'partial-assignment' });
+      const membershipTenantIds = new Set(memberships.map((membership) => membership.tenantId));
+
+      for (const membership of memberships) {
+        const tenantId = membership?.tenantId;
+        const tenant = tenantById.get(tenantId);
+        if (!isRuntimeActive(membership?.status)) {
+          addUnresolved({ userId: user.id, tenantId, reason: 'inactive-membership' });
+          continue;
+        }
+        if (!tenant || !isRuntimeActive(tenant.status)) {
+          addUnresolved({ userId: user.id, tenantId, reason: 'inactive-tenant-membership' });
+          continue;
+        }
+
+        const membershipRole = normalize(membership?.role);
+        if (membershipRole === 'owner' || membershipRole === 'admin') {
+          continue;
+        }
+
+        const hasActiveBranchAccess = branchAccesses.some((access) => {
+          const branch = branchById.get(access?.branchId);
+          return branch?.tenantId === tenantId && isRuntimeActive(branch?.status);
+        });
+        if (!hasActiveBranchAccess) {
+          addUnresolved({
+            userId: user.id,
+            tenantId,
+            reason: 'missing-active-branch-access',
+          });
+        }
+      }
+
+      for (const access of branchAccesses) {
+        const branch = branchById.get(access?.branchId);
+        const tenantId = branch?.tenantId;
+        if (tenantId && !membershipTenantIds.has(tenantId)) {
+          addUnresolved({
+            userId: user.id,
+            tenantId,
+            reason: 'branch-access-without-membership',
+          });
+        }
+      }
       continue;
     }
 
     const activeTenants = (Array.isArray(tenants) ? tenants : [])
-      .filter((tenant) => normalize(tenant?.status) === 'active');
+      .filter((tenant) => isRuntimeActive(tenant?.status));
 
     if (activeTenants.length !== 1) {
       unresolved.push({ userId: user.id, reason: 'ambiguous-tenant' });
@@ -36,7 +97,7 @@ export function planAccessBackfill({ users = [], tenants = [], branches = [] } =
     const activeBranches = (Array.isArray(branches) ? branches : [])
       .filter((branch) => (
         branch?.tenantId === tenant.id
-        && normalize(branch?.status) === 'active'
+        && isRuntimeActive(branch?.status)
       ));
 
     if (activeBranches.length !== 1) {
@@ -54,7 +115,11 @@ export function planAccessBackfill({ users = [], tenants = [], branches = [] } =
   return { assignments, unresolved };
 }
 
-export async function executeAccessBackfill({ database, apply = false } = {}) {
+export async function executeAccessBackfill({
+  database,
+  apply = false,
+  platformAdminUsername = '',
+} = {}) {
   if (!database) {
     throw new Error('Database client is required');
   }
@@ -63,12 +128,13 @@ export async function executeAccessBackfill({ database, apply = false } = {}) {
     database.user.findMany({
       select: {
         id: true,
+        username: true,
         role: true,
         memberships: {
-          select: { id: true, role: true, status: true },
+          select: { id: true, tenantId: true, role: true, status: true },
         },
         branchAccesses: {
-          select: { id: true },
+          select: { id: true, branchId: true },
         },
       },
     }),
@@ -79,7 +145,12 @@ export async function executeAccessBackfill({ database, apply = false } = {}) {
       select: { id: true, tenantId: true, status: true },
     }),
   ]);
-  const plan = planAccessBackfill({ users, tenants, branches });
+  const plan = planAccessBackfill({
+    users,
+    tenants,
+    branches,
+    platformAdminUsername,
+  });
 
   if (apply && plan.assignments.length > 0) {
     await database.$transaction(async (tx) => {

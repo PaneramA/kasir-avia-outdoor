@@ -1170,6 +1170,15 @@ export async function apiRoute(req, res, env) {
       return true;
     }
 
+    if (
+      message === 'Tenant membership is required'
+      || message === 'Tenant membership is inactive'
+      || message === 'Branch access is required'
+    ) {
+      sendError(res, 403, message);
+      return true;
+    }
+
     if (message === 'Tenant is not active') {
       sendError(res, 403, 'Tenant belum aktif. Menunggu approval admin.');
       return true;
