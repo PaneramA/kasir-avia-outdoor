@@ -55,6 +55,13 @@ export function getEnv() {
     loginRateLimitMaxBuckets: toPositiveInteger(process.env.LOGIN_RATE_LIMIT_MAX_BUCKETS, 10_000),
     requestBodyLimitBytes: toPositiveInteger(process.env.REQUEST_BODY_LIMIT_BYTES, 1_048_576),
     requestBodyTimeoutMs: toPositiveInteger(process.env.REQUEST_BODY_TIMEOUT_MS, 10_000),
+    serverRequestTimeoutMs: toPositiveInteger(process.env.SERVER_REQUEST_TIMEOUT_MS, 15_000),
+    serverHeadersTimeoutMs: toPositiveInteger(process.env.SERVER_HEADERS_TIMEOUT_MS, 10_000),
+    serverKeepAliveTimeoutMs: toPositiveInteger(process.env.SERVER_KEEP_ALIVE_TIMEOUT_MS, 5_000),
+    serverMaxRequestsPerSocket: toPositiveInteger(
+      process.env.SERVER_MAX_REQUESTS_PER_SOCKET,
+      1_000,
+    ),
     trustProxy: toStrictBoolean(process.env.TRUST_PROXY, false),
   };
 }

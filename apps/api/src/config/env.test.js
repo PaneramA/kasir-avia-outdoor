@@ -21,6 +21,10 @@ describe('environment configuration', () => {
     expect(env.corsOrigin).toBe('http://localhost:5173');
     expect(env.requestBodyLimitBytes).toBe(1_048_576);
     expect(env.requestBodyTimeoutMs).toBe(10_000);
+    expect(env.serverRequestTimeoutMs).toBe(15_000);
+    expect(env.serverHeadersTimeoutMs).toBe(10_000);
+    expect(env.serverKeepAliveTimeoutMs).toBe(5_000);
+    expect(env.serverMaxRequestsPerSocket).toBe(1_000);
     expect(env.loginRateLimitMaxBuckets).toBe(10_000);
     expect(env.trustProxy).toBe(false);
   });
@@ -32,6 +36,10 @@ describe('environment configuration', () => {
     process.env.REQUEST_BODY_LIMIT_BYTES = '2048';
     process.env.REQUEST_BODY_TIMEOUT_MS = '3000';
     process.env.LOGIN_RATE_LIMIT_MAX_BUCKETS = '250';
+    process.env.SERVER_REQUEST_TIMEOUT_MS = '8000';
+    process.env.SERVER_HEADERS_TIMEOUT_MS = '7000';
+    process.env.SERVER_KEEP_ALIVE_TIMEOUT_MS = '2000';
+    process.env.SERVER_MAX_REQUESTS_PER_SOCKET = '500';
     process.env.TRUST_PROXY = 'true';
 
     const env = getEnv();
@@ -41,6 +49,10 @@ describe('environment configuration', () => {
     expect(env.requestBodyLimitBytes).toBe(2048);
     expect(env.requestBodyTimeoutMs).toBe(3000);
     expect(env.loginRateLimitMaxBuckets).toBe(250);
+    expect(env.serverRequestTimeoutMs).toBe(8000);
+    expect(env.serverHeadersTimeoutMs).toBe(7000);
+    expect(env.serverKeepAliveTimeoutMs).toBe(2000);
+    expect(env.serverMaxRequestsPerSocket).toBe(500);
     expect(env.trustProxy).toBe(true);
   });
 

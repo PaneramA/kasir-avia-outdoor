@@ -4,6 +4,7 @@ import {
   getEnv,
   getSecurityWarnings,
 } from './config/env.js';
+import { applyHttpServerLimits } from './config/httpServer.js';
 import { initDatabase } from './data/db.js';
 import { withCors } from './middleware/cors.js';
 import { attachRequestLogger } from './middleware/logger.js';
@@ -46,6 +47,7 @@ const server = createServer(async (req, res) => {
     });
   }
 });
+applyHttpServerLimits(server, env);
 
 server.listen(env.port, () => {
   console.log(`[api] listening on http://localhost:${env.port}`);
