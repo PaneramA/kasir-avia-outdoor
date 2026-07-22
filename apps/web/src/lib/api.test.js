@@ -69,6 +69,35 @@ describe('web API client state and requests', () => {
     expect(expiredListener).toHaveBeenCalledOnce();
   });
 
+  it('does not let a stale 401 clear a newer login session', async () => {
+    localStorage.setItem('avia_api_token', 'token-a');
+    localStorage.setItem('avia_api_user', JSON.stringify({ id: 'user-a' }));
+    let resolveOldRequest;
+    fetch
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveOldRequest = resolve;
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        token: 'token-b',
+        user: { id: 'user-b', username: 'baru', role: 'kasir' },
+      }));
+    const expiredListener = vi.fn();
+    window.addEventListener('avia-auth-expired', expiredListener);
+    const api = await loadApi();
+
+    const oldRequest = api.fetchItems();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    await api.login('baru', 'password-baru');
+    resolveOldRequest(jsonResponse(null, { ok: false, status: 401, message: 'Expired' }));
+
+    await expect(oldRequest).rejects.toThrow('Expired');
+    expect(api.getStoredSession()).toMatchObject({
+      token: 'token-b',
+      user: { id: 'user-b' },
+    });
+    expect(expiredListener).not.toHaveBeenCalled();
+  });
+
   it('encodes search parameters', async () => {
     localStorage.setItem('avia_api_token', 'token-1');
     fetch.mockResolvedValue(jsonResponse([]));

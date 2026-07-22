@@ -67,8 +67,10 @@ function parseStoredUser() {
   }
 }
 
-function emitAuthExpired() {
-  window.dispatchEvent(new CustomEvent('avia-auth-expired'));
+function emitAuthExpired(token) {
+  window.dispatchEvent(new CustomEvent('avia-auth-expired', {
+    detail: { token },
+  }));
 }
 
 function setSession(token, user) {
@@ -98,17 +100,18 @@ function setTenantContext(context = {}) {
 }
 
 async function request(path, options = {}, config = { auth: false }) {
+  const requestToken = config.auth ? accessToken : '';
   const headers = {
     'Content-Type': 'application/json',
     ...(options.headers || {}),
   };
 
   if (config.auth) {
-    if (!accessToken) {
+    if (!requestToken) {
       throw new Error('Unauthorized');
     }
 
-    headers.Authorization = `Bearer ${accessToken}`;
+    headers.Authorization = `Bearer ${requestToken}`;
   }
 
   if (config.auth && activeTenantId) {
@@ -147,9 +150,9 @@ async function request(path, options = {}, config = { auth: false }) {
   }
 
   if (!response.ok) {
-    if (response.status === 401 && config.auth) {
+    if (response.status === 401 && config.auth && requestToken === accessToken) {
       setSession('', null);
-      emitAuthExpired();
+      emitAuthExpired(requestToken);
     }
 
     const message = payload?.message || `Request failed with status ${response.status}`;

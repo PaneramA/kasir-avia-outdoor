@@ -2,7 +2,7 @@
 
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { SWRConfig } from 'swr';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,6 +21,7 @@ import {
   fetchTenants,
   getActiveTenantContext,
   getStoredSession,
+  logout,
   setActiveTenantContext,
 } from './lib/api.js';
 
@@ -199,5 +200,31 @@ describe('application state orchestration', () => {
     expect(setActiveTenantContext).toHaveBeenCalledWith({ tenantId: 'tenant-1', branchId: 'branch-1' });
     expect(screen.getAllByDisplayValue('Toko Uji')).toHaveLength(2);
     expect(screen.getAllByDisplayValue('Pusat')).toHaveLength(2);
+  });
+
+  it('ignores stale auth expiry events but clears the matching active session', async () => {
+    const owner = { id: 'owner-1', username: 'owner', role: 'kasir' };
+    getStoredSession.mockReturnValue({ token: 'token-b', user: owner });
+    fetchCurrentUser.mockResolvedValue(owner);
+    fetchTenants.mockResolvedValue([{ id: 'tenant-1', name: 'Toko Uji' }]);
+    fetchBranches.mockResolvedValue([{ id: 'branch-1', tenantId: 'tenant-1', name: 'Pusat' }]);
+    renderApp('/dashboard');
+
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    act(() => {
+      window.dispatchEvent(new CustomEvent('avia-auth-expired', {
+        detail: { token: 'token-a' },
+      }));
+    });
+    expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(logout).not.toHaveBeenCalled();
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('avia-auth-expired', {
+        detail: { token: 'token-b' },
+      }));
+    });
+    expect(await screen.findByRole('heading', { name: 'Masuk ke akun' })).toBeInTheDocument();
+    expect(logout).toHaveBeenCalledOnce();
   });
 });

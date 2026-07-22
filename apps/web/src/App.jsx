@@ -278,16 +278,31 @@ function App() {
     error instanceof Error ? error.message : 'Gagal memuat data dari backend.'
   ), [])
 
+  const clearClientSession = useCallback(async ({ message = '' } = {}) => {
+    logout()
+    setSession({ token: '', user: null })
+    setCart([])
+    setActiveTenantId('')
+    setActiveBranchId('')
+    setActiveTenantContext({ tenantId: '', branchId: '' })
+    await mutateCache(() => true, undefined, { revalidate: false })
+    setAuthErrorMessage(message)
+  }, [mutateCache])
+
   useEffect(() => {
-    const handleAuthExpired = () => {
-      setSession({ token: '', user: null })
-      setCart([])
-      setAuthErrorMessage('Sesi login berakhir. Silakan login kembali.')
+    const handleAuthExpired = (event) => {
+      if (event.detail?.token !== session.token) {
+        return
+      }
+
+      void clearClientSession({
+        message: 'Sesi login berakhir. Silakan login kembali.',
+      })
     }
 
     window.addEventListener('avia-auth-expired', handleAuthExpired)
     return () => window.removeEventListener('avia-auth-expired', handleAuthExpired)
-  }, [])
+  }, [clearClientSession, session.token])
 
   useEffect(() => {
     if (!isRentalRoute || itemQuery.data === undefined || cart.length === 0) {
@@ -319,8 +334,7 @@ function App() {
     try {
       const user = await login(username, password)
       if (isPlatformAdmin(user)) {
-        logout()
-        setSession({ token: '', user: null })
+        await clearClientSession()
         throw new Error('Akun platform admin hanya bisa masuk lewat /admin.')
       }
       setSession(getStoredSession())
@@ -332,7 +346,7 @@ function App() {
     } finally {
       setIsAuthSubmitting(false)
     }
-  }, [authQuery])
+  }, [authQuery, clearClientSession])
 
   const handleAdminLogin = useCallback(async ({ username, password }) => {
     setAuthErrorMessage('')
@@ -341,8 +355,7 @@ function App() {
     try {
       const user = await login(username, password)
       if (!isPlatformAdmin(user)) {
-        logout()
-        setSession({ token: '', user: null })
+        await clearClientSession()
         throw new Error('Akun ini tidak memiliki akses administrator.')
       }
       setSession(getStoredSession())
@@ -354,18 +367,11 @@ function App() {
     } finally {
       setIsAuthSubmitting(false)
     }
-  }, [authQuery])
+  }, [authQuery, clearClientSession])
 
   const handleLogout = useCallback(() => {
-    logout()
-    setSession({ token: '', user: null })
-    setCart([])
-    setActiveTenantId('')
-    setActiveBranchId('')
-    setActiveTenantContext({ tenantId: '', branchId: '' })
-    void mutateCache(() => true, undefined, { revalidate: false })
-    setAuthErrorMessage('')
-  }, [mutateCache])
+    void clearClientSession()
+  }, [clearClientSession])
 
   const handleCreateOrUpdateItem = useCallback(
     async (itemPayload, editingItem) => {
