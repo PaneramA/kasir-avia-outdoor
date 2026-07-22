@@ -1,5 +1,5 @@
 export function normalizeTenantRole(value) {
-  return String(value || '').trim().toLowerCase();
+  return (value == null ? '' : String(value)).trim().toLowerCase();
 }
 
 export function isActiveStatus(value) {
