@@ -63,3 +63,25 @@ gzip on;
 gzip_min_length 1024;
 gzip_types application/json;
 ```
+
+## Smoke Test Beban API
+
+Jalankan dari VPS atau staging yang mengarah ke API dan database yang sama. Mode default hanya menguji pembacaan dashboard, inventaris, dan riwayat transaksi.
+
+```bash
+API_BASE_URL=http://127.0.0.1:4000 \
+LOAD_TEST_TENANT_ID=<tenant-id> \
+LOAD_TEST_BRANCH_ID=<branch-id> \
+LOAD_TEST_USERNAME=<username> \
+LOAD_TEST_PASSWORD=<password> \
+npm run test:load --workspace @avia/api
+```
+
+Untuk turut menguji checkout-return paralel, pilih barang aktif dengan stok minimal sebanyak jumlah siklus dan aktifkan mode transaksi secara eksplisit:
+
+```bash
+LOAD_TEST_ITEM_ID=<item-id> LOAD_TEST_CYCLE_COUNT=5 \
+npm run test:load --workspace @avia/api
+```
+
+Gate gagal bila error rate di atas 1%, p95 pembacaan di atas 1500 ms, atau stok akhir berbeda dari stok awal. Data transaksi memakai ID berawalan `LOAD-` dan hanya record yang dibuat oleh proses tersebut yang dibersihkan.
