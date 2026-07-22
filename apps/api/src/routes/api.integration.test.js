@@ -135,10 +135,15 @@ describe('critical API workflow integration', () => {
         data: { archivedAt },
       });
       expect(archivedItem.archivedAt).toEqual(archivedAt);
-      await prisma.item.update({
+      const restoredItem = await prisma.item.update({
         where: { id: secondItemId },
         data: { archivedAt: null },
       });
+      expect(restoredItem.archivedAt).toBeNull();
+      const persistedItem = await prisma.item.findUnique({
+        where: { id: secondItemId },
+      });
+      expect(persistedItem.archivedAt).toBeNull();
 
       const inventoryFirstPage = await callApi('GET', '/api/items/page?limit=1&query=Tenda', {
         token: ownerToken, tenantId, branchId,
