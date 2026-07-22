@@ -4,7 +4,7 @@ import ReceiptModal from '../components/ReceiptModal';
 import { openReceiptWhatsApp, printReceipt } from '../lib/receipt';
 import { formatCurrency, getCurrentMonthRangeDateKeys } from '../lib/financial';
 import { compareRentalsByClosestReturnDate, getRentalReturnTimelineDate } from '../lib/rentalTime';
-import { fetchRentalHistoryPage, getActiveTenantContext } from '../lib/api';
+import { fetchRentalHistoryPage } from '../lib/api';
 import { APP_CACHE_KEYS } from '../lib/appCache';
 
 function formatReturnTimelineLabel(rental) {
@@ -26,6 +26,8 @@ function formatPaymentSummary(rental) {
 
 const History = ({
     currentUser,
+    tenantId,
+    branchId,
     onVerifyRentalDelete,
     onDeleteRentalByAdmin,
 }) => {
@@ -45,7 +47,6 @@ const History = ({
     const [deleteErrorMessage, setDeleteErrorMessage] = useState('');
     const [deleteSuccessMessage, setDeleteSuccessMessage] = useState('');
     const [receiptRental, setReceiptRental] = useState(null);
-    const { tenantId, branchId } = getActiveTenantContext();
 
     useEffect(() => {
         const timeoutId = window.setTimeout(() => {
@@ -70,7 +71,7 @@ const History = ({
         setSize,
     } = useSWRInfinite(
         (pageIndex, previousPageData) => {
-            if (!tenantId || !branchId) {
+            if (!currentUser?.id || !tenantId || !branchId) {
                 return null;
             }
 
@@ -79,13 +80,14 @@ const History = ({
             }
 
             return APP_CACHE_KEYS.rentalHistory(
+                currentUser.id,
                 tenantId,
                 branchId,
                 historyFilters,
                 pageIndex === 0 ? '' : previousPageData.nextCursor,
             );
         },
-        ([, , , filters, cursor]) => fetchRentalHistoryPage({ ...filters, cursor }),
+        ([, , , , filters, cursor]) => fetchRentalHistoryPage({ ...filters, cursor }),
         { keepPreviousData: true },
     );
 

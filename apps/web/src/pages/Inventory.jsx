@@ -102,6 +102,7 @@ const escapeCsvCell = (value) => {
 };
 
 const Inventory = ({
+    userId,
     tenantId,
     branchId,
     categories,
@@ -136,7 +137,7 @@ const Inventory = ({
         setSize,
     } = useSWRInfinite(
         (pageIndex, previousPageData) => {
-            if (!tenantId || !branchId) {
+            if (!userId || !tenantId || !branchId) {
                 return null;
             }
 
@@ -145,6 +146,7 @@ const Inventory = ({
             }
 
             return APP_CACHE_KEYS.inventoryPage(
+                userId,
                 tenantId,
                 branchId,
                 debouncedSearchQuery,
@@ -152,7 +154,7 @@ const Inventory = ({
                 inventoryStatus,
             );
         },
-        ([, , , query, cursor, status]) => fetchItemsPage({ query, cursor, status }),
+        ([, , , , query, cursor, status]) => fetchItemsPage({ query, cursor, status }),
         { keepPreviousData: true },
     );
 

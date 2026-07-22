@@ -81,6 +81,8 @@ const Rental = ({
     setCart,
     onCheckout,
     currentUser,
+    tenantId,
+    branchId,
     tenantSettings,
 }) => {
     const safeInventory = useMemo(() => (Array.isArray(inventory) ? inventory : []), [inventory]);
@@ -172,8 +174,10 @@ const Rental = ({
     }, [customerSearch]);
 
     const customerSuggestionQuery = useSWR(
-        debouncedCustomerSearch.length >= 2 ? APP_CACHE_KEYS.customers(debouncedCustomerSearch) : null,
-        ([, keyword]) => fetchCustomers(keyword),
+        currentUser?.id && tenantId && branchId && debouncedCustomerSearch.length >= 2
+            ? APP_CACHE_KEYS.customers(currentUser.id, tenantId, branchId, debouncedCustomerSearch)
+            : null,
+        ([, , , , keyword]) => fetchCustomers(keyword),
     );
     const customerSuggestions = useMemo(
         () => (Array.isArray(customerSuggestionQuery.data) ? customerSuggestionQuery.data : []),

@@ -85,7 +85,7 @@ const EMPTY_RECAP = {
   availableMonths: [],
 }
 
-const FinancialRecap = ({ tenantId, branchId, tenantSettings, canExportData = true }) => {
+const FinancialRecap = ({ userId, tenantId, branchId, tenantSettings, canExportData = true }) => {
   const financialClosingDay = useMemo(() => getFinancialClosingDay(tenantSettings), [tenantSettings])
   const { monthKey: currentMonthKey, startDate: currentMonthStart, endDate: currentMonthEnd } = useMemo(
     () => getCurrentFinancialMonthRangeDateKeys(financialClosingDay),
@@ -106,16 +106,17 @@ const FinancialRecap = ({ tenantId, branchId, tenantSettings, canExportData = tr
     setSize,
   } = useSWRInfinite(
     (pageIndex, previousPageData) => {
-      if (!tenantId || !branchId) return null
+      if (!userId || !tenantId || !branchId) return null
       if (pageIndex > 0 && !previousPageData?.nextCursor) return null
       return APP_CACHE_KEYS.financialRecap(
+        userId,
         tenantId,
         branchId,
         recapFilters,
         pageIndex === 0 ? '' : previousPageData.nextCursor,
       )
     },
-    ([, , , filters, cursor]) => fetchFinancialRecapPage({ ...filters, cursor }),
+    ([, , , , filters, cursor]) => fetchFinancialRecapPage({ ...filters, cursor }),
     { keepPreviousData: true },
   )
 

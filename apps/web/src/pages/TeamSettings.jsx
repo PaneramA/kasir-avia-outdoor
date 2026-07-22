@@ -8,7 +8,6 @@ import {
   fetchBranches,
   fetchTenantMemberships,
   fetchTenantUsers,
-  getActiveTenantContext,
   getStoredSession,
   removeBranchAccess,
   updateTenantMembership,
@@ -33,9 +32,8 @@ const initialTenantUserForm = {
   tenantRole: 'kasir',
 }
 
-const TeamSettings = () => {
+const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
   const currentUser = getStoredSession().user
-  const tenantId = getActiveTenantContext().tenantId || 'current'
 
   const [membershipForm, setMembershipForm] = useState(initialMembershipForm)
   const [accessForm, setAccessForm] = useState(initialAccessForm)
@@ -47,13 +45,22 @@ const TeamSettings = () => {
   const [message, setMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
-  const branchQuery = useSWR(APP_CACHE_KEYS.branches(tenantId), () => fetchBranches(tenantId))
+  const branchQuery = useSWR(
+    userId && tenantId ? APP_CACHE_KEYS.branches(userId, tenantId, branchId) : null,
+    () => fetchBranches(tenantId),
+  )
   const membershipQuery = useSWR(
-    APP_CACHE_KEYS.tenantMemberships(tenantId),
+    userId && tenantId && branchId ? APP_CACHE_KEYS.tenantMemberships(userId, tenantId, branchId) : null,
     () => fetchTenantMemberships(tenantId),
   )
-  const accessQuery = useSWR(APP_CACHE_KEYS.branchAccess(tenantId), () => fetchBranchAccess(tenantId))
-  const userQuery = useSWR(APP_CACHE_KEYS.tenantUsers(tenantId), () => fetchTenantUsers(tenantId))
+  const accessQuery = useSWR(
+    userId && tenantId && branchId ? APP_CACHE_KEYS.branchAccess(userId, tenantId, branchId) : null,
+    () => fetchBranchAccess(tenantId),
+  )
+  const userQuery = useSWR(
+    userId && tenantId && branchId ? APP_CACHE_KEYS.tenantUsers(userId, tenantId, branchId) : null,
+    () => fetchTenantUsers(tenantId),
+  )
   const branches = useMemo(() => (Array.isArray(branchQuery.data) ? branchQuery.data : []), [branchQuery.data])
   const memberships = useMemo(
     () => (Array.isArray(membershipQuery.data) ? membershipQuery.data : []),
