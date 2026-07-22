@@ -47,7 +47,10 @@ function usesDefaultDatabaseCredentials(databaseUrl) {
 }
 
 function isLoopbackHostname(hostname) {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  return hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname === '[::1]'
+    || hostname === '::1';
 }
 
 function isAllowedProductionOrigin(origin, allowInsecureLoopbackCors) {
@@ -68,9 +71,11 @@ function isAllowedProductionOrigin(origin, allowInsecureLoopbackCors) {
 }
 
 export function getEnv() {
+  const nodeEnv = process.env.NODE_ENV || 'development';
   return {
     port: Number(process.env.PORT || 4000),
-    nodeEnv: process.env.NODE_ENV || 'development',
+    host: process.env.HOST || (nodeEnv === 'production' ? '127.0.0.1' : '0.0.0.0'),
+    nodeEnv,
     corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
     databaseUrl: process.env.DATABASE_URL || '',
     jwtSecret: process.env.JWT_SECRET || DEFAULT_JWT_SECRET,
@@ -146,6 +151,9 @@ export function getSecurityWarnings(env) {
   }
 
   if (env.nodeEnv === 'production') {
+    if (env.trustProxy && !isLoopbackHostname(env.host)) {
+      warnings.push('TRUST_PROXY=true hanya aman saat HOST menggunakan alamat loopback.');
+    }
     for (const [property, [name, maximum]] of Object.entries(PRODUCTION_MAXIMUMS)) {
       if (Number.isFinite(env[property]) && env[property] > maximum) {
         warnings.push(`${name} melebihi batas production ${maximum}.`);

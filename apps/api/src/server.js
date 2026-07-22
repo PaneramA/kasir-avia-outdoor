@@ -49,8 +49,8 @@ const server = createServer(async (req, res) => {
 });
 applyHttpServerLimits(server, env);
 
-server.listen(env.port, () => {
-  console.log(`[api] listening on http://localhost:${env.port}`);
+server.listen(env.port, env.host, () => {
+  console.log(`[api] listening on http://${env.host}:${env.port}`);
   if (securityWarnings.length > 0) {
     console.warn('[api] Security warnings:');
     for (const warning of securityWarnings) {

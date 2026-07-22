@@ -13,12 +13,19 @@ function secondsUntil(untilMs, nowMs) {
 }
 
 export function resolveLoginClientIp(req, { trustProxy = false } = {}) {
+  const remoteAddress = req?.socket?.remoteAddress || 'unknown';
   const forwardedFor = req?.headers?.['x-forwarded-for'];
-  if (trustProxy && typeof forwardedFor === 'string' && forwardedFor.trim()) {
-    return forwardedFor.split(',')[0].trim();
+  const proxyIsLoopback = remoteAddress === '127.0.0.1'
+    || remoteAddress === '::1'
+    || remoteAddress.startsWith('::ffff:127.');
+  if (trustProxy && proxyIsLoopback && typeof forwardedFor === 'string' && forwardedFor.trim()) {
+    const clientAddress = forwardedFor.split(',')[0].trim();
+    if (isIP(clientAddress)) {
+      return clientAddress;
+    }
   }
 
-  return req?.socket?.remoteAddress || 'unknown';
+  return remoteAddress;
 }
 
 export function createLoginRateLimiter({
@@ -143,3 +150,4 @@ export function createLoginRateLimiter({
 
   return { retryAfter, registerFailure, clear, size };
 }
+import { isIP } from 'node:net';

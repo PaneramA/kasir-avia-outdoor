@@ -12,6 +12,24 @@ describe('resolveLoginClientIp', () => {
     expect(resolveLoginClientIp(request, { trustProxy: true })).toBe('203.0.113.8');
   });
 
+  it('ignores forwarded headers from a non-loopback peer even when proxy mode is enabled', () => {
+    const request = {
+      headers: { 'x-forwarded-for': '198.51.100.22' },
+      socket: { remoteAddress: '203.0.113.9' },
+    };
+
+    expect(resolveLoginClientIp(request, { trustProxy: true })).toBe('203.0.113.9');
+  });
+
+  it('ignores malformed forwarded addresses from the trusted proxy', () => {
+    const request = {
+      headers: { 'x-forwarded-for': 'spoofed-value' },
+      socket: { remoteAddress: '::ffff:127.0.0.1' },
+    };
+
+    expect(resolveLoginClientIp(request, { trustProxy: true })).toBe('::ffff:127.0.0.1');
+  });
+
   it('falls back to an unknown identity when no client address is available', () => {
     expect(resolveLoginClientIp({ headers: {} }, { trustProxy: false })).toBe('unknown');
   });

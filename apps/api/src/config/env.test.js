@@ -27,10 +27,19 @@ describe('environment configuration', () => {
     expect(env.serverMaxRequestsPerSocket).toBe(1_000);
     expect(env.loginRateLimitMaxBuckets).toBe(10_000);
     expect(env.trustProxy).toBe(false);
+    expect(env.host).toBe('0.0.0.0');
+  });
+
+  it('binds production to loopback by default', () => {
+    process.env.NODE_ENV = 'production';
+    delete process.env.HOST;
+
+    expect(getEnv().host).toBe('127.0.0.1');
   });
 
   it('reads explicit deployment values', () => {
     process.env.PORT = '4100';
+    process.env.HOST = '127.0.0.1';
     process.env.CORS_ORIGIN = 'https://one.test,https://two.test';
     process.env.LOGIN_RATE_LIMIT_MAX_ATTEMPTS = '7';
     process.env.REQUEST_BODY_LIMIT_BYTES = '2048';
@@ -45,6 +54,7 @@ describe('environment configuration', () => {
 
     const env = getEnv();
     expect(env.port).toBe(4100);
+    expect(env.host).toBe('127.0.0.1');
     expect(env.corsOrigin).toContain('https://two.test');
     expect(env.loginRateLimitMaxAttempts).toBe(7);
     expect(env.requestBodyLimitBytes).toBe(2048);
@@ -193,5 +203,23 @@ describe('environment configuration', () => {
       expect.stringContaining('SERVER_KEEP_ALIVE_TIMEOUT_MS'),
       expect.stringContaining('SERVER_MAX_REQUESTS_PER_SOCKET'),
     ]));
+  });
+
+  it('rejects trusted proxy mode on a publicly bound production API', () => {
+    const secureBase = {
+      nodeEnv: 'production',
+      databaseUrl: 'postgresql://avia_app:strong-password@db.internal:5432/aviaoutdoor',
+      corsOrigin: 'https://kasir.example.com',
+      jwtSecret: 'strong-jwt-secret-at-least-16',
+      passwordPepper: 'strong-password-pepper-at-least-16',
+      adminUsername: 'admin@gmail.com',
+      adminPassword: 'long-random-admin-password',
+      loginRateLimitMaxAttempts: 5,
+      trustProxy: true,
+    };
+
+    expect(getSecurityWarnings({ ...secureBase, host: '0.0.0.0' }).join(' '))
+      .toContain('loopback');
+    expect(getSecurityWarnings({ ...secureBase, host: '127.0.0.1' })).toEqual([]);
   });
 });

@@ -119,7 +119,7 @@ Production startup refuses insecure settings. Run the warning check against the 
 
 ```bash
 cd "$API_DIR"
-env -u DATABASE_URL -u CORS_ORIGIN -u JWT_SECRET -u PASSWORD_PEPPER \
+env -u DATABASE_URL -u HOST -u CORS_ORIGIN -u JWT_SECRET -u PASSWORD_PEPPER \
   -u ALLOW_INSECURE_LOOPBACK_CORS \
   -u ADMIN_USERNAME -u ADMIN_PASSWORD -u TRUST_PROXY \
   NODE_ENV=production node --env-file=.env --input-type=module -e '
@@ -130,7 +130,7 @@ env -u DATABASE_URL -u CORS_ORIGIN -u JWT_SECRET -u PASSWORD_PEPPER \
 '
 ```
 
-The current default `postgres:postgres`, `admin@gmail.com`, `adminavo123`, development secrets, or localhost CORS must produce a nonzero result. Do not attempt to start the production API with those values.
+The current default `postgres:postgres`, `adminavo123`, development secrets, or localhost CORS must produce a nonzero result. `admin@gmail.com` remains a valid username because usernames are not secrets, but its password must be replaced with a strong production credential. Do not attempt to start the production API while any warning remains.
 
 ### Preserve or separately rotate `PASSWORD_PEPPER`
 
@@ -138,7 +138,7 @@ Every existing password hash depends on the exact `PASSWORD_PEPPER`. Check it wi
 
 ```bash
 cd "$API_DIR"
-env -u DATABASE_URL -u CORS_ORIGIN -u JWT_SECRET -u PASSWORD_PEPPER \
+env -u DATABASE_URL -u HOST -u CORS_ORIGIN -u JWT_SECRET -u PASSWORD_PEPPER \
   -u ALLOW_INSECURE_LOOPBACK_CORS \
   -u ADMIN_USERNAME -u ADMIN_PASSWORD -u TRUST_PROXY \
   NODE_ENV=production node --env-file=.env --input-type=module -e '
@@ -215,7 +215,7 @@ NEW_CORS_ORIGIN="$NEW_CORS_ORIGIN" node -e '
 '
 ```
 
-Default `TRUST_PROXY=false` is safe. Set it to `true` only after inspecting the effective Nginx `location` that proxies this API and confirming it discards any client-supplied `X-Forwarded-For` and overwrites it with `$remote_addr`. Do not infer this from a matching directive in an unrelated virtual host or location. This application trusts the first forwarded address, so appending an untrusted header is insufficient.
+Production binds the API to `HOST=127.0.0.1`, so only a local reverse proxy can reach it. When Nginx fronts the API, set `TRUST_PROXY=true` only after inspecting the effective Nginx `location` and confirming it discards any client-supplied `X-Forwarded-For` and overwrites it with `$remote_addr`. Leaving it false behind Nginx makes every browser share the proxy IP rate-limit bucket and can cause a global login lockout. Do not infer safety from a directive in an unrelated virtual host or location. The application accepts a forwarded client IP only from a loopback peer and only when it is a valid IP address.
 
 ```bash
 export NEW_TRUST_PROXY=false
@@ -228,6 +228,7 @@ Update `.env` atomically. The updater intentionally leaves `PASSWORD_PEPPER` unc
 ```bash
 cd "$API_DIR"
 DATABASE_URL="$NEW_DATABASE_URL" \
+HOST=127.0.0.1 \
 CORS_ORIGIN="$NEW_CORS_ORIGIN" \
 ALLOW_INSECURE_LOOPBACK_CORS=false \
 JWT_SECRET="$NEW_JWT_SECRET" \
@@ -239,6 +240,7 @@ const { chmodSync, readFileSync, renameSync, writeFileSync } = require('node:fs'
 
 const replacements = {
   NODE_ENV: 'production',
+  HOST: process.env.HOST,
   DATABASE_URL: process.env.DATABASE_URL,
   CORS_ORIGIN: process.env.CORS_ORIGIN,
   ALLOW_INSECURE_LOOPBACK_CORS: process.env.ALLOW_INSECURE_LOOPBACK_CORS,
@@ -287,7 +289,7 @@ Run the production warning check again. It must exit `0` with exactly `{"ok":tru
 
 ```bash
 cd "$API_DIR"
-env -u DATABASE_URL -u CORS_ORIGIN -u JWT_SECRET -u PASSWORD_PEPPER \
+env -u DATABASE_URL -u HOST -u CORS_ORIGIN -u JWT_SECRET -u PASSWORD_PEPPER \
   -u ALLOW_INSECURE_LOOPBACK_CORS \
   -u ADMIN_USERNAME -u ADMIN_PASSWORD -u TRUST_PROXY \
   NODE_ENV=production node --env-file=.env --input-type=module -e '
