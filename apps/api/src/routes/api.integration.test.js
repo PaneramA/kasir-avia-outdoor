@@ -1,12 +1,15 @@
 import { Readable } from 'node:stream';
+import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { getEnv } from '../config/env.js';
 import { createAccessToken } from '../auth/jwt.js';
+import { hashPassword } from '../auth/password.js';
 import {
   deleteRentalByAdmin,
   deleteTenantForPlatformAdmin,
   initDatabase,
   processReturn,
+  rehashUserPassword,
 } from '../data/db.js';
 import { prisma } from '../data/prisma.js';
 import { apiRoute } from './api.js';
@@ -141,6 +144,20 @@ function installRentalRaceBarrier(rentalId, winnerTransactionIndex = 2) {
 
 beforeAll(async () => {
   await initDatabase(env);
+  await prisma.user.deleteMany({
+    where: {
+      OR: [
+        { username: { startsWith: 'vitest-' } },
+        { username: { startsWith: 'owner-team-' } },
+        { username: { startsWith: 'rental-admin-' } },
+        { username: { startsWith: 'global-admin-team-' } },
+      ],
+      memberships: { none: {} },
+      branchAccesses: { none: {} },
+      deletedRentals: { none: {} },
+      auditLogs: { none: {} },
+    },
+  });
 }, 60_000);
 
 afterAll(async () => {
@@ -158,6 +175,7 @@ describe('critical API workflow integration', () => {
     let tenantId = '';
     let ownerUserId = '';
     let orphanUserId = '';
+    const policyUserIds = [];
 
     try {
       const removedRegister = await callApi('POST', '/api/auth/register', {
@@ -219,6 +237,45 @@ describe('critical API workflow integration', () => {
       expect(ownerLogin.status).toBe(200);
       const ownerToken = ownerLogin.body.data.token;
 
+      const parallelOwnerLogins = await Promise.all(
+        Array.from({ length: 4 }, () => callApi('POST', '/api/auth/login', {
+          body: { username: ownerUsername, password: ownerPassword },
+        })),
+      );
+      expect(parallelOwnerLogins.filter((response) => response.status === 200)).toHaveLength(1);
+      expect(parallelOwnerLogins.filter((response) => response.status === 429)).toHaveLength(3);
+      expect((await callApi('POST', '/api/auth/login', {
+        body: { username: ownerUsername, password: ownerPassword },
+      })).status).toBe(200);
+
+      const legacyPassword = `Legacy!${suffix}`;
+      const originalLegacyHash = createHash('sha256')
+        .update(`${legacyPassword}:${env.passwordPepper}`)
+        .digest('hex');
+      const rehashRaceUser = await prisma.user.create({
+        data: {
+          username: `vitest-rehash-race-${suffix}`,
+          passwordHash: originalLegacyHash,
+          role: 'kasir',
+        },
+      });
+      policyUserIds.push(rehashRaceUser.id);
+      const newerPasswordHash = await hashPassword(`Newer!${suffix}`, env.passwordPepper);
+      const pendingRehash = rehashUserPassword(
+        rehashRaceUser.id,
+        legacyPassword,
+        env.passwordPepper,
+        originalLegacyHash,
+      );
+      await prisma.user.update({
+        where: { id: rehashRaceUser.id },
+        data: { passwordHash: newerPasswordHash },
+      });
+      await pendingRehash;
+      expect((await prisma.user.findUnique({
+        where: { id: rehashRaceUser.id },
+      })).passwordHash).toBe(newerPasswordHash);
+
       const cashierUser = await prisma.user.create({
         data: {
           username: `vitest-cashier-${suffix}`,
@@ -239,6 +296,7 @@ describe('critical API workflow integration', () => {
           },
         },
       });
+      policyUserIds.push(cashierUser.id);
       const cashierToken = createAccessToken({
         sub: cashierUser.id,
         username: cashierUser.username,
@@ -258,6 +316,7 @@ describe('critical API workflow integration', () => {
           },
         },
       });
+      policyUserIds.push(globalAdminUser.id);
       const globalAdminToken = createAccessToken({
         sub: globalAdminUser.id,
         username: globalAdminUser.username,
@@ -283,11 +342,329 @@ describe('critical API workflow integration', () => {
           },
         },
       });
+      policyUserIds.push(legacySuperuser.id);
       const legacySuperuserToken = createAccessToken({
         sub: legacySuperuser.id,
         username: legacySuperuser.username,
         role: legacySuperuser.role,
       }, env);
+
+      const originalMembershipFindUnique = prisma.userMembership.findUnique.bind(
+        prisma.userMembership,
+      );
+      let cashierMembershipReads = 0;
+      const membershipRevocationSpy = vi.spyOn(prisma.userMembership, 'findUnique')
+        .mockImplementation(async (args) => {
+          const result = await originalMembershipFindUnique(args);
+          const key = args?.where?.userId_tenantId;
+          if (key?.userId === cashierUser.id && key?.tenantId === tenantId) {
+            cashierMembershipReads += 1;
+            if (cashierMembershipReads === 1) {
+              await prisma.userMembership.update({
+                where: { id: result.id },
+                data: { status: 'inactive' },
+              });
+            }
+          }
+          return result;
+        });
+      try {
+        const revokedContext = await callApi('GET', '/api/items', {
+          token: cashierToken,
+          tenantId,
+          branchId,
+        });
+        expect(revokedContext.status).toBe(403);
+      } finally {
+        membershipRevocationSpy.mockRestore();
+        await prisma.userMembership.update({
+          where: { userId_tenantId: { userId: cashierUser.id, tenantId } },
+          data: { status: 'active' },
+        });
+      }
+
+      const tenantAdminUser = await prisma.user.create({
+        data: {
+          username: `vitest-tenant-admin-${suffix}`,
+          passwordHash: 'not-used',
+          role: 'kasir',
+          memberships: {
+            create: {
+              tenantId,
+              role: 'admin',
+              status: 'active',
+            },
+          },
+        },
+      });
+      policyUserIds.push(tenantAdminUser.id);
+      const tenantAdminToken = createAccessToken({
+        sub: tenantAdminUser.id,
+        username: tenantAdminUser.username,
+        role: tenantAdminUser.role,
+      }, env);
+      const ownerMembership = await prisma.userMembership.findUnique({
+        where: { userId_tenantId: { userId: ownerUserId, tenantId } },
+      });
+      expect(ownerMembership).toBeTruthy();
+
+      const adminOwnerMutation = await callApi('POST', '/api/tenant-memberships', {
+        token: tenantAdminToken,
+        body: {
+          tenantId,
+          userId: ownerUserId,
+          role: 'kasir',
+          status: 'active',
+        },
+      });
+      expect(adminOwnerMutation.status).toBe(403);
+      expect(await prisma.userMembership.findUnique({
+        where: { id: ownerMembership.id },
+      })).toMatchObject({ role: 'owner', status: 'active' });
+
+      const lastOwnerUpsert = await callApi('POST', '/api/tenant-memberships', {
+        token: ownerToken,
+        body: {
+          tenantId,
+          userId: ownerUserId,
+          role: 'kasir',
+          status: 'active',
+        },
+      });
+      expect(lastOwnerUpsert.status).toBe(409);
+      const lastOwnerPatch = await callApi(
+        'PATCH',
+        `/api/tenant-memberships/${ownerMembership.id}`,
+        {
+          token: ownerToken,
+          tenantId,
+          branchId,
+          body: { status: 'inactive' },
+        },
+      );
+      expect(lastOwnerPatch.status).toBe(409);
+
+      const membershipTarget = await prisma.user.create({
+        data: {
+          username: `vitest-membership-target-${suffix}`,
+          passwordHash: 'not-used',
+          role: 'kasir',
+        },
+      });
+      const branchTarget = await prisma.user.create({
+        data: {
+          username: `vitest-branch-target-${suffix}`,
+          passwordHash: 'not-used',
+          role: 'kasir',
+        },
+      });
+      policyUserIds.push(membershipTarget.id, branchTarget.id);
+      const canManageStaffFeature = await prisma.planFeature.findUnique({
+        where: { planId_key: { planId: plan.id, key: 'canManageStaff' } },
+      });
+      expect(canManageStaffFeature).toBeTruthy();
+      await prisma.planFeature.update({
+        where: { id: canManageStaffFeature.id },
+        data: { valueJson: false },
+      });
+      try {
+        const disabledMembershipUpsert = await callApi('POST', '/api/tenant-memberships', {
+          token: ownerToken,
+          body: {
+            tenantId,
+            userId: membershipTarget.id,
+            role: 'kasir',
+            status: 'active',
+          },
+        });
+        expect(disabledMembershipUpsert.status).toBe(403);
+        const disabledBranchAccess = await callApi('POST', '/api/branch-access', {
+          token: ownerToken,
+          body: {
+            tenantId,
+            userId: branchTarget.id,
+            branchId,
+            role: 'kasir',
+          },
+        });
+        expect(disabledBranchAccess.status).toBe(403);
+      } finally {
+        await prisma.planFeature.update({
+          where: { id: canManageStaffFeature.id },
+          data: { valueJson: true },
+        });
+      }
+      expect(await prisma.userMembership.count({
+        where: { userId: { in: [membershipTarget.id, branchTarget.id] }, tenantId },
+      })).toBe(0);
+
+      const maxTenantUsersFeature = await prisma.planFeature.findUnique({
+        where: { planId_key: { planId: plan.id, key: 'maxTenantUsers' } },
+      });
+      expect(maxTenantUsersFeature).toBeTruthy();
+      const activeMembershipCount = await prisma.userMembership.count({
+        where: { tenantId, status: 'active' },
+      });
+      await prisma.planFeature.update({
+        where: { id: maxTenantUsersFeature.id },
+        data: { valueJson: activeMembershipCount },
+      });
+      try {
+        const limitedMembershipUpsert = await callApi('POST', '/api/tenant-memberships', {
+          token: ownerToken,
+          body: {
+            tenantId,
+            userId: membershipTarget.id,
+            role: 'kasir',
+            status: 'active',
+          },
+        });
+        expect(limitedMembershipUpsert.status).toBe(409);
+        const limitedBranchAccess = await callApi('POST', '/api/branch-access', {
+          token: ownerToken,
+          body: {
+            tenantId,
+            userId: branchTarget.id,
+            branchId,
+            role: 'kasir',
+          },
+        });
+        expect(limitedBranchAccess.status).toBe(409);
+      } finally {
+        await prisma.planFeature.update({
+          where: { id: maxTenantUsersFeature.id },
+          data: { valueJson: maxTenantUsersFeature.valueJson },
+        });
+      }
+
+      const concurrentStaffUsers = await Promise.all([
+        prisma.user.create({
+          data: {
+            username: `vitest-concurrent-staff-a-${suffix}`,
+            passwordHash: 'not-used',
+            role: 'kasir',
+          },
+        }),
+        prisma.user.create({
+          data: {
+            username: `vitest-concurrent-staff-b-${suffix}`,
+            passwordHash: 'not-used',
+            role: 'kasir',
+          },
+        }),
+      ]);
+      policyUserIds.push(...concurrentStaffUsers.map((user) => user.id));
+      const concurrentLimit = (await prisma.userMembership.count({
+        where: { tenantId, status: 'active' },
+      })) + 1;
+      await prisma.planFeature.update({
+        where: { id: maxTenantUsersFeature.id },
+        data: { valueJson: concurrentLimit },
+      });
+      const originalMembershipCount = prisma.userMembership.count.bind(prisma.userMembership);
+      const originalTransaction = prisma.$transaction.bind(prisma);
+      let tenantLockCount = 0;
+      const transactionSpy = vi.spyOn(prisma, '$transaction').mockImplementation((operation, options) => {
+        if (typeof operation !== 'function') {
+          return originalTransaction(operation, options);
+        }
+        return originalTransaction(async (tx) => operation(new Proxy(tx, {
+          get(target, property) {
+            if (property === '$queryRaw') {
+              return (...args) => {
+                tenantLockCount += 1;
+                return target.$queryRaw(...args);
+              };
+            }
+            const value = Reflect.get(target, property);
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        })), options);
+      });
+      let matchingCountCalls = 0;
+      let releaseSecondCount;
+      const secondCountReached = new Promise((resolve) => {
+        releaseSecondCount = resolve;
+      });
+      const membershipCountSpy = vi.spyOn(prisma.userMembership, 'count')
+        .mockImplementation(async (args) => {
+          const result = await originalMembershipCount(args);
+          if (
+            args?.where?.tenantId === tenantId
+            && args?.where?.status === 'active'
+            && !args?.where?.userId
+          ) {
+            matchingCountCalls += 1;
+            if (matchingCountCalls === 1) {
+              await Promise.race([
+                secondCountReached,
+                new Promise((resolve) => setTimeout(resolve, 250)),
+              ]);
+            } else if (matchingCountCalls === 2) {
+              releaseSecondCount();
+            }
+          }
+          return result;
+        });
+      try {
+        const concurrentMembershipResults = await Promise.all(
+          concurrentStaffUsers.map((user) => callApi('POST', '/api/tenant-memberships', {
+            token: ownerToken,
+            body: {
+              tenantId,
+              userId: user.id,
+              role: 'kasir',
+              status: 'active',
+            },
+          })),
+        );
+        expect(concurrentMembershipResults.map((result) => result.status).sort()).toEqual([
+          201,
+          409,
+        ]);
+        expect(tenantLockCount).toBe(2);
+        membershipCountSpy.mockRestore();
+        transactionSpy.mockRestore();
+        expect(await prisma.userMembership.count({
+          where: {
+            tenantId,
+            userId: { in: concurrentStaffUsers.map((user) => user.id) },
+            status: 'active',
+          },
+        })).toBe(1);
+      } finally {
+        membershipCountSpy.mockRestore();
+        transactionSpy.mockRestore();
+        await prisma.planFeature.update({
+          where: { id: maxTenantUsersFeature.id },
+          data: { valueJson: maxTenantUsersFeature.valueJson },
+        });
+      }
+
+      const inactiveOwnerUser = await prisma.user.create({
+        data: {
+          username: `vitest-inactive-owner-${suffix}`,
+          passwordHash: 'not-used',
+          role: 'kasir',
+          memberships: {
+            create: { tenantId, role: 'owner', status: 'inactive' },
+          },
+        },
+      });
+      policyUserIds.push(inactiveOwnerUser.id);
+      const ownerBranchReactivation = await callApi('POST', '/api/branch-access', {
+        token: ownerToken,
+        body: {
+          tenantId,
+          userId: inactiveOwnerUser.id,
+          branchId,
+          role: 'kasir',
+        },
+      });
+      expect(ownerBranchReactivation.status).toBe(403);
+      expect(await prisma.userMembership.findUnique({
+        where: { userId_tenantId: { userId: inactiveOwnerUser.id, tenantId } },
+      })).toMatchObject({ role: 'owner', status: 'inactive' });
 
       const financialFeature = await prisma.planFeature.findUnique({
         where: {
@@ -316,6 +693,31 @@ describe('critical API workflow integration', () => {
         });
       }
 
+      expect((await callApi('PATCH', `/api/tenants/${tenantId}`, {
+        token: adminToken,
+        body: { status: 'suspended' },
+      })).status).toBe(200);
+      try {
+        const suspendedOperationalAccess = await callApi('GET', '/api/items', {
+          token: adminToken,
+          tenantId,
+          branchId,
+        });
+        expect(suspendedOperationalAccess.status).toBe(403);
+        const suspendedManagementAccess = await callApi('GET', '/api/tenants', {
+          token: adminToken,
+        });
+        expect(suspendedManagementAccess.status).toBe(200);
+        expect(suspendedManagementAccess.body.data).toEqual(expect.arrayContaining([
+          expect.objectContaining({ id: tenantId, status: 'suspended' }),
+        ]));
+      } finally {
+        await callApi('PATCH', `/api/tenants/${tenantId}`, {
+          token: adminToken,
+          body: { status: 'active' },
+        });
+      }
+
       const ownerTenants = await callApi('GET', '/api/tenants', { token: ownerToken });
       expect(ownerTenants.status).toBe(200);
       expect(ownerTenants.body.data.map((tenant) => tenant.id)).toEqual([tenantId]);
@@ -329,6 +731,40 @@ describe('critical API workflow integration', () => {
       expect(itemResponse.status).toBe(201);
       const itemId = itemResponse.body.data.id;
       expect(itemResponse.body.data.updatedAt).toEqual(expect.any(String));
+
+      const noScopeInventory = await callApi('GET', '/api/items', { token: ownerToken });
+      expect(noScopeInventory.status).toBe(200);
+      const noScopeItemDelete = await callApi('DELETE', `/api/items/${itemId}`, {
+        token: ownerToken,
+      });
+      expect(noScopeItemDelete.status).toBe(400);
+      expect((await prisma.item.findUnique({ where: { id: itemId } })).archivedAt).toBeNull();
+      const noScopeTenantSettings = await callApi('PATCH', '/api/tenants/current/settings', {
+        token: ownerToken,
+        body: { phone: '080000000001' },
+      });
+      expect(noScopeTenantSettings.status).toBe(400);
+      expect((await callApi('GET', '/api/tenants/current/settings', {
+        token: ownerToken,
+      })).status).toBe(400);
+      expect((await callApi('GET', '/api/branches/current/settings', {
+        token: ownerToken,
+        tenantId,
+      })).status).toBe(400);
+      const noBranchSettings = await callApi('PATCH', '/api/branches/current/settings', {
+        token: ownerToken,
+        tenantId,
+        body: { phone: '080000000002' },
+      });
+      expect(noBranchSettings.status).toBe(400);
+      expect((await callApi('PATCH', `/api/tenants/${tenantId}/settings`, {
+        token: ownerToken,
+        body: { phone: '080000000003' },
+      })).status).toBe(200);
+      expect((await callApi('PATCH', `/api/branches/${branchId}/settings`, {
+        token: ownerToken,
+        body: { phone: '080000000004' },
+      })).status).toBe(200);
 
       const cashierItemDelete = await callApi('DELETE', `/api/items/${itemId}`, {
         token: cashierToken, tenantId, branchId,
@@ -476,6 +912,38 @@ describe('critical API workflow integration', () => {
         },
       });
       expect(ownerTeamUpdate.status).toBe(201);
+      policyUserIds.push(ownerTeamUpdate.body.data.id);
+
+      const rentalAdminUsername = `rental-admin-${suffix}`;
+      const rentalAdminPassword = `RentalAdmin!${suffix}`;
+      const rentalAdminCreate = await callApi('POST', '/api/users/tenant', {
+        token: ownerToken,
+        body: {
+          tenantId,
+          username: rentalAdminUsername,
+          password: rentalAdminPassword,
+          tenantRole: 'admin',
+        },
+      });
+      expect(rentalAdminCreate.status).toBe(201);
+      policyUserIds.push(rentalAdminCreate.body.data.id);
+      const rentalAdminLogin = await callApi('POST', '/api/auth/login', {
+        body: { username: rentalAdminUsername, password: rentalAdminPassword },
+      });
+      expect(rentalAdminLogin.status).toBe(200);
+      const rentalAdminToken = rentalAdminLogin.body.data.token;
+
+      const globalAdminTeamUpdate = await callApi('POST', '/api/users/tenant', {
+        token: globalAdminToken,
+        body: {
+          tenantId,
+          username: `global-admin-team-${suffix}`,
+          password: `GlobalAdmin!${suffix}`,
+          tenantRole: 'kasir',
+        },
+      });
+      expect(globalAdminTeamUpdate.status).toBe(201);
+      policyUserIds.push(globalAdminTeamUpdate.body.data.id);
 
       await prisma.item.update({
         where: { id: itemId },
@@ -563,6 +1031,107 @@ describe('critical API workflow integration', () => {
         });
         expect(rental.status, `rental ke-${index} gagal: ${rental.body?.message || ''}`).toBe(201);
       }
+
+      const ownerDeleteRental = await callApi('POST', '/api/rentals', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          customer: { name: 'Owner Delete', phone: '081277777761', guarantee: 'KTP' },
+          items: [{ id: secondItemId, qty: 1 }],
+          duration: 1,
+          payment: { status: 'LUNAS', method: 'TUNAI', paidAmount: 40_000 },
+        },
+      });
+      expect(ownerDeleteRental.status).toBe(201);
+      const ownerDeleteRentalId = ownerDeleteRental.body.data.id;
+      const cashierDeleteVerify = await callApi(
+        'POST',
+        `/api/rentals/${ownerDeleteRentalId}/delete-verify`,
+        {
+          token: cashierToken,
+          tenantId,
+          branchId,
+          body: { password: 'not-used' },
+        },
+      );
+      expect(cashierDeleteVerify.status).toBe(403);
+      const ownerDeleteVerifyWithoutScope = await callApi(
+        'POST',
+        `/api/rentals/${ownerDeleteRentalId}/delete-verify`,
+        {
+          token: ownerToken,
+          body: { password: ownerPassword },
+        },
+      );
+      expect(ownerDeleteVerifyWithoutScope.status).toBe(400);
+      const ownerDeleteVerify = await callApi(
+        'POST',
+        `/api/rentals/${ownerDeleteRentalId}/delete-verify`,
+        {
+          token: ownerToken,
+          tenantId,
+          branchId,
+          body: { password: ownerPassword },
+        },
+      );
+      expect(ownerDeleteVerify.status).toBe(200);
+      const ownerRentalDeleteWithoutBranch = await callApi(
+        'DELETE',
+        `/api/rentals/${ownerDeleteRentalId}`,
+        {
+          token: ownerToken,
+          tenantId,
+          body: {
+            reason: 'Missing scope test',
+            confirmationText: `HAPUS ${ownerDeleteRentalId}`,
+          },
+        },
+      );
+      expect(ownerRentalDeleteWithoutBranch.status).toBe(400);
+      const ownerRentalDelete = await callApi('DELETE', `/api/rentals/${ownerDeleteRentalId}`, {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          reason: 'Owner authorization test',
+          confirmationText: `HAPUS ${ownerDeleteRentalId}`,
+        },
+      });
+      expect(ownerRentalDelete.status).toBe(200);
+
+      const adminDeleteRental = await callApi('POST', '/api/rentals', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          customer: { name: 'Admin Delete', phone: '081277777762', guarantee: 'KTP' },
+          items: [{ id: secondItemId, qty: 1 }],
+          duration: 1,
+          payment: { status: 'LUNAS', method: 'TUNAI', paidAmount: 40_000 },
+        },
+      });
+      expect(adminDeleteRental.status).toBe(201);
+      const adminDeleteRentalId = adminDeleteRental.body.data.id;
+      expect((await callApi(
+        'POST',
+        `/api/rentals/${adminDeleteRentalId}/delete-verify`,
+        {
+          token: rentalAdminToken,
+          tenantId,
+          branchId,
+          body: { password: rentalAdminPassword },
+        },
+      )).status).toBe(200);
+      expect((await callApi('DELETE', `/api/rentals/${adminDeleteRentalId}`, {
+        token: rentalAdminToken,
+        tenantId,
+        branchId,
+        body: {
+          reason: 'Admin authorization test',
+          confirmationText: `HAPUS ${adminDeleteRentalId}`,
+        },
+      })).status).toBe(200);
 
       await prisma.item.update({
         where: { id: secondItemId },
@@ -924,6 +1493,14 @@ describe('critical API workflow integration', () => {
       if (orphanUserId) {
         await prisma.user.deleteMany({ where: { id: orphanUserId } });
       }
+      if (policyUserIds.length > 0) {
+        await prisma.user.deleteMany({
+          where: { id: { in: policyUserIds } },
+        });
+      }
+      expect(await prisma.user.count({
+        where: { id: { in: policyUserIds } },
+      })).toBe(0);
     }
   }, 90_000);
 });

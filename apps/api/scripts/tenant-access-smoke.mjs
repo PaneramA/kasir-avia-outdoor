@@ -390,16 +390,32 @@ export async function runTenantAccessSmoke() {
       'Tenant admin must not be able to downgrade owner membership',
     );
 
+    const finalOwnerError = await captureError(() => updateTenantMembershipForUser({
+      actorUserId: superuser.id,
+      actorRole: 'superuser',
+      membershipId: ownerMembership.id,
+      payload: { role: 'admin' },
+    }));
+    assert(
+      finalOwnerError === 'At least one active tenant owner is required',
+      'Superuser must not remove the final active owner',
+    );
+
+    const promotedBySuperuser = await updateTenantMembershipForUser({
+      actorUserId: superuser.id,
+      actorRole: 'superuser',
+      membershipId: tenantAdminMembership.id,
+      payload: { role: 'owner' },
+    });
+    assert(promotedBySuperuser.role === 'owner', 'Superuser should be able to add a replacement owner');
+
     const updatedBySuperuser = await updateTenantMembershipForUser({
       actorUserId: superuser.id,
       actorRole: 'superuser',
       membershipId: ownerMembership.id,
-      payload: {
-        role: 'admin',
-      },
+      payload: { role: 'admin' },
     });
-
-    assert(updatedBySuperuser.role === 'admin', 'Superuser should be able to update owner membership');
+    assert(updatedBySuperuser.role === 'admin', 'Superuser should be able to transfer owner authority');
 
     const deletedTenant = await deleteTenantForPlatformAdmin(tenantB.id, tenantB.name);
     assert(deletedTenant.id === tenantB.id, 'Platform admin deletion should return deleted tenant');

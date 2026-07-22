@@ -2,6 +2,7 @@ import { ZodError } from 'zod';
 import {
   changeOwnPassword,
   changeUserPasswordByAdmin,
+  assertRentalInContext,
   archiveItem,
   createCategory,
   upsertCustomer,
@@ -105,6 +106,8 @@ const rentalDeleteVerifications = createExpiringVerificationStore({
 });
 let loginRateLimiter;
 let loginRateLimiterSignature = '';
+let inFlightLoginHashes = 0;
+const inFlightLoginHashesByKey = new Map();
 
 function normalizeUsername(value) {
   return String(value || '').trim().toLowerCase();
@@ -146,6 +149,39 @@ function getLoginRateLimiter(env) {
   }
 
   return loginRateLimiter;
+}
+
+function reserveLoginHashCapacity({ ipKey, userKey, env }) {
+  const globalLimit = Math.max(1, Math.min(8, Number(env.loginRateLimitMaxAttempts) || 1));
+  const ipLimit = Math.max(1, Math.min(2, globalLimit));
+  const userLimit = 1;
+  if (
+    inFlightLoginHashes >= globalLimit
+    || (inFlightLoginHashesByKey.get(ipKey) || 0) >= ipLimit
+    || (inFlightLoginHashesByKey.get(userKey) || 0) >= userLimit
+  ) {
+    return null;
+  }
+
+  inFlightLoginHashes += 1;
+  inFlightLoginHashesByKey.set(ipKey, (inFlightLoginHashesByKey.get(ipKey) || 0) + 1);
+  inFlightLoginHashesByKey.set(userKey, (inFlightLoginHashesByKey.get(userKey) || 0) + 1);
+  let released = false;
+  return () => {
+    if (released) {
+      return;
+    }
+    released = true;
+    inFlightLoginHashes -= 1;
+    for (const key of [ipKey, userKey]) {
+      const nextCount = (inFlightLoginHashesByKey.get(key) || 1) - 1;
+      if (nextCount > 0) {
+        inFlightLoginHashesByKey.set(key, nextCount);
+      } else {
+        inFlightLoginHashesByKey.delete(key);
+      }
+    }
+  };
 }
 
 function createRentalDeleteVerificationKey(actorUserId, rentalId) {
@@ -301,14 +337,35 @@ export async function apiRoute(req, res, env) {
     return ensureSuperuser();
   };
 
-  const ensureRequestContext = async ({ requestedTenantId, requestedBranchId } = {}) => {
+  const requireScope = (value, message) => {
+    if (!value) {
+      const error = new Error(message);
+      error.statusCode = 400;
+      throw error;
+    }
+    return value;
+  };
+
+  const ensureRequestContext = async ({
+    requestedTenantId,
+    requestedBranchId,
+    requireBranch = true,
+    requireExplicitScope = false,
+  } = {}) => {
     if (requestContext) {
       return requestContext;
     }
 
     const user = await ensureAuth();
-    const targetTenantId = requestedTenantId || getHeaderValue(req, 'x-tenant-id') || 'current';
+    const explicitTenantId = requestedTenantId || getHeaderValue(req, 'x-tenant-id');
     const targetBranchId = requestedBranchId || getHeaderValue(req, 'x-branch-id');
+    if (requireExplicitScope && !explicitTenantId && !targetBranchId) {
+      requireScope('', 'Explicit tenant scope is required');
+    }
+    if (requireExplicitScope && requireBranch) {
+      requireScope(targetBranchId, 'Explicit branch scope is required');
+    }
+    const targetTenantId = explicitTenantId || 'current';
 
     requestContext = await resolveTenantBranchContextForUser({
       userId: user.id,
@@ -321,7 +378,10 @@ export async function apiRoute(req, res, env) {
   };
 
   const ensureTenantManagerContext = async (options) => {
-    const context = await ensureRequestContext(options);
+    const context = await ensureRequestContext({
+      ...options,
+      requireExplicitScope: true,
+    });
     assertTenantManager(context.membershipRole);
     return context;
   };
@@ -353,11 +413,27 @@ export async function apiRoute(req, res, env) {
         return true;
       }
 
-      const user = await findUserByUsername(normalizedUsername);
+      const releaseLoginHash = reserveLoginHashCapacity({
+        ipKey: loginIpKey,
+        userKey: loginUserKey,
+        env,
+      });
+      if (!releaseLoginHash) {
+        res.setHeader('Retry-After', '1');
+        sendError(res, 429, 'Too many login attempts. Please try again later.');
+        return true;
+      }
 
-      const passwordMatches = user
-        ? await verifyPassword(body.password, user.passwordHash, env.passwordPepper)
-        : false;
+      let user;
+      let passwordMatches = false;
+      try {
+        user = await findUserByUsername(normalizedUsername);
+        passwordMatches = user
+          ? await verifyPassword(body.password, user.passwordHash, env.passwordPepper)
+          : false;
+      } finally {
+        releaseLoginHash();
+      }
       if (!passwordMatches) {
         const nextIpRetryAfterSeconds = limiter.registerFailure(loginIpKey);
         const nextUserRetryAfterSeconds = limiter.registerFailure(loginUserKey);
@@ -390,7 +466,12 @@ export async function apiRoute(req, res, env) {
 
       if (needsPasswordRehash(user.passwordHash)) {
         try {
-          await rehashUserPassword(user.id, body.password, env.passwordPepper);
+          await rehashUserPassword(
+            user.id,
+            body.password,
+            env.passwordPepper,
+            user.passwordHash,
+          );
         } catch (rehashError) {
           const message = rehashError instanceof Error ? rehashError.message : String(rehashError);
           console.warn(`[api] failed to rehash password for user ${user.id}: ${message}`);
@@ -489,11 +570,19 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'GET' && pathname === '/api/branches/current/settings') {
       const user = await ensureAuth();
+      const requestedTenantId = requireScope(
+        getHeaderValue(req, 'x-tenant-id'),
+        'Explicit tenant scope is required',
+      );
+      const requestedBranchId = requireScope(
+        getHeaderValue(req, 'x-branch-id'),
+        'Explicit branch scope is required',
+      );
       const settings = await getBranchSettingsForUser({
         userId: user.id,
         role: user.role,
-        requestedTenantId: getHeaderValue(req, 'x-tenant-id') || 'current',
-        requestedBranchId: getHeaderValue(req, 'x-branch-id') || undefined,
+        requestedTenantId,
+        requestedBranchId,
       });
       sendSuccess(res, 200, settings);
       return true;
@@ -552,7 +641,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'POST' && pathname === '/api/branches') {
       const user = await ensureAuth();
       const body = createBranchSchema.parse(await readBody(req));
-      await ensureTenantManagerContext({ requestedTenantId: body.tenantId });
+      await ensureTenantManagerContext({ requestedTenantId: body.tenantId, requireBranch: false });
       const created = await createBranchForUser({
         userId: user.id,
         role: user.role,
@@ -593,7 +682,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'POST' && pathname === '/api/tenant-memberships') {
       const user = await ensureAuth();
       const body = upsertTenantMembershipSchema.parse(await readBody(req));
-      await ensureTenantManagerContext({ requestedTenantId: body.tenantId });
+      await ensureTenantManagerContext({ requestedTenantId: body.tenantId, requireBranch: false });
       const saved = await upsertTenantMembershipForUser({
         actorUserId: user.id,
         actorRole: user.role,
@@ -607,7 +696,6 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'PATCH' && pathname.startsWith('/api/tenant-memberships/')) {
       const user = await ensureAuth();
       const membershipId = decodeURIComponent(pathname.replace('/api/tenant-memberships/', ''));
-      await ensureTenantManagerContext();
       const body = updateTenantMembershipSchema.parse(await readBody(req));
       const updated = await updateTenantMembershipForUser({
         actorUserId: user.id,
@@ -634,7 +722,10 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'POST' && pathname === '/api/branch-access') {
       const user = await ensureAuth();
       const body = upsertBranchAccessSchema.parse(await readBody(req));
-      await ensureTenantManagerContext({ requestedTenantId: body.tenantId });
+      await ensureTenantManagerContext({
+        requestedTenantId: body.tenantId,
+        requestedBranchId: body.branchId,
+      });
       const saved = await upsertBranchAccessForUser({
         actorUserId: user.id,
         actorRole: user.role,
@@ -648,7 +739,6 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'DELETE' && pathname.startsWith('/api/branch-access/')) {
       const user = await ensureAuth();
       const accessId = decodeURIComponent(pathname.replace('/api/branch-access/', ''));
-      await ensureTenantManagerContext();
       const removed = await removeBranchAccessForUser({
         actorUserId: user.id,
         actorRole: user.role,
@@ -660,10 +750,14 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'GET' && pathname === '/api/tenants/current/settings') {
       const user = await ensureAuth();
+      const requestedTenantId = requireScope(
+        getHeaderValue(req, 'x-tenant-id'),
+        'Explicit tenant scope is required',
+      );
       const settings = await getTenantSettingsForUser({
         userId: user.id,
         role: user.role,
-        requestedTenantId: getHeaderValue(req, 'x-tenant-id') || 'current',
+        requestedTenantId,
       });
       sendSuccess(res, 200, settings);
       return true;
@@ -679,10 +773,14 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'GET' && pathname === '/api/tenants/current/subscription') {
       const user = await ensureAuth();
+      const requestedTenantId = requireScope(
+        getHeaderValue(req, 'x-tenant-id'),
+        'Explicit tenant scope is required',
+      );
       const subscriptionSummary = await getTenantSubscriptionSummaryForUser({
         userId: user.id,
         role: user.role,
-        requestedTenantId: getHeaderValue(req, 'x-tenant-id') || 'current',
+        requestedTenantId,
       });
       sendSuccess(res, 200, subscriptionSummary);
       return true;
@@ -690,7 +788,7 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'PATCH' && pathname === '/api/tenants/current/settings') {
       const user = await ensureAuth();
-      const context = await ensureTenantManagerContext();
+      const context = await ensureTenantManagerContext({ requireBranch: false });
       const body = updateTenantSettingsSchema.parse(await readBody(req));
       const updated = await updateTenantSettingsByTenantId(context.tenantId, body, {
         userId: user.id,
@@ -723,7 +821,7 @@ export async function apiRoute(req, res, env) {
         throw new Error('Tenant id is required');
       }
 
-      await ensureTenantManagerContext({ requestedTenantId: tenantId });
+      await ensureTenantManagerContext({ requestedTenantId: tenantId, requireBranch: false });
       const body = updateTenantSettingsSchema.parse(await readBody(req));
       const updated = await updateTenantSettingsByTenantId(tenantId, body, {
         userId: user.id,
@@ -811,7 +909,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'POST' && pathname === '/api/users/tenant') {
       const user = await ensureAuth();
       const body = createTenantUserSchema.parse(await readBody(req));
-      await ensureTenantManagerContext({ requestedTenantId: body.tenantId });
+      await ensureTenantManagerContext({ requestedTenantId: body.tenantId, requireBranch: false });
       const created = await createTenantUserForUser({
         actorUserId: user.id,
         actorRole: user.role,
@@ -1044,8 +1142,10 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'POST' && pathname.startsWith('/api/rentals/') && pathname.endsWith('/delete-verify')) {
-      const adminUser = await ensureAdmin();
+      const adminUser = await ensureAuth();
+      const context = await ensureTenantManagerContext();
       const rentalId = decodeURIComponent(pathname.replace('/api/rentals/', '').replace('/delete-verify', ''));
+      await assertRentalInContext(rentalId, context);
       const body = verifyRentalDeleteSchema.parse(await readBody(req));
       const validPassword = await verifyUserPasswordById(adminUser.id, body.password, env.passwordPepper);
 
@@ -1059,8 +1159,8 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'DELETE' && pathname.startsWith('/api/rentals/')) {
-      const adminUser = await ensureAdmin();
-      const context = await ensureRequestContext();
+      const adminUser = await ensureAuth();
+      const context = await ensureTenantManagerContext();
       const rentalId = decodeURIComponent(pathname.replace('/api/rentals/', ''));
       const body = deleteRentalByAdminSchema.parse(await readBody(req));
       const expectedConfirmation = `HAPUS ${rentalId}`.toUpperCase();
