@@ -1195,6 +1195,11 @@ export async function apiRoute(req, res, env) {
       return true;
     }
 
+    if (message.startsWith('Item changed after it was loaded')) {
+      sendError(res, 409, message);
+      return true;
+    }
+
     if (
       message.includes('not found') ||
       message.includes('does not exist')

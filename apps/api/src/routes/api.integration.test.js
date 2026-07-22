@@ -124,6 +124,30 @@ describe('critical API workflow integration', () => {
       });
       expect(itemResponse.status).toBe(201);
       const itemId = itemResponse.body.data.id;
+      expect(itemResponse.body.data.updatedAt).toEqual(expect.any(String));
+
+      await prisma.item.update({
+        where: { id: itemId },
+        data: {
+          updatedAt: new Date(new Date(itemResponse.body.data.updatedAt).getTime() + 1_000),
+        },
+      });
+      const staleItemUpdate = await callApi('PATCH', `/api/items/${itemId}`, {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          name: 'Tenda Vitest Lama',
+          category: 'Tenda',
+          stock: 99,
+          price: 50_000,
+          image: '',
+          expectedUpdatedAt: itemResponse.body.data.updatedAt,
+        },
+      });
+      expect(staleItemUpdate.status, JSON.stringify(staleItemUpdate.body)).toBe(409);
+      expect(staleItemUpdate.body.message).toContain('changed');
+      expect((await prisma.item.findUnique({ where: { id: itemId } })).stock).toBe(10);
 
       const secondItemResponse = await callApi('POST', '/api/items', {
         token: ownerToken,

@@ -155,6 +155,7 @@ function toItemDto(item) {
     price: item.price,
     image: item.image || '',
     archivedAt: item.archivedAt ? item.archivedAt.toISOString() : null,
+    updatedAt: item.updatedAt.toISOString(),
   };
 }
 
@@ -1003,6 +1004,7 @@ export async function updateItem(id, payload, context) {
   const categoryName = String(payload?.category || '').trim();
   const stock = Number(payload?.stock);
   const price = Number(payload?.price);
+  const expectedUpdatedAt = new Date(payload?.expectedUpdatedAt);
 
   if (!name) {
     throw new Error('Item name is required');
@@ -1033,8 +1035,12 @@ export async function updateItem(id, payload, context) {
     throw new Error('Category does not exist');
   }
 
-  const updated = await prisma.item.update({
-    where: { id: targetId },
+  const updateResult = await prisma.item.updateMany({
+    where: withTenantBranchScope({
+      id: targetId,
+      archivedAt: null,
+      updatedAt: expectedUpdatedAt,
+    }, context),
     data: {
       name,
       categoryId: category.id,
@@ -1044,8 +1050,20 @@ export async function updateItem(id, payload, context) {
       price,
       image: payload?.image || '',
     },
+  });
+
+  if (updateResult.count !== 1) {
+    throw new Error('Item changed after it was loaded. Refresh and try again');
+  }
+
+  const updated = await prisma.item.findUnique({
+    where: { id: targetId },
     include: { category: true },
   });
+
+  if (!updated) {
+    throw new Error('Item not found');
+  }
 
   return toItemDto(updated);
 }
