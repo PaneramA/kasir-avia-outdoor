@@ -53,3 +53,13 @@ npm run db:backfill:access --workspace @avia/api -- --apply
 4. Jalankan dry-run sekali lagi. Hasil yang aman sebelum restart adalah `assignments: []` dan `unresolved: []`.
 
 Command ini idempotent. Mode default selalu dry-run; perubahan database hanya terjadi bila argumen `--apply` diberikan.
+
+## Kompresi Production
+
+API tidak melakukan gzip di proses Node agar serialisasi response tidak memblokir event loop. Aktifkan kompresi JSON di Nginx:
+
+```nginx
+gzip on;
+gzip_min_length 1024;
+gzip_types application/json;
+```

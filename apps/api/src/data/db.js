@@ -752,6 +752,7 @@ async function ensureDefaultTenantAndBranch(tx) {
 
 export async function initDatabase(env) {
   await prisma.$connect();
+  const adminPasswordHash = await hashPassword(env.adminPassword, env.passwordPepper);
 
   await prisma.$transaction(async (tx) => {
     const defaultTenant = await ensureDefaultTenantAndBranch(tx);
@@ -764,7 +765,7 @@ export async function initDatabase(env) {
       },
       create: {
         username: env.adminUsername,
-        passwordHash: hashPassword(env.adminPassword, env.passwordPepper),
+        passwordHash: adminPasswordHash,
         role: 'superuser',
       },
     });
@@ -4323,10 +4324,11 @@ export async function rehashUserPassword(userId, plainPassword, passwordPepper) 
     throw new Error('User id is required');
   }
 
+  const passwordHash = await hashPassword(plainPassword, passwordPepper);
   await prisma.user.update({
     where: { id: targetId },
     data: {
-      passwordHash: hashPassword(plainPassword, passwordPepper),
+      passwordHash,
     },
   });
 }
@@ -4409,10 +4411,11 @@ export async function createUser(payload, passwordPepper) {
     throw new Error('Username already exists');
   }
 
+  const passwordHash = await hashPassword(password, passwordPepper);
   const created = await prisma.user.create({
     data: {
       username: normalizedUsername,
-      passwordHash: hashPassword(password, passwordPepper),
+      passwordHash,
       role,
     },
   });
@@ -4469,11 +4472,12 @@ export async function createTenantUserForUser({
     throw new Error('Username already exists');
   }
 
+  const passwordHash = await hashPassword(password, passwordPepper);
   const created = await prisma.$transaction(async (tx) => {
     const newUser = await tx.user.create({
       data: {
         username: normalizedUsername,
-        passwordHash: hashPassword(password, passwordPepper),
+        passwordHash,
         role: 'kasir',
       },
     });
@@ -4577,6 +4581,7 @@ export async function onboardTenantForPlatformAdmin(payload, passwordPepper) {
     throw new Error('Store slug already exists');
   }
 
+  const passwordHash = await hashPassword(password, passwordPepper);
   const created = await prisma.$transaction(async (tx) => {
     const selectedPlan = await tx.plan.findUnique({
       where: { id: planId },
@@ -4638,7 +4643,7 @@ export async function onboardTenantForPlatformAdmin(payload, passwordPepper) {
     const user = await tx.user.create({
       data: {
         username: normalizedUsername,
-        passwordHash: hashPassword(password, passwordPepper),
+        passwordHash,
         role: 'kasir',
       },
     });
@@ -4763,10 +4768,11 @@ export async function changeUserPasswordByAdmin(userId, newPassword, passwordPep
     throw new Error('User not found');
   }
 
+  const passwordHash = await hashPassword(newPassword, passwordPepper);
   await prisma.user.update({
     where: { id: targetId },
     data: {
-      passwordHash: hashPassword(newPassword, passwordPepper),
+      passwordHash,
     },
   });
 
@@ -4787,15 +4793,20 @@ export async function changeOwnPassword(userId, currentPassword, newPassword, pa
     throw new Error('User not found');
   }
 
-  const validCurrentPassword = verifyPassword(currentPassword, existing.passwordHash, passwordPepper);
+  const validCurrentPassword = await verifyPassword(
+    currentPassword,
+    existing.passwordHash,
+    passwordPepper,
+  );
   if (!validCurrentPassword) {
     throw new Error('Current password is incorrect');
   }
 
+  const passwordHash = await hashPassword(newPassword, passwordPepper);
   await prisma.user.update({
     where: { id: targetId },
     data: {
-      passwordHash: hashPassword(newPassword, passwordPepper),
+      passwordHash,
     },
   });
 

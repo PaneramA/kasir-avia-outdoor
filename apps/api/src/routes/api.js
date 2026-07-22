@@ -414,7 +414,10 @@ export async function apiRoute(req, res, env) {
 
       const user = await findUserByUsername(normalizedUsername);
 
-      if (!user || !verifyPassword(body.password, user.passwordHash, env.passwordPepper)) {
+      const passwordMatches = user
+        ? await verifyPassword(body.password, user.passwordHash, env.passwordPepper)
+        : false;
+      if (!passwordMatches) {
         const nextIpRetryAfterSeconds = registerLoginFailure(loginIpKey, env);
         const nextUserRetryAfterSeconds = registerLoginFailure(loginUserKey, env);
         const retryAfterSeconds = Math.max(nextIpRetryAfterSeconds, nextUserRetryAfterSeconds);

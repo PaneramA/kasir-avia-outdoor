@@ -59,19 +59,18 @@ describe('HTTP utilities', () => {
     expect(res.end).toHaveBeenCalledWith('{"ok":true}');
   });
 
-  it('compresses sufficiently large JSON when the caller accepts gzip', () => {
+  it('leaves JSON compression to the reverse proxy', () => {
     const res = {
       __aviaAcceptEncoding: 'br, gzip, deflate',
       writeHead: vi.fn(),
       end: vi.fn(),
     };
     sendJson(res, 200, { message: 'x'.repeat(4_000) });
-    expect(res.writeHead).toHaveBeenCalledWith(200, expect.objectContaining({
-      'Content-Encoding': 'gzip',
-      Vary: 'Accept-Encoding',
-    }));
-    expect(Buffer.isBuffer(res.end.mock.calls[0][0])).toBe(true);
-    expect(res.__aviaResponseBytes).toBeLessThan(res.__aviaResponseUncompressedBytes);
+    const headers = res.writeHead.mock.calls[0][1];
+    expect(headers).not.toHaveProperty('Content-Encoding');
+    expect(headers).not.toHaveProperty('Vary');
+    expect(typeof res.end.mock.calls[0][0]).toBe('string');
+    expect(res.__aviaResponseBytes).toBe(res.__aviaResponseUncompressedBytes);
   });
 
   it('does not send a response body for 204 responses', () => {

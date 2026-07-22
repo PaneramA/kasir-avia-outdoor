@@ -1,12 +1,8 @@
 import { PrismaClient } from '@prisma/client';
-import { createHash } from 'node:crypto';
+import { hashPassword } from '../src/auth/password.js';
 import { getSeedUsers } from './seed.users.js';
 
 const prisma = new PrismaClient();
-
-function hashPassword(password, pepper) {
-  return createHash('sha256').update(`${password}:${pepper}`).digest('hex');
-}
 
 async function main() {
   const adminUsername = process.env.ADMIN_USERNAME || 'admin@gmail.com';
@@ -72,15 +68,16 @@ async function main() {
   }
 
   for (const seedUser of seedUsers) {
+    const passwordHash = await hashPassword(seedUser.password, pepper);
     const user = await prisma.user.upsert({
       where: { username: seedUser.username },
       update: {
-        passwordHash: hashPassword(seedUser.password, pepper),
+        passwordHash,
         role: seedUser.role,
       },
       create: {
         username: seedUser.username,
-        passwordHash: hashPassword(seedUser.password, pepper),
+        passwordHash,
         role: seedUser.role,
       },
     });
