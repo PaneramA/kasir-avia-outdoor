@@ -29,8 +29,9 @@ export function createLoginRateLimiter({
   function removeExpired(nowMs) {
     for (const [key, entry] of buckets) {
       const windowExpired = nowMs >= entry.windowStartedAtMs + windowMs;
+      const blockActive = entry.blockedUntilMs > nowMs;
       const blockExpired = entry.blockedUntilMs > 0 && nowMs >= entry.blockedUntilMs;
-      if (windowExpired || blockExpired) {
+      if (blockExpired || (windowExpired && !blockActive)) {
         buckets.delete(key);
       }
     }
