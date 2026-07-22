@@ -130,6 +130,11 @@ function App() {
   const [isHeaderDataRequested, setIsHeaderDataRequested] = useState(false)
   const [activeTenantId, setActiveTenantId] = useState(() => getActiveTenantContext().tenantId)
   const [activeBranchId, setActiveBranchId] = useState(() => getActiveTenantContext().branchId)
+  const resetOperationalDrafts = useCallback(() => {
+    setCart([])
+    setErrorMessage('')
+    setIsHeaderDataRequested(false)
+  }, [])
   const authQuery = useSWR(
     session.token ? APP_CACHE_KEYS.currentUser : null,
     fetchCurrentUser,
@@ -156,6 +161,7 @@ function App() {
     if (!shouldLoadOperationalData || tenantQuery.data === undefined) return
 
     if (tenantOptions.length === 0) {
+      resetOperationalDrafts()
       setActiveTenantId('')
       setActiveBranchId('')
       setActiveTenantContext({ tenantId: '', branchId: '' })
@@ -168,11 +174,12 @@ function App() {
       : (tenantOptions.some((tenant) => tenant.id === stored.tenantId) ? stored.tenantId : tenantOptions[0].id)
 
     if (preferredTenantId !== activeTenantId) {
+      resetOperationalDrafts()
       setActiveTenantId(preferredTenantId)
       setActiveBranchId('')
       setActiveTenantContext({ tenantId: preferredTenantId, branchId: '' })
     }
-  }, [activeTenantId, shouldLoadOperationalData, tenantOptions, tenantQuery.data])
+  }, [activeTenantId, resetOperationalDrafts, shouldLoadOperationalData, tenantOptions, tenantQuery.data])
 
   const branchQuery = useSWR(
     shouldLoadOperationalData && currentUserId && activeTenantId
@@ -199,10 +206,13 @@ function App() {
       )
 
     if (preferredBranchId !== activeBranchId) {
+      resetOperationalDrafts()
       setActiveBranchId(preferredBranchId)
       setActiveTenantContext({ tenantId: activeTenantId, branchId: preferredBranchId })
     }
-  }, [activeBranchId, activeTenantId, branchOptions, branchQuery.data])
+  }, [activeBranchId, activeTenantId, branchOptions, branchQuery.data, resetOperationalDrafts])
+
+  const operationalScopeKey = `${currentUserId}:${activeTenantId}:${activeBranchId}`
 
   const hasOperationalContext = Boolean(
     shouldLoadOperationalData
@@ -285,13 +295,13 @@ function App() {
   const clearClientSession = useCallback(async ({ message = '' } = {}) => {
     logout()
     setSession({ token: '', user: null })
-    setCart([])
+    resetOperationalDrafts()
     setActiveTenantId('')
     setActiveBranchId('')
     setActiveTenantContext({ tenantId: '', branchId: '' })
     await mutateCache(() => true, undefined, { revalidate: false })
     setAuthErrorMessage(message)
-  }, [mutateCache])
+  }, [mutateCache, resetOperationalDrafts])
 
   useEffect(() => {
     const handleAuthExpired = (event) => {
@@ -674,30 +684,32 @@ function App() {
 
   const handleTenantChange = useCallback(async (nextTenantId) => {
     const tenantId = String(nextTenantId || '').trim()
-    if (!tenantId) {
+    if (!tenantId || tenantId === activeTenantId) {
       return
     }
 
+    resetOperationalDrafts()
     setActiveTenantId(tenantId)
     setActiveBranchId('')
     setActiveTenantContext({
       tenantId,
       branchId: '',
     })
-  }, [])
+  }, [activeTenantId, resetOperationalDrafts])
 
   const handleBranchChange = useCallback(async (nextBranchId) => {
     const branchId = String(nextBranchId || '').trim()
-    if (!branchId) {
+    if (!branchId || branchId === activeBranchId) {
       return
     }
 
+    resetOperationalDrafts()
     setActiveBranchId(branchId)
     setActiveTenantContext({
       tenantId: activeTenantId,
       branchId,
     })
-  }, [activeTenantId])
+  }, [activeBranchId, activeTenantId, resetOperationalDrafts])
 
   const headerInfo = useMemo(() => resolvePageInfo(location.pathname), [location.pathname])
   useEffect(() => {
@@ -840,6 +852,7 @@ function App() {
               path={APP_ROUTES.rental}
               element={
                 <Rental
+                  key={operationalScopeKey}
                   inventory={inventory}
                   categories={categories}
                   cart={cart}
@@ -856,6 +869,7 @@ function App() {
               path={APP_ROUTES.return}
               element={
                 <Return
+                  key={operationalScopeKey}
                   rentals={rentals}
                   onProcessReturn={handleProcessReturn}
                 />

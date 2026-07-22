@@ -55,6 +55,15 @@ const RENTAL_VIEW_STORAGE_KEY = 'avia_rental_inventory_view_mode';
 const RENTAL_DRAFT_STORAGE_KEY = 'avia_rental_draft_v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+const createRentalDraftStorageKey = (userId, tenantId, branchId) => {
+    const scope = [userId, tenantId, branchId].map((value) => String(value || '').trim());
+    if (scope.some((value) => !value)) {
+        return '';
+    }
+
+    return `${RENTAL_DRAFT_STORAGE_KEY}:${scope.map(encodeURIComponent).join(':')}`;
+};
+
 const getDefaultRentalTimeRange = () => {
     const startAt = new Date();
     startAt.setSeconds(0, 0);
@@ -210,6 +219,10 @@ const Rental = ({
         () => resolveRentalDayPolicy(tenantSettings),
         [tenantSettings],
     );
+    const rentalDraftStorageKey = useMemo(
+        () => createRentalDraftStorageKey(currentUser?.id, tenantId, branchId),
+        [branchId, currentUser?.id, tenantId],
+    );
     const rentalStartAt = useMemo(() => toDate(rentalTimeRange.startInput), [rentalTimeRange.startInput]);
     const rentalEndAt = useMemo(() => toDate(rentalTimeRange.endInput), [rentalTimeRange.endInput]);
 
@@ -219,7 +232,10 @@ const Rental = ({
         }
 
         window.localStorage.removeItem(RENTAL_DRAFT_STORAGE_KEY);
-    }, []);
+        if (rentalDraftStorageKey) {
+            window.localStorage.removeItem(rentalDraftStorageKey);
+        }
+    }, [rentalDraftStorageKey]);
 
     const restoreDraftFromStorage = useCallback((draftPayload) => {
         if (!draftPayload || typeof draftPayload !== 'object') {
@@ -305,7 +321,10 @@ const Rental = ({
         hasRestoredDraftRef.current = true;
 
         try {
-            const rawDraft = window.localStorage.getItem(RENTAL_DRAFT_STORAGE_KEY);
+            window.localStorage.removeItem(RENTAL_DRAFT_STORAGE_KEY);
+            const rawDraft = rentalDraftStorageKey
+                ? window.localStorage.getItem(rentalDraftStorageKey)
+                : null;
             if (!rawDraft) {
                 return;
             }
@@ -343,6 +362,7 @@ const Rental = ({
         duration,
         payment.status,
         payment.paidAmount,
+        rentalDraftStorageKey,
         restoreDraftFromStorage,
     ]);
 
