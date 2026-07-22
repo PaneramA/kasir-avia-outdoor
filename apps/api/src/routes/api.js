@@ -424,78 +424,76 @@ export async function apiRoute(req, res, env) {
         return true;
       }
 
-      let user;
-      let passwordMatches = false;
       try {
-        user = await findUserByUsername(normalizedUsername);
-        passwordMatches = user
+        const user = await findUserByUsername(normalizedUsername);
+        const passwordMatches = user
           ? await verifyPassword(body.password, user.passwordHash, env.passwordPepper)
           : false;
-      } finally {
-        releaseLoginHash();
-      }
-      if (!passwordMatches) {
-        const nextIpRetryAfterSeconds = limiter.registerFailure(loginIpKey);
-        const nextUserRetryAfterSeconds = limiter.registerFailure(loginUserKey);
-        const retryAfterSeconds = Math.max(nextIpRetryAfterSeconds, nextUserRetryAfterSeconds);
-        if (retryAfterSeconds > 0) {
-          res.setHeader('Retry-After', String(retryAfterSeconds));
-          sendError(res, 429, 'Too many login attempts. Please try again later.');
+        if (!passwordMatches) {
+          const nextIpRetryAfterSeconds = limiter.registerFailure(loginIpKey);
+          const nextUserRetryAfterSeconds = limiter.registerFailure(loginUserKey);
+          const retryAfterSeconds = Math.max(nextIpRetryAfterSeconds, nextUserRetryAfterSeconds);
+          if (retryAfterSeconds > 0) {
+            res.setHeader('Retry-After', String(retryAfterSeconds));
+            sendError(res, 429, 'Too many login attempts. Please try again later.');
+            return true;
+          }
+
+          sendError(res, 401, 'Invalid username or password');
           return true;
         }
 
-        sendError(res, 401, 'Invalid username or password');
-        return true;
-      }
+        limiter.clear(loginUserKey);
 
-      limiter.clear(loginUserKey);
-
-      const membershipSummary = await getUserTenantMembershipSummary(user.id);
-      if (
-        membershipSummary.total > 0
-        && membershipSummary.activeOnActiveTenant === 0
-        && getEffectiveUserRole(user, env) !== 'superuser'
-      ) {
-        sendError(
-          res,
-          403,
-          'Akun kamu masih menunggu approval admin. Silakan selesaikan pembayaran lalu tunggu aktivasi toko.',
-        );
-        return true;
-      }
-
-      if (needsPasswordRehash(user.passwordHash)) {
-        try {
-          await rehashUserPassword(
-            user.id,
-            body.password,
-            env.passwordPepper,
-            user.passwordHash,
+        const membershipSummary = await getUserTenantMembershipSummary(user.id);
+        if (
+          membershipSummary.total > 0
+          && membershipSummary.activeOnActiveTenant === 0
+          && getEffectiveUserRole(user, env) !== 'superuser'
+        ) {
+          sendError(
+            res,
+            403,
+            'Akun kamu masih menunggu approval admin. Silakan selesaikan pembayaran lalu tunggu aktivasi toko.',
           );
-        } catch (rehashError) {
-          const message = rehashError instanceof Error ? rehashError.message : String(rehashError);
-          console.warn(`[api] failed to rehash password for user ${user.id}: ${message}`);
+          return true;
         }
+
+        if (needsPasswordRehash(user.passwordHash)) {
+          try {
+            await rehashUserPassword(
+              user.id,
+              body.password,
+              env.passwordPepper,
+              user.passwordHash,
+            );
+          } catch (rehashError) {
+            const message = rehashError instanceof Error ? rehashError.message : String(rehashError);
+            console.warn(`[api] failed to rehash password for user ${user.id}: ${message}`);
+          }
+        }
+
+        const token = createAccessToken(
+          {
+            sub: user.id,
+            username: user.username,
+            role: getEffectiveUserRole(user, env),
+          },
+          env,
+        );
+
+        sendSuccess(res, 200, {
+          token,
+          user: {
+            id: user.id,
+            username: user.username,
+            role: getEffectiveUserRole(user, env),
+          },
+        });
+        return true;
+      } finally {
+        releaseLoginHash();
       }
-
-      const token = createAccessToken(
-        {
-          sub: user.id,
-          username: user.username,
-          role: getEffectiveUserRole(user, env),
-        },
-        env,
-      );
-
-      sendSuccess(res, 200, {
-        token,
-        user: {
-          id: user.id,
-          username: user.username,
-          role: getEffectiveUserRole(user, env),
-        },
-      });
-      return true;
     }
 
     if (isWriteMethod(req.method) && !shouldSkipAuth(pathname)) {
