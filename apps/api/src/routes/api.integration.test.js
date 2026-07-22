@@ -50,6 +50,87 @@ async function callApi(method, url, { token, tenantId, branchId, body } = {}) {
   };
 }
 
+function waitForBarrier(promise, label, timeoutMs = 5_000) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`Timed out waiting for ${label}`)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+}
+
+function installRentalRaceBarrier(rentalId, winnerTransactionIndex = 2) {
+  const originalTransaction = prisma.$transaction.bind(prisma);
+  let transactionIndex = 0;
+  let initialReadCount = 0;
+  let releaseInitialReads;
+  let releaseWinnerClaim;
+  const initialReadsComplete = new Promise((resolve) => {
+    releaseInitialReads = resolve;
+  });
+  const winnerClaimComplete = new Promise((resolve) => {
+    releaseWinnerClaim = resolve;
+  });
+
+  return vi.spyOn(prisma, '$transaction').mockImplementation(async (operation, options) => {
+    if (typeof operation !== 'function') {
+      return originalTransaction(operation, options);
+    }
+
+    transactionIndex += 1;
+    const currentTransactionIndex = transactionIndex;
+    return originalTransaction(async (tx) => {
+      let interceptedInitialRead = false;
+      const rentalDelegate = new Proxy(tx.rental, {
+        get(target, property) {
+          if (property === 'findUnique') {
+            return async (args) => {
+              const result = await target.findUnique(args);
+              if (!interceptedInitialRead && args?.where?.id === rentalId) {
+                interceptedInitialRead = true;
+                initialReadCount += 1;
+                if (initialReadCount === 2) {
+                  releaseInitialReads();
+                }
+                await waitForBarrier(initialReadsComplete, 'both initial rental reads');
+                if (currentTransactionIndex !== winnerTransactionIndex) {
+                  await waitForBarrier(winnerClaimComplete, 'winning rental claim');
+                }
+              }
+              return result;
+            };
+          }
+
+          if (property === 'updateMany') {
+            return async (args) => {
+              const result = await target.updateMany(args);
+              if (
+                currentTransactionIndex === winnerTransactionIndex
+                && args?.where?.id === rentalId
+              ) {
+                releaseWinnerClaim();
+              }
+              return result;
+            };
+          }
+
+          const value = Reflect.get(target, property);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+      const transactionProxy = new Proxy(tx, {
+        get(target, property) {
+          if (property === 'rental') {
+            return rentalDelegate;
+          }
+          const value = Reflect.get(target, property);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+      return operation(transactionProxy);
+    }, options);
+  });
+}
+
 beforeAll(async () => {
   await initDatabase(env);
 }, 60_000);
@@ -446,77 +527,22 @@ describe('critical API workflow integration', () => {
       });
       expect(deleteReturnRaceRental.status).toBe(201);
       const deleteReturnRaceId = deleteReturnRaceRental.body.data.id;
-      const originalTransaction = prisma.$transaction.bind(prisma);
-      let transactionIndex = 0;
-      let initialReadCount = 0;
-      let releaseInitialReads;
-      let releaseReturnClaim;
-      const initialReadsComplete = new Promise((resolve) => {
-        releaseInitialReads = resolve;
-      });
-      const returnClaimComplete = new Promise((resolve) => {
-        releaseReturnClaim = resolve;
-      });
-      const transactionSpy = vi.spyOn(prisma, '$transaction').mockImplementation(
-        async (operation, options) => {
-          if (typeof operation !== 'function') {
-            return originalTransaction(operation, options);
-          }
+      await expect(deleteRentalByAdmin({
+        actorUserId: ownerUserId,
+        rentalId: deleteReturnRaceId,
+        reason: 'Wrong tenant test',
+        context: { tenantId: 'tenant-lain', branchId },
+      })).rejects.toThrow('Forbidden');
+      await expect(deleteRentalByAdmin({
+        actorUserId: ownerUserId,
+        rentalId: deleteReturnRaceId,
+        reason: 'Wrong branch test',
+        context: { tenantId, branchId: 'branch-lain' },
+      })).rejects.toThrow('Forbidden');
+      expect((await prisma.rental.findUnique({ where: { id: deleteReturnRaceId } })).deletedAt).toBeNull();
+      expect((await prisma.item.findUnique({ where: { id: secondItemId } })).stock).toBe(1);
 
-          transactionIndex += 1;
-          const currentTransactionIndex = transactionIndex;
-          return originalTransaction(async (tx) => {
-            let interceptedInitialRead = false;
-            const rentalDelegate = new Proxy(tx.rental, {
-              get(target, property) {
-                if (property === 'findUnique') {
-                  return async (args) => {
-                    const result = await target.findUnique(args);
-                    if (!interceptedInitialRead && args?.where?.id === deleteReturnRaceId) {
-                      interceptedInitialRead = true;
-                      initialReadCount += 1;
-                      if (initialReadCount === 2) {
-                        releaseInitialReads();
-                      }
-                      await initialReadsComplete;
-                      if (currentTransactionIndex === 1) {
-                        await returnClaimComplete;
-                      }
-                    }
-                    return result;
-                  };
-                }
-
-                if (property === 'updateMany') {
-                  return async (args) => {
-                    const result = await target.updateMany(args);
-                    if (
-                      currentTransactionIndex === 2
-                      && args?.where?.id === deleteReturnRaceId
-                    ) {
-                      releaseReturnClaim();
-                    }
-                    return result;
-                  };
-                }
-
-                const value = Reflect.get(target, property);
-                return typeof value === 'function' ? value.bind(target) : value;
-              },
-            });
-            const transactionProxy = new Proxy(tx, {
-              get(target, property) {
-                if (property === 'rental') {
-                  return rentalDelegate;
-                }
-                const value = Reflect.get(target, property);
-                return typeof value === 'function' ? value.bind(target) : value;
-              },
-            });
-            return operation(transactionProxy);
-          }, options);
-        },
-      );
+      const transactionSpy = installRentalRaceBarrier(deleteReturnRaceId);
       let deleteReturnRaceResults;
       try {
         deleteReturnRaceResults = await Promise.allSettled([
@@ -531,14 +557,65 @@ describe('critical API workflow integration', () => {
       } finally {
         transactionSpy.mockRestore();
       }
-      expect(deleteReturnRaceResults.some((result) => result.status === 'fulfilled')).toBe(true);
+      expect(deleteReturnRaceResults.map((result) => result.status)).toEqual(['fulfilled', 'fulfilled']);
       expect((await prisma.item.findUnique({ where: { id: secondItemId } })).stock).toBe(2);
-      expect(await prisma.auditLog.count({
+      const deleteReturnAudit = await prisma.auditLog.findFirst({
         where: { action: 'rental.delete', targetId: deleteReturnRaceId },
-      })).toBeLessThanOrEqual(1);
+      });
+      expect(deleteReturnAudit?.snapshotBefore).toMatchObject({
+        status: 'Returned',
+        returnDate: expect.any(String),
+        finalTotal: 40_000,
+        items: [expect.objectContaining({ itemId: secondItemId, qty: 1 })],
+      });
       expect(await prisma.returnRecord.count({
         where: { rentalId: deleteReturnRaceId },
-      })).toBeLessThanOrEqual(1);
+      })).toBe(1);
+      expect(await prisma.auditLog.count({
+        where: { action: 'rental.delete', targetId: deleteReturnRaceId },
+      })).toBe(1);
+      expect(await prisma.rental.findUnique({
+        where: { id: deleteReturnRaceId },
+      })).toMatchObject({ status: 'Returned', deletedAt: expect.any(Date) });
+
+      const deleteFirstRaceRental = await callApi('POST', '/api/rentals', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          customer: { name: 'Delete First Race', phone: '081277777774', guarantee: 'KTP' },
+          items: [{ id: secondItemId, qty: 1 }],
+          duration: 1,
+          payment: { status: 'LUNAS', method: 'TUNAI', paidAmount: 40_000 },
+        },
+      });
+      expect(deleteFirstRaceRental.status).toBe(201);
+      const deleteFirstRaceId = deleteFirstRaceRental.body.data.id;
+      const deleteFirstSpy = installRentalRaceBarrier(deleteFirstRaceId);
+      let deleteFirstRaceResults;
+      try {
+        deleteFirstRaceResults = await Promise.allSettled([
+          processReturn({ rentalId: deleteFirstRaceId }, { tenantId, branchId }),
+          deleteRentalByAdmin({
+            actorUserId: ownerUserId,
+            rentalId: deleteFirstRaceId,
+            reason: 'Delete-first concurrency test',
+            context: { tenantId, branchId },
+          }),
+        ]);
+      } finally {
+        deleteFirstSpy.mockRestore();
+      }
+      expect(deleteFirstRaceResults.map((result) => result.status)).toEqual(['rejected', 'fulfilled']);
+      expect((await prisma.item.findUnique({ where: { id: secondItemId } })).stock).toBe(2);
+      expect(await prisma.returnRecord.count({ where: { rentalId: deleteFirstRaceId } })).toBe(0);
+      expect(await prisma.auditLog.count({
+        where: { action: 'rental.delete', targetId: deleteFirstRaceId },
+      })).toBe(1);
+      expect(await prisma.rental.findUnique({ where: { id: deleteFirstRaceId } })).toMatchObject({
+        status: 'Active',
+        deletedAt: expect.any(Date),
+      });
 
       const deletion = await callApi('DELETE', `/api/tenants/${tenantId}`, {
         token: adminToken,
