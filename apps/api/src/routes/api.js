@@ -62,6 +62,7 @@ import {
   updateItem,
 } from '../data/db.js';
 import { createAccessToken, verifyAccessToken } from '../auth/jwt.js';
+import { assertFeatureEnabled, assertTenantManager } from '../auth/authorization.js';
 import { createLoginRateLimiter, resolveLoginClientIp } from '../auth/loginRateLimiter.js';
 import { needsPasswordRehash, verifyPassword } from '../auth/password.js';
 import {
@@ -316,23 +317,29 @@ export async function apiRoute(req, res, env) {
     return ensureSuperuser();
   };
 
-  const ensureRequestContext = async () => {
+  const ensureRequestContext = async ({ requestedTenantId, requestedBranchId } = {}) => {
     if (requestContext) {
       return requestContext;
     }
 
     const user = await ensureAuth();
-    const requestedTenantId = getHeaderValue(req, 'x-tenant-id') || 'current';
-    const requestedBranchId = getHeaderValue(req, 'x-branch-id');
+    const targetTenantId = requestedTenantId || getHeaderValue(req, 'x-tenant-id') || 'current';
+    const targetBranchId = requestedBranchId || getHeaderValue(req, 'x-branch-id');
 
     requestContext = await resolveTenantBranchContextForUser({
       userId: user.id,
       role: user.role,
-      requestedTenantId,
-      requestedBranchId,
+      requestedTenantId: targetTenantId,
+      requestedBranchId: targetBranchId,
     });
 
     return requestContext;
+  };
+
+  const ensureTenantManagerContext = async (options) => {
+    const context = await ensureRequestContext(options);
+    assertTenantManager(context.membershipRole);
+    return context;
   };
 
   try {
@@ -510,7 +517,7 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'PATCH' && pathname === '/api/branches/current/settings') {
       const user = await ensureAuth();
-      const context = await ensureRequestContext();
+      const context = await ensureTenantManagerContext();
       const body = updateBranchSettingsSchema.parse(await readBody(req));
       const updated = await updateBranchSettingsByIdForUser({
         actorUserId: user.id,
@@ -546,6 +553,7 @@ export async function apiRoute(req, res, env) {
         throw new Error('Branch id is required');
       }
 
+      await ensureTenantManagerContext({ requestedBranchId: branchId });
       const body = updateBranchSettingsSchema.parse(await readBody(req));
       const updated = await updateBranchSettingsByIdForUser({
         actorUserId: user.id,
@@ -560,6 +568,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'POST' && pathname === '/api/branches') {
       const user = await ensureAuth();
       const body = createBranchSchema.parse(await readBody(req));
+      await ensureTenantManagerContext({ requestedTenantId: body.tenantId });
       const created = await createBranchForUser({
         userId: user.id,
         role: user.role,
@@ -573,6 +582,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'PATCH' && pathname.startsWith('/api/branches/')) {
       const user = await ensureAuth();
       const branchId = decodeURIComponent(pathname.replace('/api/branches/', ''));
+      await ensureTenantManagerContext({ requestedBranchId: branchId });
       const body = updateBranchSchema.parse(await readBody(req));
       const updated = await updateBranchForUser({
         userId: user.id,
@@ -599,6 +609,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'POST' && pathname === '/api/tenant-memberships') {
       const user = await ensureAuth();
       const body = upsertTenantMembershipSchema.parse(await readBody(req));
+      await ensureTenantManagerContext({ requestedTenantId: body.tenantId });
       const saved = await upsertTenantMembershipForUser({
         actorUserId: user.id,
         actorRole: user.role,
@@ -612,6 +623,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'PATCH' && pathname.startsWith('/api/tenant-memberships/')) {
       const user = await ensureAuth();
       const membershipId = decodeURIComponent(pathname.replace('/api/tenant-memberships/', ''));
+      await ensureTenantManagerContext();
       const body = updateTenantMembershipSchema.parse(await readBody(req));
       const updated = await updateTenantMembershipForUser({
         actorUserId: user.id,
@@ -638,6 +650,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'POST' && pathname === '/api/branch-access') {
       const user = await ensureAuth();
       const body = upsertBranchAccessSchema.parse(await readBody(req));
+      await ensureTenantManagerContext({ requestedTenantId: body.tenantId });
       const saved = await upsertBranchAccessForUser({
         actorUserId: user.id,
         actorRole: user.role,
@@ -651,6 +664,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'DELETE' && pathname.startsWith('/api/branch-access/')) {
       const user = await ensureAuth();
       const accessId = decodeURIComponent(pathname.replace('/api/branch-access/', ''));
+      await ensureTenantManagerContext();
       const removed = await removeBranchAccessForUser({
         actorUserId: user.id,
         actorRole: user.role,
@@ -692,13 +706,9 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'PATCH' && pathname === '/api/tenants/current/settings') {
       const user = await ensureAuth();
-      const currentSettings = await getTenantSettingsForUser({
-        userId: user.id,
-        role: user.role,
-        requestedTenantId: getHeaderValue(req, 'x-tenant-id') || 'current',
-      });
+      const context = await ensureTenantManagerContext();
       const body = updateTenantSettingsSchema.parse(await readBody(req));
-      const updated = await updateTenantSettingsByTenantId(currentSettings.tenantId, body, {
+      const updated = await updateTenantSettingsByTenantId(context.tenantId, body, {
         userId: user.id,
         role: user.role,
       });
@@ -729,6 +739,7 @@ export async function apiRoute(req, res, env) {
         throw new Error('Tenant id is required');
       }
 
+      await ensureTenantManagerContext({ requestedTenantId: tenantId });
       const body = updateTenantSettingsSchema.parse(await readBody(req));
       const updated = await updateTenantSettingsByTenantId(tenantId, body, {
         userId: user.id,
@@ -816,6 +827,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'POST' && pathname === '/api/users/tenant') {
       const user = await ensureAuth();
       const body = createTenantUserSchema.parse(await readBody(req));
+      await ensureTenantManagerContext({ requestedTenantId: body.tenantId });
       const created = await createTenantUserForUser({
         actorUserId: user.id,
         actorRole: user.role,
@@ -905,7 +917,7 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'DELETE' && pathname.startsWith('/api/customers/')) {
       await ensureAuth();
-      const context = await ensureRequestContext();
+      const context = await ensureTenantManagerContext();
       const customerId = decodeURIComponent(pathname.replace('/api/customers/', ''));
       const deleted = await deleteCustomerById(customerId, context);
       sendSuccess(res, 200, deleted);
@@ -928,7 +940,7 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'DELETE' && pathname.startsWith('/api/categories/')) {
       await ensureAuth();
-      const context = await ensureRequestContext();
+      const context = await ensureTenantManagerContext();
       const categoryName = decodeURIComponent(pathname.replace('/api/categories/', ''));
       const removed = await deleteCategory(categoryName, context);
       sendSuccess(res, 200, removed);
@@ -963,7 +975,7 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'POST' && pathname.startsWith('/api/items/') && pathname.endsWith('/restore')) {
       const user = await ensureAuth();
-      const context = await ensureRequestContext();
+      const context = await ensureTenantManagerContext();
       const itemId = decodeURIComponent(pathname.replace('/api/items/', '').replace('/restore', ''));
       const restored = await restoreItem(itemId, { ...context, actorUserId: user.id });
       sendSuccess(res, 200, restored);
@@ -972,7 +984,7 @@ export async function apiRoute(req, res, env) {
 
     if (req.method === 'DELETE' && pathname.startsWith('/api/items/')) {
       const user = await ensureAuth();
-      const context = await ensureRequestContext();
+      const context = await ensureTenantManagerContext();
       const itemId = decodeURIComponent(pathname.replace('/api/items/', ''));
       const archived = await archiveItem(itemId, { ...context, actorUserId: user.id });
       sendSuccess(res, 200, archived);
@@ -1019,6 +1031,7 @@ export async function apiRoute(req, res, env) {
     if (req.method === 'GET' && pathname === '/api/financial/recap') {
       await ensureAuth();
       const context = await ensureRequestContext();
+      assertFeatureEnabled(context.subscription, 'canUseFinancialRecap');
       const recap = await getFinancialRecapPage({
         startDate: searchParams.get('startDate') || undefined,
         endDate: searchParams.get('endDate') || undefined,

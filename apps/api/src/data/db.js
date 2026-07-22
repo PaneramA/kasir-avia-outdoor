@@ -2500,6 +2500,8 @@ async function assertTenantSubscriptionUsable(tenantId) {
       throw new Error('Tenant subscription has expired');
     }
   }
+
+  return subscription;
 }
 
 function getEntitlementValue(subscription, key, fallback = null) {
@@ -3389,13 +3391,14 @@ export async function resolveTenantBranchContextForUser({
   });
 
   const normalizedRole = normalizeRole(role);
-  const isAdminLike = normalizedRole === 'admin' || normalizedRole === 'superuser';
-  if (!isAdminLike) {
-    await assertTenantSubscriptionUsable(tenant.id);
-  }
+  const isSuperuser = normalizedRole === 'superuser';
+  const isAdminLike = normalizedRole === 'admin' || isSuperuser;
+  const subscription = isAdminLike
+    ? await resolveTenantSubscriptionForTenant(tenant.id)
+    : await assertTenantSubscriptionUsable(tenant.id);
 
   const branchId = String(requestedBranchId || '').trim();
-  const membership = isSuperuserRole(role)
+  const membership = isSuperuser
     ? null
     : await prisma.userMembership.findUnique({
         where: {
@@ -3406,6 +3409,7 @@ export async function resolveTenantBranchContextForUser({
         },
       });
   const canAccessAll = canAccessAllTenantBranches(role, membership?.role);
+  const effectiveMembershipRole = isAdminLike ? 'admin' : membership?.role || null;
 
   const baseBranchWhere = {
     tenantId: tenant.id,
@@ -3432,6 +3436,12 @@ export async function resolveTenantBranchContextForUser({
     return {
       tenantId: tenant.id,
       branchId: accessBranch.branch.id,
+      membershipRole: effectiveMembershipRole,
+      subscription: {
+        features: Object.fromEntries(
+          subscription.plan.features.map((feature) => [feature.key, feature.valueJson]),
+        ),
+      },
     };
   }
 
@@ -3447,6 +3457,12 @@ export async function resolveTenantBranchContextForUser({
   return {
     tenantId: tenant.id,
     branchId: branch.id,
+    membershipRole: effectiveMembershipRole,
+    subscription: {
+      features: Object.fromEntries(
+        subscription.plan.features.map((feature) => [feature.key, feature.valueJson]),
+      ),
+    },
   };
 }
 

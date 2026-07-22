@@ -190,7 +190,7 @@ describe('critical API workflow integration', () => {
 
       const plans = await callApi('GET', '/api/plans', { token: adminToken });
       expect(plans.status).toBe(200);
-      const plan = plans.body.data.find((entry) => entry.status === 'active');
+      const plan = plans.body.data.find((entry) => entry.code === 'growth');
       expect(plan?.id).toBeTruthy();
 
       const onboarding = await callApi('POST', '/api/admin/tenants/onboard', {
@@ -219,6 +219,103 @@ describe('critical API workflow integration', () => {
       expect(ownerLogin.status).toBe(200);
       const ownerToken = ownerLogin.body.data.token;
 
+      const cashierUser = await prisma.user.create({
+        data: {
+          username: `vitest-cashier-${suffix}`,
+          passwordHash: 'not-used',
+          role: 'kasir',
+          memberships: {
+            create: {
+              tenantId,
+              role: 'kasir',
+              status: 'active',
+            },
+          },
+          branchAccesses: {
+            create: {
+              branchId,
+              role: 'kasir',
+            },
+          },
+        },
+      });
+      const cashierToken = createAccessToken({
+        sub: cashierUser.id,
+        username: cashierUser.username,
+        role: cashierUser.role,
+      }, env);
+      const globalAdminUser = await prisma.user.create({
+        data: {
+          username: `vitest-global-admin-${suffix}`,
+          passwordHash: 'not-used',
+          role: 'admin',
+          memberships: {
+            create: {
+              tenantId,
+              role: 'kasir',
+              status: 'active',
+            },
+          },
+        },
+      });
+      const globalAdminToken = createAccessToken({
+        sub: globalAdminUser.id,
+        username: globalAdminUser.username,
+        role: globalAdminUser.role,
+      }, env);
+      const legacySuperuser = await prisma.user.create({
+        data: {
+          username: `vitest-legacy-superuser-${suffix}`,
+          passwordHash: 'not-used',
+          role: 'superuser',
+          memberships: {
+            create: {
+              tenantId,
+              role: 'kasir',
+              status: 'active',
+            },
+          },
+          branchAccesses: {
+            create: {
+              branchId,
+              role: 'kasir',
+            },
+          },
+        },
+      });
+      const legacySuperuserToken = createAccessToken({
+        sub: legacySuperuser.id,
+        username: legacySuperuser.username,
+        role: legacySuperuser.role,
+      }, env);
+
+      const financialFeature = await prisma.planFeature.findUnique({
+        where: {
+          planId_key: {
+            planId: plan.id,
+            key: 'canUseFinancialRecap',
+          },
+        },
+      });
+      expect(financialFeature).toBeTruthy();
+      await prisma.planFeature.update({
+        where: { id: financialFeature.id },
+        data: { valueJson: false },
+      });
+      try {
+        const disabledFinancial = await callApi('GET', '/api/financial/recap', {
+          token: ownerToken,
+          tenantId,
+          branchId,
+        });
+        expect(disabledFinancial.status).toBe(403);
+      } finally {
+        await prisma.planFeature.update({
+          where: { id: financialFeature.id },
+          data: { valueJson: true },
+        });
+      }
+
       const ownerTenants = await callApi('GET', '/api/tenants', { token: ownerToken });
       expect(ownerTenants.status).toBe(200);
       expect(ownerTenants.body.data.map((tenant) => tenant.id)).toEqual([tenantId]);
@@ -232,6 +329,153 @@ describe('critical API workflow integration', () => {
       expect(itemResponse.status).toBe(201);
       const itemId = itemResponse.body.data.id;
       expect(itemResponse.body.data.updatedAt).toEqual(expect.any(String));
+
+      const cashierItemDelete = await callApi('DELETE', `/api/items/${itemId}`, {
+        token: cashierToken, tenantId, branchId,
+      });
+      expect(cashierItemDelete.status).toBe(403);
+
+      const categoryName = `Category ${suffix}`;
+      const categoryResponse = await callApi('POST', '/api/categories', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: { name: categoryName },
+      });
+      expect(categoryResponse.status).toBe(201);
+      const cashierCategoryDelete = await callApi(
+        'DELETE',
+        `/api/categories/${encodeURIComponent(categoryName)}`,
+        { token: cashierToken, tenantId, branchId },
+      );
+      expect(cashierCategoryDelete.status).toBe(403);
+      const ownerCategoryDelete = await callApi(
+        'DELETE',
+        `/api/categories/${encodeURIComponent(categoryName)}`,
+        { token: ownerToken, tenantId, branchId },
+      );
+      expect(ownerCategoryDelete.status).toBe(200);
+
+      const platformCategoryName = `Platform Category ${suffix}`;
+      expect((await callApi('POST', '/api/categories', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: { name: platformCategoryName },
+      })).status).toBe(201);
+      const platformCategoryDelete = await callApi(
+        'DELETE',
+        `/api/categories/${encodeURIComponent(platformCategoryName)}`,
+        { token: adminToken, tenantId, branchId },
+      );
+      expect(platformCategoryDelete.status).toBe(200);
+
+      const globalAdminCategoryName = `Global Admin Category ${suffix}`;
+      expect((await callApi('POST', '/api/categories', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: { name: globalAdminCategoryName },
+      })).status).toBe(201);
+      const globalAdminCategoryDelete = await callApi(
+        'DELETE',
+        `/api/categories/${encodeURIComponent(globalAdminCategoryName)}`,
+        { token: globalAdminToken, tenantId, branchId },
+      );
+      expect(globalAdminCategoryDelete.status).toBe(200);
+
+      const legacySuperuserCategoryName = `Legacy Superuser Category ${suffix}`;
+      expect((await callApi('POST', '/api/categories', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: { name: legacySuperuserCategoryName },
+      })).status).toBe(201);
+      const legacySuperuserCategoryDelete = await callApi(
+        'DELETE',
+        `/api/categories/${encodeURIComponent(legacySuperuserCategoryName)}`,
+        { token: legacySuperuserToken, tenantId, branchId },
+      );
+      expect(legacySuperuserCategoryDelete.status).toBe(403);
+      expect((await callApi(
+        'DELETE',
+        `/api/categories/${encodeURIComponent(legacySuperuserCategoryName)}`,
+        { token: ownerToken, tenantId, branchId },
+      )).status).toBe(200);
+
+      const customerResponse = await callApi('POST', '/api/customers', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          name: `Customer Delete ${suffix}`,
+          phone: `0813${String(Date.now()).slice(-8)}`,
+          guarantee: 'KTP',
+        },
+      });
+      expect(customerResponse.status).toBe(201);
+      const customerId = customerResponse.body.data.id;
+      const cashierCustomerDelete = await callApi('DELETE', `/api/customers/${customerId}`, {
+        token: cashierToken, tenantId, branchId,
+      });
+      expect(cashierCustomerDelete.status).toBe(403);
+      const ownerCustomerDelete = await callApi('DELETE', `/api/customers/${customerId}`, {
+        token: ownerToken, tenantId, branchId,
+      });
+      expect(ownerCustomerDelete.status).toBe(200);
+
+      const cashierSettingsUpdate = await callApi('PATCH', '/api/tenants/current/settings', {
+        token: cashierToken,
+        tenantId,
+        branchId,
+        body: { phone: '081234567890' },
+      });
+      expect(cashierSettingsUpdate.status).toBe(403);
+      const ownerSettingsUpdate = await callApi('PATCH', '/api/tenants/current/settings', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: { phone: '081234567890' },
+      });
+      expect(ownerSettingsUpdate.status).toBe(200);
+
+      const cashierBranchSettingsUpdate = await callApi('PATCH', '/api/branches/current/settings', {
+        token: cashierToken,
+        tenantId,
+        branchId,
+        body: { phone: '089999999999' },
+      });
+      expect(cashierBranchSettingsUpdate.status).toBe(403);
+      const ownerBranchSettingsUpdate = await callApi('PATCH', '/api/branches/current/settings', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: { phone: '089999999999' },
+      });
+      expect(ownerBranchSettingsUpdate.status).toBe(200);
+
+      const cashierTeamUpdate = await callApi('POST', '/api/users/tenant', {
+        token: cashierToken,
+        tenantId,
+        branchId,
+        body: {
+          username: `blocked-team-${suffix}`,
+          password: `Blocked!${suffix}`,
+          tenantRole: 'kasir',
+        },
+      });
+      expect(cashierTeamUpdate.status).toBe(403);
+      const ownerTeamUpdate = await callApi('POST', '/api/users/tenant', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          username: `owner-team-${suffix}`,
+          password: `Created!${suffix}`,
+          tenantRole: 'kasir',
+        },
+      });
+      expect(ownerTeamUpdate.status).toBe(201);
 
       await prisma.item.update({
         where: { id: itemId },
