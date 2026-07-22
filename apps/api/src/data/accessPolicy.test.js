@@ -14,6 +14,13 @@ describe('tenant access policy helpers', () => {
     it('normalizes null to an empty string', () => {
       expect(normalizeTenantRole(null)).toBe('');
     });
+
+    it.each([
+      [false, 'false'],
+      [0, '0'],
+    ])('preserves falsy non-nullish value %s as a string', (value, expected) => {
+      expect(normalizeTenantRole(value)).toBe(expected);
+    });
   });
 
   describe('isActiveStatus', () => {
