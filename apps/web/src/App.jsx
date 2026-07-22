@@ -8,7 +8,7 @@ import AdminLayout from './components/AdminLayout'
 import Login from './pages/Login'
 import AdminLogin from './pages/AdminLogin'
 import { APP_ROUTES, resolvePageInfo } from './lib/routes'
-import { APP_CACHE_KEYS } from './lib/appCache'
+import { APP_CACHE_KEYS, isInventoryMutationKeyForScope } from './lib/appCache'
 import {
   createCategory,
   createItem,
@@ -493,30 +493,26 @@ function App() {
     async (id) => {
       await removeItem(id)
       await itemQuery.mutate((current = []) => current.filter((item) => item.id !== id), { revalidate: false })
-      void itemQuery.mutate()
       void mutateCache(
-        (key) => Array.isArray(key) && key[0] === 'app/inventory-page',
+        (key) => isInventoryMutationKeyForScope(key, activeTenantId, activeBranchId),
         undefined,
         { revalidate: true },
       )
     },
-    [itemQuery, mutateCache],
+    [activeBranchId, activeTenantId, itemQuery, mutateCache],
   )
 
   const handleRestoreItem = useCallback(
     async (id) => {
       const restored = await restoreItem(id)
-      void itemQuery.mutate()
       void mutateCache(
-        (key) => Array.isArray(key) && (
-          key[0] === 'app/inventory-page' || key[0] === 'app/dashboard'
-        ),
+        (key) => isInventoryMutationKeyForScope(key, activeTenantId, activeBranchId),
         undefined,
         { revalidate: true },
       )
       return restored
     },
-    [itemQuery, mutateCache],
+    [activeBranchId, activeTenantId, mutateCache],
   )
 
   const handleCreateCategory = useCallback(

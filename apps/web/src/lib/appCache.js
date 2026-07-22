@@ -21,6 +21,19 @@ export const APP_CACHE_KEYS = {
   branchAccess: (tenantId = 'current') => ['app/branch-access', tenantId],
 }
 
+const INVENTORY_MUTATION_NAMESPACES = new Set([
+  'app/items',
+  'app/inventory-page',
+  'app/dashboard',
+])
+
+export function isInventoryMutationKeyForScope(key, tenantId, branchId) {
+  return Array.isArray(key)
+    && INVENTORY_MUTATION_NAMESPACES.has(key[0])
+    && key[1] === tenantId
+    && key[2] === branchId
+}
+
 export const APP_SWR_OPTIONS = {
   dedupingInterval: 5000,
   errorRetryCount: 2,
