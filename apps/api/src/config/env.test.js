@@ -41,6 +41,7 @@ describe('environment configuration', () => {
     process.env.SERVER_KEEP_ALIVE_TIMEOUT_MS = '2000';
     process.env.SERVER_MAX_REQUESTS_PER_SOCKET = '500';
     process.env.TRUST_PROXY = 'true';
+    process.env.ALLOW_INSECURE_LOOPBACK_CORS = 'true';
 
     const env = getEnv();
     expect(env.port).toBe(4100);
@@ -54,6 +55,7 @@ describe('environment configuration', () => {
     expect(env.serverKeepAliveTimeoutMs).toBe(2000);
     expect(env.serverMaxRequestsPerSocket).toBe(500);
     expect(env.trustProxy).toBe(true);
+    expect(env.allowInsecureLoopbackCors).toBe(true);
   });
 
   it('warns about insecure production settings', () => {
@@ -68,7 +70,7 @@ describe('environment configuration', () => {
       loginRateLimitMaxAttempts: 20,
     });
 
-    expect(warnings).toHaveLength(8);
+    expect(warnings).toHaveLength(7);
     expect(warnings.join(' ')).toContain('wildcard');
     expect(warnings.join(' ')).toContain('production');
   });
@@ -81,6 +83,19 @@ describe('environment configuration', () => {
       jwtSecret: 'strong-jwt-secret-at-least-16',
       passwordPepper: 'strong-password-pepper-at-least-16',
       adminUsername: 'platform-owner',
+      adminPassword: 'long-random-admin-password',
+      loginRateLimitMaxAttempts: 5,
+    })).toEqual([]);
+  });
+
+  it('allows the configured admin email when its credentials are hardened', () => {
+    expect(getSecurityWarnings({
+      nodeEnv: 'production',
+      databaseUrl: 'postgresql://avia_app:strong-password@db.internal:5432/aviaoutdoor',
+      corsOrigin: 'https://kasir.example.com',
+      jwtSecret: 'strong-jwt-secret-at-least-16',
+      passwordPepper: 'strong-password-pepper-at-least-16',
+      adminUsername: 'admin@gmail.com',
       adminPassword: 'long-random-admin-password',
       loginRateLimitMaxAttempts: 5,
     })).toEqual([]);
@@ -112,5 +127,71 @@ describe('environment configuration', () => {
       adminPassword: 'long-random-admin-password',
       loginRateLimitMaxAttempts: 5,
     })).not.toThrow();
+  });
+
+  it('rejects non-HTTPS production CORS origins by default', () => {
+    const warnings = getSecurityWarnings({
+      nodeEnv: 'production',
+      databaseUrl: 'postgresql://avia_app:strong-password@db.internal:5432/aviaoutdoor',
+      corsOrigin: 'http://kasir.example.com',
+      jwtSecret: 'strong-jwt-secret-at-least-16',
+      passwordPepper: 'strong-password-pepper-at-least-16',
+      adminUsername: 'platform-owner',
+      adminPassword: 'long-random-admin-password',
+      loginRateLimitMaxAttempts: 5,
+      allowInsecureLoopbackCors: false,
+    });
+
+    expect(warnings.join(' ')).toContain('HTTPS');
+  });
+
+  it('permits only an explicit loopback HTTP CORS escape', () => {
+    const secureBase = {
+      nodeEnv: 'production',
+      databaseUrl: 'postgresql://avia_app:strong-password@db.internal:5432/aviaoutdoor',
+      jwtSecret: 'strong-jwt-secret-at-least-16',
+      passwordPepper: 'strong-password-pepper-at-least-16',
+      adminUsername: 'platform-owner',
+      adminPassword: 'long-random-admin-password',
+      loginRateLimitMaxAttempts: 5,
+      allowInsecureLoopbackCors: true,
+    };
+
+    expect(getSecurityWarnings({
+      ...secureBase,
+      corsOrigin: 'http://127.0.0.1:5173',
+    })).toEqual([]);
+    expect(getSecurityWarnings({
+      ...secureBase,
+      corsOrigin: 'http://kasir.example.com',
+    }).join(' ')).toContain('HTTPS');
+  });
+
+  it('rejects excessive production request and server resource limits', () => {
+    const warnings = getSecurityWarnings({
+      nodeEnv: 'production',
+      databaseUrl: 'postgresql://avia_app:strong-password@db.internal:5432/aviaoutdoor',
+      corsOrigin: 'https://kasir.example.com',
+      jwtSecret: 'strong-jwt-secret-at-least-16',
+      passwordPepper: 'strong-password-pepper-at-least-16',
+      adminUsername: 'platform-owner',
+      adminPassword: 'long-random-admin-password',
+      loginRateLimitMaxAttempts: 5,
+      requestBodyLimitBytes: 10_485_761,
+      requestBodyTimeoutMs: 60_001,
+      serverRequestTimeoutMs: 120_001,
+      serverHeadersTimeoutMs: 60_001,
+      serverKeepAliveTimeoutMs: 60_001,
+      serverMaxRequestsPerSocket: 10_001,
+    });
+
+    expect(warnings).toEqual(expect.arrayContaining([
+      expect.stringContaining('REQUEST_BODY_LIMIT_BYTES'),
+      expect.stringContaining('REQUEST_BODY_TIMEOUT_MS'),
+      expect.stringContaining('SERVER_REQUEST_TIMEOUT_MS'),
+      expect.stringContaining('SERVER_HEADERS_TIMEOUT_MS'),
+      expect.stringContaining('SERVER_KEEP_ALIVE_TIMEOUT_MS'),
+      expect.stringContaining('SERVER_MAX_REQUESTS_PER_SOCKET'),
+    ]));
   });
 });

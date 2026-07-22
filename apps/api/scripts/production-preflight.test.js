@@ -63,6 +63,7 @@ describe('production preflight', () => {
     await expect(runProductionPreflight({ database })).resolves.toEqual({
       ok: true,
       schema: {
+        inspectionOk: true,
         requiredTables: REQUIRED_TABLES,
         requiredColumns: ['Item.archivedAt'],
         missing: [],
@@ -158,8 +159,43 @@ describe('production preflight', () => {
     expect(writeLine).toHaveBeenCalledTimes(1);
     expect(JSON.parse(writeLine.mock.calls[0][0])).toMatchObject({
       ok: false,
-      schema: { missing: ['column:Item.archivedAt'] },
+      schema: { inspectionOk: true, missing: ['column:Item.archivedAt'] },
       access: { assignmentCount: 0, unresolved: [] },
     });
+  });
+
+  it('marks schema inspection errors as an explicit migration blocker', async () => {
+    const {
+      runProductionPreflightCli,
+      schemaReadyForMigrationResolution,
+    } = await loadPreflight();
+    const database = createDatabase({ schemaRows: [] });
+    database.$queryRaw = vi.fn().mockRejectedValue(new Error('permission denied'));
+    const writeLine = vi.fn();
+
+    const exitCode = await runProductionPreflightCli({ database, writeLine });
+    const result = JSON.parse(writeLine.mock.calls[0][0]);
+
+    expect(exitCode).toBe(1);
+    expect(result.schema).toMatchObject({
+      inspectionOk: false,
+      missing: null,
+      error: 'permission denied',
+    });
+    expect(schemaReadyForMigrationResolution(result)).toBe(false);
+  });
+
+  it('allows migration resolution only after a successful complete schema inspection', async () => {
+    const { schemaReadyForMigrationResolution } = await loadPreflight();
+
+    expect(schemaReadyForMigrationResolution({
+      schema: { inspectionOk: true, missing: [] },
+    })).toBe(true);
+    expect(schemaReadyForMigrationResolution({
+      schema: { inspectionOk: true, missing: ['column:Item.archivedAt'] },
+    })).toBe(false);
+    expect(schemaReadyForMigrationResolution({
+      schema: { inspectionOk: false, missing: [] },
+    })).toBe(false);
   });
 });

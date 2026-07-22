@@ -76,12 +76,19 @@ export async function inspectProductionSchema(database) {
   }
 
   return {
+    inspectionOk: true,
     requiredTables: REQUIRED_TABLES,
     requiredColumns: REQUIRED_COLUMNS.map(
       ({ tableName, columnName }) => `${tableName}.${columnName}`,
     ),
     missing,
   };
+}
+
+export function schemaReadyForMigrationResolution(result) {
+  return result?.schema?.inspectionOk === true
+    && Array.isArray(result.schema.missing)
+    && result.schema.missing.length === 0;
 }
 
 export async function runProductionPreflight({
@@ -123,11 +130,12 @@ export async function runProductionPreflightCli({
     result = {
       ok: false,
       schema: {
+        inspectionOk: false,
         requiredTables: REQUIRED_TABLES,
         requiredColumns: REQUIRED_COLUMNS.map(
           ({ tableName, columnName }) => `${tableName}.${columnName}`,
         ),
-        missing: [],
+        missing: null,
         error: error instanceof Error ? error.message : String(error),
       },
       access: {

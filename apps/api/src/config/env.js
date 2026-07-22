@@ -4,6 +4,14 @@ const DEFAULT_ADMIN_USERNAME = 'admin@gmail.com';
 const DEFAULT_ADMIN_PASSWORD = 'adminavo123';
 const INSECURE_JWT_SECRETS = new Set([DEFAULT_JWT_SECRET, 'change-this-in-production']);
 const INSECURE_PASSWORD_PEPPERS = new Set([DEFAULT_PASSWORD_PEPPER, 'change-this-too']);
+const PRODUCTION_MAXIMUMS = {
+  requestBodyLimitBytes: ['REQUEST_BODY_LIMIT_BYTES', 10 * 1024 * 1024],
+  requestBodyTimeoutMs: ['REQUEST_BODY_TIMEOUT_MS', 60_000],
+  serverRequestTimeoutMs: ['SERVER_REQUEST_TIMEOUT_MS', 120_000],
+  serverHeadersTimeoutMs: ['SERVER_HEADERS_TIMEOUT_MS', 60_000],
+  serverKeepAliveTimeoutMs: ['SERVER_KEEP_ALIVE_TIMEOUT_MS', 60_000],
+  serverMaxRequestsPerSocket: ['SERVER_MAX_REQUESTS_PER_SOCKET', 10_000],
+};
 
 function toPositiveInteger(value, fallback) {
   const parsed = Number(value);
@@ -38,6 +46,27 @@ function usesDefaultDatabaseCredentials(databaseUrl) {
   }
 }
 
+function isLoopbackHostname(hostname) {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+function isAllowedProductionOrigin(origin, allowInsecureLoopbackCors) {
+  try {
+    const parsed = new URL(origin);
+    if (origin !== parsed.origin || parsed.username || parsed.password) {
+      return false;
+    }
+
+    return parsed.protocol === 'https:' || (
+      allowInsecureLoopbackCors
+      && parsed.protocol === 'http:'
+      && isLoopbackHostname(parsed.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function getEnv() {
   return {
     port: Number(process.env.PORT || 4000),
@@ -63,6 +92,10 @@ export function getEnv() {
       1_000,
     ),
     trustProxy: toStrictBoolean(process.env.TRUST_PROXY, false),
+    allowInsecureLoopbackCors: toStrictBoolean(
+      process.env.ALLOW_INSECURE_LOOPBACK_CORS,
+      false,
+    ),
   };
 }
 
@@ -84,12 +117,8 @@ export function getSecurityWarnings(env) {
     warnings.push('PASSWORD_PEPPER masih default atau terlalu pendek.');
   }
 
-  if (env.adminPassword === DEFAULT_ADMIN_PASSWORD || env.adminPassword.length < 10) {
+  if (env.adminPassword === DEFAULT_ADMIN_PASSWORD || env.adminPassword.length < 16) {
     warnings.push('ADMIN_PASSWORD masih default atau terlalu lemah.');
-  }
-
-  if (env.adminUsername === DEFAULT_ADMIN_USERNAME) {
-    warnings.push('ADMIN_USERNAME masih default.');
   }
 
   if (env.loginRateLimitMaxAttempts > 10) {
@@ -104,8 +133,24 @@ export function getSecurityWarnings(env) {
     warnings.push('CORS_ORIGIN menggunakan wildcard (*). Batasi origin spesifik untuk production.');
   }
 
-  if (env.nodeEnv === 'production' && corsOrigins.some((origin) => origin.includes('localhost'))) {
-    warnings.push('CORS_ORIGIN masih mengandung localhost pada mode production.');
+  if (
+    env.nodeEnv === 'production'
+    && corsOrigins.some((origin) => (
+      origin !== '*' && !isAllowedProductionOrigin(origin, env.allowInsecureLoopbackCors)
+    ))
+  ) {
+    warnings.push(
+      'CORS_ORIGIN production harus berupa origin HTTPS tanpa path. '
+      + 'HTTP hanya diizinkan untuk loopback saat ALLOW_INSECURE_LOOPBACK_CORS=true.',
+    );
+  }
+
+  if (env.nodeEnv === 'production') {
+    for (const [property, [name, maximum]] of Object.entries(PRODUCTION_MAXIMUMS)) {
+      if (Number.isFinite(env[property]) && env[property] > maximum) {
+        warnings.push(`${name} melebihi batas production ${maximum}.`);
+      }
+    }
   }
 
   return warnings;

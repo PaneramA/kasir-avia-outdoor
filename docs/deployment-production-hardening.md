@@ -2,6 +2,46 @@
 
 This runbook deploys the production-hardening release to one PM2 API process. Run every command from the same SSH session. Stop immediately when a check does not match the stated expected result.
 
+## CI deployment prerequisites
+
+The production workflow checks out and tests one immutable `${{ github.sha }}`, then passes that exact 40-character SHA to `/usr/local/bin/deploy-kasir.sh`. Configure these GitHub Actions secrets:
+
+- `VPS_HOST`, `VPS_USER`, and numeric `VPS_PORT`.
+- `VPS_SSH_KEY`: a dedicated, unencrypted deployment private key. Passphrase-protected keys are intentionally unsupported by the non-interactive precheck.
+- `VPS_SSH_HOST_FINGERPRINT`: one trusted `SHA256:...` SSH host-key fingerprint obtained out-of-band from the VPS console, never from the same network path used by the deployment.
+
+Read the Ed25519 fingerprint directly on the VPS console and compare it with the GitHub secret:
+
+```bash
+sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256
+```
+
+The deploy script must check out the requested commit before it installs dependencies, runs migrations, builds, or restarts any process. Its opening sequence must enforce this contract:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_DIR=/var/www/kasir-aviaoutdoor
+RELEASE_COMMIT="${1:?usage: deploy-kasir.sh <40-character-commit-sha>}"
+[[ "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+
+cd "$APP_DIR"
+git status --porcelain | grep -q . && {
+  echo 'Refusing to deploy over a dirty worktree.' >&2
+  exit 1
+}
+git fetch --prune origin
+git cat-file -e "$RELEASE_COMMIT^{commit}"
+git checkout --detach "$RELEASE_COMMIT"
+test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+
+# Only after the equality check above may the existing script run npm ci,
+# Prisma preflight/migrations, build, and PM2 restart steps.
+```
+
+The script may not pull or check out `main`, `latest`, or another moving ref after this guard. It must repeat the same HEAD equality check immediately before and after PM2 restart. The workflow also verifies the deployed HEAD after the script returns. Remove the obsolete `VPS_SSH_PASSPHRASE` secret; `VPS_SSH_HOST_FINGERPRINT` is required and host-key checking may not be disabled.
+
 ## 1. Set deployment values
 
 The repository and PostgreSQL container defaults match the current VPS. Pre-set `APP_DIR` or `POSTGRES_CONTAINER` before this block to override either value. Replace the remaining values in angle brackets.
@@ -45,11 +85,11 @@ Do not restart PM2 yet.
 Take and verify the database backup before changing credentials, schema, migration history, access assignments, or application state. Read the current database credentials without printing them. `pg_dump` and `pg_restore` run inside `$POSTGRES_CONTAINER`, so PostgreSQL client tools are not required on the VPS host. The custom-format archive is streamed to the private host backup directory.
 
 ```bash
-export DATABASE_URL="$(cd "$API_DIR" && node --env-file=.env -e 'process.stdout.write(process.env.DATABASE_URL || "")')"
+export DATABASE_URL="$(cd "$API_DIR" && env -u DATABASE_URL node --env-file=.env -e 'process.stdout.write(process.env.DATABASE_URL || "")')"
 test -n "$DATABASE_URL"
-export PGUSER="$(cd "$API_DIR" && node --env-file=.env -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).username))')"
-export PGPASSWORD="$(cd "$API_DIR" && node --env-file=.env -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).password))')"
-export PGDATABASE="$(cd "$API_DIR" && node --env-file=.env -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).pathname.slice(1)))')"
+export PGUSER="$(cd "$API_DIR" && env -u DATABASE_URL node --env-file=.env -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).username))')"
+export PGPASSWORD="$(cd "$API_DIR" && env -u DATABASE_URL node --env-file=.env -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).password))')"
+export PGDATABASE="$(cd "$API_DIR" && env -u DATABASE_URL node --env-file=.env -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).pathname.slice(1)))')"
 test -n "$PGUSER"
 test -n "$PGDATABASE"
 test "$(docker inspect "$POSTGRES_CONTAINER" --format '{{.State.Running}}')" = true
@@ -75,11 +115,12 @@ Expected: every command exits `0`; `test -s` proves both files are non-empty, an
 
 ## 4. Harden and precheck production configuration
 
-Commit `b69f857` refuses to start with insecure production settings. Run the warning check against the current `.env`; it reports warning names but never prints secret values:
+Production startup refuses insecure settings. Run the warning check against the current `.env`; it reports warning names but never prints secret values:
 
 ```bash
 cd "$API_DIR"
 env -u DATABASE_URL -u CORS_ORIGIN -u JWT_SECRET -u PASSWORD_PEPPER \
+  -u ALLOW_INSECURE_LOOPBACK_CORS \
   -u ADMIN_USERNAME -u ADMIN_PASSWORD -u TRUST_PROXY \
   NODE_ENV=production node --env-file=.env --input-type=module -e '
   import { getEnv, getSecurityWarnings } from "./src/config/env.js";
@@ -98,6 +139,7 @@ Every existing password hash depends on the exact `PASSWORD_PEPPER`. Check it wi
 ```bash
 cd "$API_DIR"
 env -u DATABASE_URL -u CORS_ORIGIN -u JWT_SECRET -u PASSWORD_PEPPER \
+  -u ALLOW_INSECURE_LOOPBACK_CORS \
   -u ADMIN_USERNAME -u ADMIN_PASSWORD -u TRUST_PROXY \
   NODE_ENV=production node --env-file=.env --input-type=module -e '
   import { getEnv, getSecurityWarnings } from "./src/config/env.js";
@@ -173,14 +215,11 @@ NEW_CORS_ORIGIN="$NEW_CORS_ORIGIN" node -e '
 '
 ```
 
-Default `TRUST_PROXY=false` is safe. Set it to `true` only when Nginx discards any client-supplied `X-Forwarded-For` and overwrites it with the direct client address. This application trusts the first forwarded address, so appending an untrusted header is insufficient.
+Default `TRUST_PROXY=false` is safe. Set it to `true` only after inspecting the effective Nginx `location` that proxies this API and confirming it discards any client-supplied `X-Forwarded-For` and overwrites it with `$remote_addr`. Do not infer this from a matching directive in an unrelated virtual host or location. This application trusts the first forwarded address, so appending an untrusted header is insufficient.
 
 ```bash
 export NEW_TRUST_PROXY=false
-if sudo nginx -T 2>/dev/null \
-  | grep -F 'proxy_set_header X-Forwarded-For $remote_addr;' >/dev/null; then
-  export NEW_TRUST_PROXY=true
-fi
+# Change to true only after the exact API proxy location passes the review above.
 printf 'TRUST_PROXY will be set to %s\n' "$NEW_TRUST_PROXY"
 ```
 
@@ -190,6 +229,7 @@ Update `.env` atomically. The updater intentionally leaves `PASSWORD_PEPPER` unc
 cd "$API_DIR"
 DATABASE_URL="$NEW_DATABASE_URL" \
 CORS_ORIGIN="$NEW_CORS_ORIGIN" \
+ALLOW_INSECURE_LOOPBACK_CORS=false \
 JWT_SECRET="$NEW_JWT_SECRET" \
 ADMIN_USERNAME="$NEW_ADMIN_USERNAME" \
 ADMIN_PASSWORD="$NEW_ADMIN_PASSWORD" \
@@ -201,6 +241,7 @@ const replacements = {
   NODE_ENV: 'production',
   DATABASE_URL: process.env.DATABASE_URL,
   CORS_ORIGIN: process.env.CORS_ORIGIN,
+  ALLOW_INSECURE_LOOPBACK_CORS: process.env.ALLOW_INSECURE_LOOPBACK_CORS,
   JWT_SECRET: process.env.JWT_SECRET,
   ADMIN_USERNAME: process.env.ADMIN_USERNAME,
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
@@ -225,7 +266,11 @@ NODE
 export DATABASE_URL="$NEW_DATABASE_URL"
 ```
 
-Verify the rotated database password over TCP, then use the supported seed command to create or update the configured platform-admin password hash with the preserved pepper:
+Keep `ALLOW_INSECURE_LOOPBACK_CORS=false` for the public production service. The only supported exception is a direct local production smoke test whose browser origin is exactly `http://localhost`, `http://127.0.0.1`, or `http://[::1]`; enabling it never permits a remote HTTP origin.
+
+Production startup also rejects values above these ceilings: request body `10 MiB`, body timeout `60 s`, request timeout `120 s`, header timeout `60 s`, keep-alive timeout `60 s`, and `10,000` requests per socket. Lower values in `.env` are encouraged; raising a value above its ceiling requires a reviewed code change rather than an environment-only bypass.
+
+Verify the rotated database password over TCP, then use the dedicated command to create or update only the configured platform-admin password hash with the preserved pepper:
 
 ```bash
 export PGDATABASE="$(NEW_DATABASE_URL="$NEW_DATABASE_URL" node -e 'process.stdout.write(decodeURIComponent(new URL(process.env.NEW_DATABASE_URL).pathname.slice(1)))')"
@@ -233,16 +278,17 @@ docker exec -e PGPASSWORD="$NEW_DB_PASSWORD" "$POSTGRES_CONTAINER" \
   psql --no-psqlrc --host=127.0.0.1 --username=postgres --dbname="$PGDATABASE" \
   --command='SELECT 1' >/dev/null
 cd "$APP_DIR"
-npm run seed --workspace @avia/api
+npm run admin:rotate-credentials --workspace @avia/api
 ```
 
-Changing `ADMIN_PASSWORD` alone does not update an existing same-username hash during normal startup: `initDatabase` only updates that user's role. The seed command is the supported path here because it updates the configured seed admin's `passwordHash`. When `ADMIN_USERNAME` changes, startup also creates that new configured superuser; legacy stored superusers are treated as ordinary cashiers by authorization because only the configured username receives effective platform-superuser access.
+Changing `ADMIN_PASSWORD` alone does not update an existing same-username hash during normal startup. `admin:rotate-credentials` upserts only `ADMIN_USERNAME` with the new password hash and `superuser` role; it does not seed or alter tenants, branches, catalog data, or other users. When `ADMIN_USERNAME` changes, the previous stored user remains in the database but no longer receives effective platform-superuser access because authorization recognizes only the configured username.
 
 Run the production warning check again. It must exit `0` with exactly `{"ok":true,"warnings":[]}` before migration or restart:
 
 ```bash
 cd "$API_DIR"
 env -u DATABASE_URL -u CORS_ORIGIN -u JWT_SECRET -u PASSWORD_PEPPER \
+  -u ALLOW_INSECURE_LOOPBACK_CORS \
   -u ADMIN_USERNAME -u ADMIN_PASSWORD -u TRUST_PROXY \
   NODE_ENV=production node --env-file=.env --input-type=module -e '
   import { getEnv, getSecurityWarnings } from "./src/config/env.js";
@@ -250,7 +296,7 @@ env -u DATABASE_URL -u CORS_ORIGIN -u JWT_SECRET -u PASSWORD_PEPPER \
   console.log(JSON.stringify({ ok: warnings.length === 0, warnings }));
   process.exitCode = warnings.length === 0 ? 0 : 1;
 '
-export DATABASE_URL="$(node --env-file=.env -e 'process.stdout.write(process.env.DATABASE_URL || "")')"
+export DATABASE_URL="$(env -u DATABASE_URL node --env-file=.env -e 'process.stdout.write(process.env.DATABASE_URL || "")')"
 test -n "$DATABASE_URL"
 unset CURRENT_DATABASE_URL NEW_DATABASE_URL NEW_DB_PASSWORD NEW_ADMIN_PASSWORD NEW_JWT_SECRET
 ```
@@ -270,7 +316,7 @@ docker exec -it "$POSTGRES_CONTAINER" \
 
 cd "$API_DIR"
 install -m 600 ".env.before-$ROLLOUT_ID" .env
-export DATABASE_URL="$(node --env-file=.env -e 'process.stdout.write(process.env.DATABASE_URL || "")')"
+export DATABASE_URL="$(env -u DATABASE_URL node --env-file=.env -e 'process.stdout.write(process.env.DATABASE_URL || "")')"
 export ROLLBACK_PGUSER="$(node --env-file=.env -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).username))')"
 export ROLLBACK_PGPASSWORD="$(node --env-file=.env -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).password))')"
 export ROLLBACK_PGDATABASE="$(node --env-file=.env -e 'process.stdout.write(decodeURIComponent(new URL(process.env.DATABASE_URL).pathname.slice(1)))')"
@@ -278,14 +324,14 @@ docker exec -e PGPASSWORD="$ROLLBACK_PGPASSWORD" "$POSTGRES_CONTAINER" \
   psql --no-psqlrc --host=127.0.0.1 --username="$ROLLBACK_PGUSER" \
   --dbname="$ROLLBACK_PGDATABASE" --command='SELECT 1' >/dev/null
 cd "$APP_DIR"
-npm run seed --workspace @avia/api
+npm run admin:rotate-credentials --workspace @avia/api
 pm2 start "$PM2_APP" --update-env
 curl --fail --silent --show-error "$API_BASE_URL/health" \
   | jq -e '.ok == true and .service == "avia-api"'
 unset ROLLBACK_PGUSER ROLLBACK_PGPASSWORD ROLLBACK_PGDATABASE
 ```
 
-Expected: the previous database credentials authenticate, the supported seed restores the previous configured admin hash, PM2 returns `online`, and health exits `0`. End the rollout after this rollback; investigate before trying again.
+Expected: the previous database credentials authenticate, the dedicated updater restores the previous configured admin hash without touching business data, PM2 returns `online`, and health exits `0`. End the rollout after this rollback; investigate before trying again.
 
 ## 5. Inspect and reconcile migration `0007`
 
@@ -342,7 +388,7 @@ unset PGPASSWORD
 
 An exact match means all of the following are true:
 
-- `schema.missing` in the preflight JSON is empty.
+- `schema.inspectionOk` in the preflight JSON is `true`, `schema.error` is absent, and `schema.missing` is empty.
 - The column query returns exactly one nullable `timestamp without time zone` column named `archivedAt` with precision `3`.
 - The index query returns exactly one row with `indisvalid=true`, `indisready=true`, `indisunique=false`, method `btree`, columns `tenantId`, `branchId`, `archivedAt`, and `createdAt` in that order, and a null predicate.
 - The definitions match the reviewed `0007_item_archival/migration.sql`; there are no partial or unrelated changes.
@@ -350,7 +396,7 @@ An exact match means all of the following are true:
 If migration status says `0007_item_archival` is pending and every check above matches exactly, require an explicit operator confirmation before reconciling the ledger:
 
 ```bash
-jq -e '.schema.missing == []' "/tmp/preflight-before-0007-$ROLLOUT_ID.json"
+jq -e '.schema.inspectionOk == true and (.schema.error | not) and .schema.missing == []' "/tmp/preflight-before-0007-$ROLLOUT_ID.json"
 read -rp 'Type RESOLVE 0007 EXACT MATCH to confirm the schema matches migration 0007: ' RESOLVE_CONFIRMATION
 test "$RESOLVE_CONFIRMATION" = 'RESOLVE 0007 EXACT MATCH'
 cd "$API_DIR"
@@ -358,7 +404,7 @@ npx prisma migrate resolve --applied 0007_item_archival \
   --schema prisma/schema.prisma
 ```
 
-Never run `migrate resolve` from the index name alone. If the column or index is absent, partial, invalid, differently defined, or the SQL does not match, stop the rollout and investigate the drift separately. Do not run `migrate deploy` in that state. If status already reports `0007_item_archival` applied, skip `migrate resolve` but still require the exact schema checks.
+Never run `migrate resolve` from the index name alone. A preflight inspection exception emits `schema.inspectionOk=false`, `schema.missing=null`, and `schema.error`; that result is always a blocker and cannot satisfy the command above. If the column or index is absent, partial, invalid, differently defined, or the SQL does not match, stop the rollout and investigate the drift separately. Do not run `migrate deploy` in that state. If status already reports `0007_item_archival` applied, skip `migrate resolve` but still require the exact schema checks.
 
 After the resolve or already-applied decision, rerun migration status, SQL diff, and preflight:
 
@@ -422,7 +468,7 @@ npm run db:preflight:production --workspace @avia/api --silent \
 cat "/tmp/production-preflight-$ROLLOUT_ID.json"
 ```
 
-Expected: the access recheck contains empty `assignments` and `unresolved` arrays. The production preflight exits `0` and contains `"ok":true`, an empty `schema.missing` array, `assignmentCount: 0`, and an empty `access.unresolved` array. The production preflight never writes data.
+Expected: the access recheck contains empty `assignments` and `unresolved` arrays. The production preflight exits `0` and contains `"ok":true`, `schema.inspectionOk:true`, no `schema.error`, an empty `schema.missing` array, `assignmentCount: 0`, and an empty `access.unresolved` array. The production preflight never writes data.
 
 ## 7. Restart and check health
 
