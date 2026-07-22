@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { planAccessBackfill } from './accessBackfill.js';
+import { vi } from 'vitest';
+import * as accessBackfill from './accessBackfill.js';
+
+const { planAccessBackfill } = accessBackfill;
 
 describe('planAccessBackfill', () => {
   it('assigns a user to the only active tenant and its only active branch', () => {
@@ -52,7 +55,7 @@ describe('planAccessBackfill', () => {
     })).toEqual({ assignments: [], unresolved: [] });
   });
 
-  it('skips users who already have memberships or branch accesses', () => {
+  it('reports partially assigned users instead of silently skipping them', () => {
     expect(planAccessBackfill({
       users: [
         { id: 'user-1', role: 'kasir', memberships: [{ id: 'membership-1' }], branchAccesses: [] },
@@ -60,11 +63,88 @@ describe('planAccessBackfill', () => {
       ],
       tenants: [{ id: 'tenant-1', status: 'active' }],
       branches: [{ id: 'branch-1', tenantId: 'tenant-1', status: 'active' }],
-    })).toEqual({ assignments: [], unresolved: [] });
+    })).toEqual({
+      assignments: [],
+      unresolved: [
+        { userId: 'user-1', reason: 'partial-assignment' },
+        { userId: 'user-2', reason: 'partial-assignment' },
+      ],
+    });
   });
 
   it('treats missing input arrays as empty', () => {
     expect(planAccessBackfill({})).toEqual({ assignments: [], unresolved: [] });
     expect(planAccessBackfill()).toEqual({ assignments: [], unresolved: [] });
+  });
+
+  it('does not require branch assignments for active tenant owners or admins', () => {
+    expect(planAccessBackfill({
+      users: [
+        {
+          id: 'owner-1',
+          role: 'kasir',
+          memberships: [{ id: 'membership-1', role: 'owner', status: 'active' }],
+          branchAccesses: [],
+        },
+        {
+          id: 'admin-1',
+          role: 'kasir',
+          memberships: [{ id: 'membership-2', role: 'admin', status: 'ACTIVE' }],
+          branchAccesses: [],
+        },
+      ],
+      tenants: [{ id: 'tenant-1', status: 'active' }],
+      branches: [{ id: 'branch-1', tenantId: 'tenant-1', status: 'active' }],
+    })).toEqual({ assignments: [], unresolved: [] });
+  });
+});
+
+describe('executeAccessBackfill', () => {
+  it('stays read-only by default and returns the deterministic plan', async () => {
+    expect(typeof accessBackfill.executeAccessBackfill).toBe('function');
+    const database = {
+      user: { findMany: vi.fn().mockResolvedValue([]) },
+      tenant: { findMany: vi.fn().mockResolvedValue([]) },
+      branch: { findMany: vi.fn().mockResolvedValue([]) },
+      $transaction: vi.fn(),
+    };
+
+    await expect(accessBackfill.executeAccessBackfill({ database })).resolves.toEqual({
+      mode: 'dry-run',
+      assignments: [],
+      unresolved: [],
+    });
+    expect(database.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('upserts membership and branch access when apply mode is explicit', async () => {
+    expect(typeof accessBackfill.executeAccessBackfill).toBe('function');
+    const membershipUpsert = vi.fn().mockResolvedValue({});
+    const branchAccessUpsert = vi.fn().mockResolvedValue({});
+    const database = {
+      user: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: 'user-1', role: 'kasir', memberships: [], branchAccesses: [] },
+        ]),
+      },
+      tenant: { findMany: vi.fn().mockResolvedValue([{ id: 'tenant-1', status: 'active' }]) },
+      branch: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: 'branch-1', tenantId: 'tenant-1', status: 'active' },
+        ]),
+      },
+      $transaction: vi.fn(async (operation) => operation({
+        userMembership: { upsert: membershipUpsert },
+        userBranchAccess: { upsert: branchAccessUpsert },
+      })),
+    };
+
+    await expect(accessBackfill.executeAccessBackfill({ database, apply: true })).resolves.toEqual({
+      mode: 'apply',
+      assignments: [{ userId: 'user-1', tenantId: 'tenant-1', branchId: 'branch-1' }],
+      unresolved: [],
+    });
+    expect(membershipUpsert).toHaveBeenCalledOnce();
+    expect(branchAccessUpsert).toHaveBeenCalledOnce();
   });
 });

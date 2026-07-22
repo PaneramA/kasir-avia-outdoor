@@ -29,3 +29,25 @@ npm run dev
 npm run lint
 npm run build
 ```
+
+## Migrasi Akses Pengguna
+
+Versi ini menolak akses kasir yang belum memiliki membership tenant dan assignment cabang aktif. Jalankan preflight berikut di VPS setelah menarik kode baru, tetapi sebelum me-restart API.
+
+1. Tampilkan rencana tanpa mengubah database:
+
+```bash
+npm run db:backfill:access --workspace @avia/api
+```
+
+2. Periksa bagian `unresolved`. Selesaikan akun `partial-assignment`, `ambiguous-tenant`, atau `ambiguous-branch` secara manual. Jangan restart API selama daftar ini belum kosong.
+
+3. Terapkan assignment yang tidak ambigu:
+
+```bash
+npm run db:backfill:access --workspace @avia/api -- --apply
+```
+
+4. Jalankan dry-run sekali lagi. Hasil yang aman sebelum restart adalah `assignments: []` dan `unresolved: []`.
+
+Command ini idempotent. Mode default selalu dry-run; perubahan database hanya terjadi bila argumen `--apply` diberikan.
