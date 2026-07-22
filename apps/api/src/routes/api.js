@@ -62,6 +62,7 @@ import {
   updateItem,
 } from '../data/db.js';
 import { createAccessToken, verifyAccessToken } from '../auth/jwt.js';
+import { createLoginRateLimiter, resolveLoginClientIp } from '../auth/loginRateLimiter.js';
 import { needsPasswordRehash, verifyPassword } from '../auth/password.js';
 import {
   adminChangePasswordSchema,
@@ -95,9 +96,10 @@ import {
 } from '../validation/schemas.js';
 import { parsePath, readJsonBody, sendJson } from '../utils/http.js';
 
-const loginRateLimitBuckets = new Map();
 const rentalDeleteVerificationBuckets = new Map();
 const RENTAL_DELETE_VERIFICATION_TTL_MS = 5 * 60 * 1000;
+let loginRateLimiter;
+let loginRateLimiterSignature = '';
 
 function normalizeUsername(value) {
   return String(value || '').trim().toLowerCase();
@@ -117,82 +119,28 @@ function getEffectiveUserRole(user, env) {
   return role;
 }
 
-function cleanupLoginRateLimitEntry(key, entry, env, now) {
-  const maxIdleMs = Math.max(env.loginRateLimitWindowMs, env.loginRateLimitBlockMs);
-  if (now - entry.updatedAtMs > maxIdleMs) {
-    loginRateLimitBuckets.delete(key);
-    return true;
-  }
-
-  return false;
-}
-
-function getRequestClientIp(req) {
-  const forwardedFor = req.headers['x-forwarded-for'];
-  if (typeof forwardedFor === 'string' && forwardedFor.trim()) {
-    return forwardedFor.split(',')[0].trim();
-  }
-
-  return req.socket?.remoteAddress || 'unknown';
-}
-
 function createLoginRateLimitKey(type, value) {
   return `${type}:${String(value || '').trim().toLowerCase() || 'unknown'}`;
 }
 
-function getLoginRateLimitRetrySeconds(key, env) {
-  const now = Date.now();
-  const entry = loginRateLimitBuckets.get(key);
-  if (!entry) {
-    return 0;
+function getLoginRateLimiter(env) {
+  const signature = [
+    env.loginRateLimitWindowMs,
+    env.loginRateLimitBlockMs,
+    env.loginRateLimitMaxAttempts,
+    env.loginRateLimitMaxBuckets,
+  ].join(':');
+  if (!loginRateLimiter || loginRateLimiterSignature !== signature) {
+    loginRateLimiter = createLoginRateLimiter({
+      windowMs: env.loginRateLimitWindowMs,
+      blockMs: env.loginRateLimitBlockMs,
+      maxAttempts: env.loginRateLimitMaxAttempts,
+      maxBuckets: env.loginRateLimitMaxBuckets,
+    });
+    loginRateLimiterSignature = signature;
   }
 
-  if (entry.blockedUntilMs <= now) {
-    if (!cleanupLoginRateLimitEntry(key, entry, env, now)) {
-      entry.blockedUntilMs = 0;
-      loginRateLimitBuckets.set(key, entry);
-    }
-    return 0;
-  }
-
-  return Math.max(1, Math.ceil((entry.blockedUntilMs - now) / 1000));
-}
-
-function registerLoginFailure(key, env) {
-  const now = Date.now();
-  const entry = loginRateLimitBuckets.get(key) || {
-    attempts: 0,
-    windowStartedAtMs: now,
-    blockedUntilMs: 0,
-    updatedAtMs: now,
-  };
-
-  if (entry.blockedUntilMs > now) {
-    return Math.max(1, Math.ceil((entry.blockedUntilMs - now) / 1000));
-  }
-
-  if (now - entry.windowStartedAtMs >= env.loginRateLimitWindowMs) {
-    entry.attempts = 0;
-    entry.windowStartedAtMs = now;
-  }
-
-  entry.attempts += 1;
-  entry.updatedAtMs = now;
-
-  if (entry.attempts >= env.loginRateLimitMaxAttempts) {
-    entry.attempts = 0;
-    entry.blockedUntilMs = now + env.loginRateLimitBlockMs;
-  }
-
-  loginRateLimitBuckets.set(key, entry);
-
-  return entry.blockedUntilMs > now
-    ? Math.max(1, Math.ceil((entry.blockedUntilMs - now) / 1000))
-    : 0;
-}
-
-function clearLoginFailures(key) {
-  loginRateLimitBuckets.delete(key);
+  return loginRateLimiter;
 }
 
 function createRentalDeleteVerificationKey(actorUserId, rentalId) {
@@ -394,8 +342,10 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'POST' && pathname === '/api/auth/login') {
-      const loginIpKey = createLoginRateLimitKey('ip', getRequestClientIp(req));
-      const ipRetryAfterSeconds = getLoginRateLimitRetrySeconds(loginIpKey, env);
+      const limiter = getLoginRateLimiter(env);
+      const clientIp = resolveLoginClientIp(req, { trustProxy: env.trustProxy });
+      const loginIpKey = createLoginRateLimitKey('ip', clientIp);
+      const ipRetryAfterSeconds = limiter.retryAfter(loginIpKey);
       if (ipRetryAfterSeconds > 0) {
         res.setHeader('Retry-After', String(ipRetryAfterSeconds));
         sendError(res, 429, 'Too many login attempts. Please try again later.');
@@ -405,7 +355,7 @@ export async function apiRoute(req, res, env) {
       const body = loginSchema.parse(await readBody(req));
       const normalizedUsername = body.username.trim().toLowerCase();
       const loginUserKey = createLoginRateLimitKey('user', normalizedUsername);
-      const userRetryAfterSeconds = getLoginRateLimitRetrySeconds(loginUserKey, env);
+      const userRetryAfterSeconds = limiter.retryAfter(loginUserKey);
       if (userRetryAfterSeconds > 0) {
         res.setHeader('Retry-After', String(userRetryAfterSeconds));
         sendError(res, 429, 'Too many login attempts. Please try again later.');
@@ -418,8 +368,8 @@ export async function apiRoute(req, res, env) {
         ? await verifyPassword(body.password, user.passwordHash, env.passwordPepper)
         : false;
       if (!passwordMatches) {
-        const nextIpRetryAfterSeconds = registerLoginFailure(loginIpKey, env);
-        const nextUserRetryAfterSeconds = registerLoginFailure(loginUserKey, env);
+        const nextIpRetryAfterSeconds = limiter.registerFailure(loginIpKey);
+        const nextUserRetryAfterSeconds = limiter.registerFailure(loginUserKey);
         const retryAfterSeconds = Math.max(nextIpRetryAfterSeconds, nextUserRetryAfterSeconds);
         if (retryAfterSeconds > 0) {
           res.setHeader('Retry-After', String(retryAfterSeconds));
@@ -431,7 +381,7 @@ export async function apiRoute(req, res, env) {
         return true;
       }
 
-      clearLoginFailures(loginUserKey);
+      limiter.clear(loginUserKey);
 
       const membershipSummary = await getUserTenantMembershipSummary(user.id);
       if (

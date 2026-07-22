@@ -42,6 +42,11 @@ describe('top-level API routes', () => {
     await apiRoute(req, res, {
       requestBodyLimitBytes: 5,
       requestBodyTimeoutMs: 100,
+      loginRateLimitWindowMs: 60_000,
+      loginRateLimitBlockMs: 60_000,
+      loginRateLimitMaxAttempts: 5,
+      loginRateLimitMaxBuckets: 100,
+      trustProxy: false,
     });
 
     expect(res.writeHead).toHaveBeenCalledWith(413, expect.any(Object));
