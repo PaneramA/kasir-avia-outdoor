@@ -62,6 +62,7 @@ function installRentalRaceBarrier(rentalId, winnerTransactionIndex = 2) {
   const originalTransaction = prisma.$transaction.bind(prisma);
   let transactionIndex = 0;
   let initialReadCount = 0;
+  let winnerClaimCount = 0;
   let releaseInitialReads;
   let releaseWinnerClaim;
   const initialReadsComplete = new Promise((resolve) => {
@@ -71,7 +72,7 @@ function installRentalRaceBarrier(rentalId, winnerTransactionIndex = 2) {
     releaseWinnerClaim = resolve;
   });
 
-  return vi.spyOn(prisma, '$transaction').mockImplementation(async (operation, options) => {
+  const transactionSpy = vi.spyOn(prisma, '$transaction').mockImplementation(async (operation, options) => {
     if (typeof operation !== 'function') {
       return originalTransaction(operation, options);
     }
@@ -107,6 +108,7 @@ function installRentalRaceBarrier(rentalId, winnerTransactionIndex = 2) {
                 currentTransactionIndex === winnerTransactionIndex
                 && args?.where?.id === rentalId
               ) {
+                winnerClaimCount += 1;
                 releaseWinnerClaim();
               }
               return result;
@@ -129,6 +131,11 @@ function installRentalRaceBarrier(rentalId, winnerTransactionIndex = 2) {
       return operation(transactionProxy);
     }, options);
   });
+
+  return {
+    transactionSpy,
+    getState: () => ({ transactionIndex, initialReadCount, winnerClaimCount }),
+  };
 }
 
 beforeAll(async () => {
@@ -542,7 +549,7 @@ describe('critical API workflow integration', () => {
       expect((await prisma.rental.findUnique({ where: { id: deleteReturnRaceId } })).deletedAt).toBeNull();
       expect((await prisma.item.findUnique({ where: { id: secondItemId } })).stock).toBe(1);
 
-      const transactionSpy = installRentalRaceBarrier(deleteReturnRaceId);
+      const returnFirstBarrier = installRentalRaceBarrier(deleteReturnRaceId);
       let deleteReturnRaceResults;
       try {
         deleteReturnRaceResults = await Promise.allSettled([
@@ -555,8 +562,13 @@ describe('critical API workflow integration', () => {
           processReturn({ rentalId: deleteReturnRaceId }, { tenantId, branchId }),
         ]);
       } finally {
-        transactionSpy.mockRestore();
+        returnFirstBarrier.transactionSpy.mockRestore();
       }
+      expect(returnFirstBarrier.getState()).toEqual({
+        transactionIndex: 2,
+        initialReadCount: 2,
+        winnerClaimCount: 1,
+      });
       expect(deleteReturnRaceResults.map((result) => result.status)).toEqual(['fulfilled', 'fulfilled']);
       expect((await prisma.item.findUnique({ where: { id: secondItemId } })).stock).toBe(2);
       const deleteReturnAudit = await prisma.auditLog.findFirst({
@@ -591,7 +603,7 @@ describe('critical API workflow integration', () => {
       });
       expect(deleteFirstRaceRental.status).toBe(201);
       const deleteFirstRaceId = deleteFirstRaceRental.body.data.id;
-      const deleteFirstSpy = installRentalRaceBarrier(deleteFirstRaceId);
+      const deleteFirstBarrier = installRentalRaceBarrier(deleteFirstRaceId);
       let deleteFirstRaceResults;
       try {
         deleteFirstRaceResults = await Promise.allSettled([
@@ -604,9 +616,18 @@ describe('critical API workflow integration', () => {
           }),
         ]);
       } finally {
-        deleteFirstSpy.mockRestore();
+        deleteFirstBarrier.transactionSpy.mockRestore();
       }
+      expect(deleteFirstBarrier.getState()).toEqual({
+        transactionIndex: 2,
+        initialReadCount: 2,
+        winnerClaimCount: 1,
+      });
       expect(deleteFirstRaceResults.map((result) => result.status)).toEqual(['rejected', 'fulfilled']);
+      expect(deleteFirstRaceResults[0]).toMatchObject({
+        status: 'rejected',
+        reason: expect.objectContaining({ message: 'Rental already returned' }),
+      });
       expect((await prisma.item.findUnique({ where: { id: secondItemId } })).stock).toBe(2);
       expect(await prisma.returnRecord.count({ where: { rentalId: deleteFirstRaceId } })).toBe(0);
       expect(await prisma.auditLog.count({
