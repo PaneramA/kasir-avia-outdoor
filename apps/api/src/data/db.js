@@ -4147,6 +4147,24 @@ export async function deleteRentalByAdmin({ actorUserId, rentalId, reason, conte
       throw new Error('Rental already deleted');
     }
 
+    const claim = await tx.rental.updateMany({
+      where: {
+        id: rental.id,
+        tenantId,
+        branchId,
+        deletedAt: null,
+      },
+      data: {
+        deletedAt: new Date(),
+        deletedByUserId: actorId,
+        deleteReason,
+      },
+    });
+
+    if (claim.count !== 1) {
+      throw new Error('Rental already deleted');
+    }
+
     if (isActiveRentalStatus(rental.status) && !rental.returnRecord) {
       for (const rentalItem of rental.items) {
         await tx.item.updateMany({
@@ -4160,17 +4178,16 @@ export async function deleteRentalByAdmin({ actorUserId, rentalId, reason, conte
       }
     }
 
-    const updated = await tx.rental.update({
+    const updated = await tx.rental.findUnique({
       where: { id: rental.id },
-      data: {
-        deletedAt: new Date(),
-        deletedByUserId: actorId,
-        deleteReason,
-      },
       include: {
         items: true,
       },
     });
+
+    if (!updated) {
+      throw new Error('Rental not found');
+    }
 
     await tx.auditLog.create({
       data: {

@@ -1,7 +1,12 @@
 import { Readable } from 'node:stream';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getEnv } from '../config/env.js';
-import { deleteTenantForPlatformAdmin, initDatabase } from '../data/db.js';
+import {
+  deleteRentalByAdmin,
+  deleteTenantForPlatformAdmin,
+  initDatabase,
+  processReturn,
+} from '../data/db.js';
 import { prisma } from '../data/prisma.js';
 import { apiRoute } from './api.js';
 
@@ -349,6 +354,60 @@ describe('critical API workflow integration', () => {
       });
       expect(inventory.status).toBe(200);
       expect(inventory.body.data.find((item) => item.id === itemId)?.stock).toBe(7);
+
+      const deleteRaceRental = await callApi('POST', '/api/rentals', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          customer: { name: 'Delete Race', phone: '081277777771', guarantee: 'KTP' },
+          items: [{ id: secondItemId, qty: 1 }],
+          duration: 1,
+          payment: { status: 'LUNAS', method: 'TUNAI', paidAmount: 40_000 },
+        },
+      });
+      expect(deleteRaceRental.status).toBe(201);
+      const deleteRaceId = deleteRaceRental.body.data.id;
+      const deleteRaceResults = await Promise.allSettled([
+        deleteRentalByAdmin({
+          actorUserId: ownerUserId,
+          rentalId: deleteRaceId,
+          reason: 'Concurrency test',
+          context: { tenantId, branchId },
+        }),
+        deleteRentalByAdmin({
+          actorUserId: ownerUserId,
+          rentalId: deleteRaceId,
+          reason: 'Concurrency test',
+          context: { tenantId, branchId },
+        }),
+      ]);
+      expect(deleteRaceResults.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect((await prisma.item.findUnique({ where: { id: secondItemId } })).stock).toBe(2);
+      expect(await prisma.auditLog.count({
+        where: { action: 'rental.delete', targetId: deleteRaceId },
+      })).toBe(1);
+
+      const returnRaceRental = await callApi('POST', '/api/rentals', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          customer: { name: 'Return Race', phone: '081277777772', guarantee: 'KTP' },
+          items: [{ id: secondItemId, qty: 1 }],
+          duration: 1,
+          payment: { status: 'LUNAS', method: 'TUNAI', paidAmount: 40_000 },
+        },
+      });
+      expect(returnRaceRental.status).toBe(201);
+      const returnRaceId = returnRaceRental.body.data.id;
+      const returnRaceResults = await Promise.allSettled([
+        processReturn({ rentalId: returnRaceId }, { tenantId, branchId }),
+        processReturn({ rentalId: returnRaceId }, { tenantId, branchId }),
+      ]);
+      expect(returnRaceResults.some((result) => result.status === 'fulfilled')).toBe(true);
+      expect((await prisma.item.findUnique({ where: { id: secondItemId } })).stock).toBe(2);
+      expect(await prisma.returnRecord.count({ where: { rentalId: returnRaceId } })).toBe(1);
 
       const deletion = await callApi('DELETE', `/api/tenants/${tenantId}`, {
         token: adminToken,
