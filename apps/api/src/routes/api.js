@@ -65,6 +65,7 @@ import { createAccessToken, verifyAccessToken } from '../auth/jwt.js';
 import { assertFeatureEnabled, assertTenantManager } from '../auth/authorization.js';
 import { createLoginRateLimiter, resolveLoginClientIp } from '../auth/loginRateLimiter.js';
 import { needsPasswordRehash, verifyPassword } from '../auth/password.js';
+import { createExpiringVerificationStore } from '../auth/verificationStore.js';
 import {
   adminChangePasswordSchema,
   createCategorySchema,
@@ -97,8 +98,11 @@ import {
 } from '../validation/schemas.js';
 import { parsePath, readJsonBody, sendJson } from '../utils/http.js';
 
-const rentalDeleteVerificationBuckets = new Map();
 const RENTAL_DELETE_VERIFICATION_TTL_MS = 5 * 60 * 1000;
+const rentalDeleteVerifications = createExpiringVerificationStore({
+  ttlMs: RENTAL_DELETE_VERIFICATION_TTL_MS,
+  maxEntries: 1_000,
+});
 let loginRateLimiter;
 let loginRateLimiterSignature = '';
 
@@ -150,27 +154,7 @@ function createRentalDeleteVerificationKey(actorUserId, rentalId) {
 
 function markRentalDeleteVerified(actorUserId, rentalId) {
   const key = createRentalDeleteVerificationKey(actorUserId, rentalId);
-  rentalDeleteVerificationBuckets.set(key, Date.now() + RENTAL_DELETE_VERIFICATION_TTL_MS);
-}
-
-function clearRentalDeleteVerification(actorUserId, rentalId) {
-  const key = createRentalDeleteVerificationKey(actorUserId, rentalId);
-  rentalDeleteVerificationBuckets.delete(key);
-}
-
-function isRentalDeleteVerified(actorUserId, rentalId) {
-  const key = createRentalDeleteVerificationKey(actorUserId, rentalId);
-  const expiresAt = rentalDeleteVerificationBuckets.get(key);
-  if (!expiresAt) {
-    return false;
-  }
-
-  if (Date.now() > expiresAt) {
-    rentalDeleteVerificationBuckets.delete(key);
-    return false;
-  }
-
-  return true;
+  rentalDeleteVerifications.mark(key);
 }
 
 function sendError(res, statusCode, message, details) {
@@ -1086,7 +1070,8 @@ export async function apiRoute(req, res, env) {
         throw new Error(`Confirmation text must be exactly: HAPUS ${rentalId}`);
       }
 
-      if (!isRentalDeleteVerified(adminUser.id, rentalId)) {
+      const verificationKey = createRentalDeleteVerificationKey(adminUser.id, rentalId);
+      if (!rentalDeleteVerifications.consume(verificationKey)) {
         throw new Error('Password verification expired. Please verify again.');
       }
 
@@ -1097,7 +1082,6 @@ export async function apiRoute(req, res, env) {
         context,
       });
 
-      clearRentalDeleteVerification(adminUser.id, rentalId);
       sendSuccess(res, 200, deleted);
       return true;
     }
