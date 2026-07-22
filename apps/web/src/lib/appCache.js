@@ -3,7 +3,9 @@ export const APP_CACHE_KEYS = {
   tenants: 'app/tenants',
   branches: (tenantId = 'current') => ['app/branches', tenantId],
   items: (tenantId, branchId) => ['app/items', tenantId, branchId],
-  inventoryPage: (tenantId, branchId, query = '', cursor = '') => ['app/inventory-page', tenantId, branchId, query, cursor],
+  inventoryPage: (tenantId, branchId, query = '', cursor = '', status = 'active') => [
+    'app/inventory-page', tenantId, branchId, query, cursor, status,
+  ],
   categories: (tenantId) => ['app/categories', tenantId],
   rentals: (tenantId, branchId) => ['app/rentals', tenantId, branchId],
   dashboard: (tenantId, branchId, recentStatus = '') => ['app/dashboard', tenantId, branchId, recentStatus],

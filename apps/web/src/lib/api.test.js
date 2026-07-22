@@ -78,6 +78,25 @@ describe('web API client state and requests', () => {
     expect(fetch.mock.calls[0][0]).toBe('http://localhost:4000/api/customers?q=Fuad%20%26%20Avia');
   });
 
+  it('requests archived inventory pages and restores an item', async () => {
+    localStorage.setItem('avia_api_token', 'token-1');
+    fetch
+      .mockResolvedValueOnce(jsonResponse({ items: [], nextCursor: null }))
+      .mockResolvedValueOnce(jsonResponse({ id: 'item-1', archivedAt: null }));
+    const api = await loadApi();
+
+    await api.fetchItemsPage({ query: 'tenda', status: 'archived', limit: 25 });
+    expect(fetch.mock.calls[0][0]).toBe(
+      'http://localhost:4000/api/items/page?query=tenda&limit=25&status=archived',
+    );
+
+    await expect(api.restoreItem('item-1')).resolves.toMatchObject({ id: 'item-1', archivedAt: null });
+    expect(fetch.mock.calls[1]).toEqual([
+      'http://localhost:4000/api/items/item-1/restore',
+      expect.objectContaining({ method: 'POST' }),
+    ]);
+  });
+
   it('normalizes historical returned rental statuses', async () => {
     localStorage.setItem('avia_api_token', 'token-1');
     fetch.mockResolvedValue(jsonResponse([

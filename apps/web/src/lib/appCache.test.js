@@ -18,6 +18,9 @@ describe('application SWR cache policy', () => {
     expect(APP_CACHE_KEYS.inventoryPage('tenant-a', 'branch-a', 'tenda')).not.toEqual(
       APP_CACHE_KEYS.inventoryPage('tenant-a', 'branch-a', 'carrier'),
     )
+    expect(APP_CACHE_KEYS.inventoryPage('tenant-a', 'branch-a', '', '', 'active')).not.toEqual(
+      APP_CACHE_KEYS.inventoryPage('tenant-a', 'branch-a', '', '', 'archived'),
+    )
   })
 
   it('keeps cached data while revalidating safely', () => {

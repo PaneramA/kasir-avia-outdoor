@@ -32,6 +32,7 @@ import {
   processReturn,
   removeCategory,
   removeItem,
+  restoreItem,
   updateCurrentTenantSettings,
   updateCurrentBranchSettings,
   updateItem,
@@ -502,6 +503,22 @@ function App() {
     [itemQuery, mutateCache],
   )
 
+  const handleRestoreItem = useCallback(
+    async (id) => {
+      const restored = await restoreItem(id)
+      void itemQuery.mutate()
+      void mutateCache(
+        (key) => Array.isArray(key) && (
+          key[0] === 'app/inventory-page' || key[0] === 'app/dashboard'
+        ),
+        undefined,
+        { revalidate: true },
+      )
+      return restored
+    },
+    [itemQuery, mutateCache],
+  )
+
   const handleCreateCategory = useCallback(
     async (name) => {
       const createdName = await createCategory(name)
@@ -812,6 +829,7 @@ function App() {
                   onSaveItem={handleCreateOrUpdateItem}
                   onImportItems={handleImportItems}
                   onDeleteItem={handleDeleteItem}
+                  onRestoreItem={handleRestoreItem}
                   onAddCategory={handleCreateCategory}
                   onDeleteCategory={handleDeleteCategory}
                 />

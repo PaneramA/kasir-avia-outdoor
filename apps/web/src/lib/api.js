@@ -247,11 +247,12 @@ export function fetchItems() {
   return request('/api/items', {}, { auth: true });
 }
 
-export function fetchItemsPage({ query = '', cursor = '', limit = 50 } = {}) {
+export function fetchItemsPage({ query = '', cursor = '', limit = 50, status = 'active' } = {}) {
   const params = new URLSearchParams();
   if (query) params.set('query', query);
   if (cursor) params.set('cursor', cursor);
   params.set('limit', String(limit));
+  params.set('status', status);
   return request(`/api/items/page?${params.toString()}`, {}, { auth: true });
 }
 
@@ -272,6 +273,12 @@ export function updateItem(id, item) {
 export function removeItem(id) {
   return request(`/api/items/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+  }, { auth: true });
+}
+
+export function restoreItem(id) {
+  return request(`/api/items/${encodeURIComponent(id)}/restore`, {
+    method: 'POST',
   }, { auth: true });
 }
 
