@@ -21,6 +21,7 @@ coverage
 # API runtime data
 apps/api/data/db.json
 backups/
+.worktrees/
 
 # Env and local files
 .env
