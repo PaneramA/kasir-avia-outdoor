@@ -1673,13 +1673,11 @@ export async function createRental(payload, context) {
       }
 
       const decrementResult = await tx.item.updateMany({
-        where: {
+        where: withTenantBranchScope({
           id: item.id,
-          tenantId,
-          branchId,
           archivedAt: null,
           stock: { gte: request.qty },
-        },
+        }, context),
         data: {
           stock: {
             decrement: request.qty,

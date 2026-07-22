@@ -184,6 +184,37 @@ describe('critical API workflow integration', () => {
         expect(rental.status, `rental ke-${index} gagal: ${rental.body?.message || ''}`).toBe(201);
       }
 
+      await prisma.item.update({
+        where: { id: secondItemId },
+        data: { branchId: null },
+      });
+      const tenantWideCheckout = await callApi('POST', '/api/rentals', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          customer: {
+            name: 'Customer Tenant Wide',
+            phone: '081288888888',
+            address: 'Alamat Tenant',
+            guarantee: 'KTP',
+          },
+          items: [{ id: secondItemId, qty: 1 }],
+          duration: 1,
+          payment: { status: 'LUNAS', method: 'TUNAI', paidAmount: 40_000 },
+        },
+      });
+      expect(tenantWideCheckout.status).toBe(201);
+      await prisma.$transaction([
+        prisma.item.update({
+          where: { id: secondItemId },
+          data: { stock: { increment: 1 } },
+        }),
+        prisma.rental.delete({
+          where: { id: tenantWideCheckout.body.data.id },
+        }),
+      ]);
+
       const rentalItemCountBeforeArchive = await prisma.rentalItem.count({
         where: { itemId },
       });
