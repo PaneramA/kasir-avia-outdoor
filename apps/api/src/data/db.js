@@ -154,6 +154,7 @@ function toItemDto(item) {
     stock: item.stock,
     price: item.price,
     image: item.image || '',
+    archivedAt: item.archivedAt ? item.archivedAt.toISOString() : null,
   };
 }
 
@@ -877,7 +878,7 @@ export async function deleteCategory(name, context) {
 
 export async function listItems(context) {
   const items = await prisma.item.findMany({
-    where: withTenantBranchScope({}, context),
+    where: withTenantBranchScope({ archivedAt: null }, context),
     include: { category: true },
     orderBy: { createdAt: 'asc' },
   });
@@ -885,10 +886,19 @@ export async function listItems(context) {
   return items.map(toItemDto);
 }
 
-export async function listItemsPage({ query, cursor, limit = 50 } = {}, context) {
+function itemArchiveWhere(rawStatus = 'active') {
+  const status = String(rawStatus || 'active').trim().toLowerCase();
+  if (status === 'active') return { archivedAt: null };
+  if (status === 'archived') return { archivedAt: { not: null } };
+  if (status === 'all') return {};
+  throw new Error('Item status is invalid');
+}
+
+export async function listItemsPage({ query, cursor, limit = 50, status = 'active' } = {}, context) {
   const keyword = String(query || '').trim();
   const pageSize = Math.min(100, Math.max(1, Math.trunc(Number(limit) || 50)));
   const where = withTenantBranchScope({
+    ...itemArchiveWhere(status),
     ...(keyword ? {
       OR: [
         { name: { contains: keyword, mode: 'insensitive' } },
@@ -1040,7 +1050,7 @@ export async function updateItem(id, payload, context) {
   return toItemDto(updated);
 }
 
-export async function deleteItem(id, context) {
+async function findScopedItem(id, context) {
   const targetId = String(id);
 
   const existing = await prisma.item.findUnique({
@@ -1060,45 +1070,88 @@ export async function deleteItem(id, context) {
     throw new Error('Forbidden');
   }
 
-  const usages = await prisma.rentalItem.findMany({
-    where: {
-      itemId: targetId,
-      rental: withTenantBranchScope({}, context, { includeBranchNull: false }),
-    },
-    select: {
-      id: true,
-      rental: {
-        select: {
-          status: true,
-          deletedAt: true,
-        },
-      },
-    },
-  });
+  return existing;
+}
 
-  const activeUsageCount = usages.reduce((count, usage) => (
-    usage.rental?.deletedAt === null && isActiveRentalStatus(usage.rental?.status) ? count + 1 : count
-  ), 0);
-
-  if (activeUsageCount > 0) {
-    throw new Error('Item is used by active rentals');
+export async function archiveItem(id, context) {
+  const existing = await findScopedItem(id, context);
+  const actorUserId = String(context?.actorUserId || '').trim();
+  if (!actorUserId) {
+    throw new Error('Actor user id is required');
   }
 
-  if (usages.length > 0) {
-    await prisma.rentalItem.deleteMany({
-      where: {
-        id: {
-          in: usages.map((usage) => usage.id),
-        },
-      },
+  if (existing.archivedAt) {
+    return toItemDto(existing);
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const archivedAt = new Date();
+    const claimed = await tx.item.updateMany({
+      where: { id: existing.id, archivedAt: null },
+      data: { archivedAt },
     });
+
+    if (claimed.count === 1) {
+      await tx.auditLog.create({
+        data: {
+          actorUserId,
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          action: 'item.archive',
+          targetType: 'item',
+          targetId: existing.id,
+          snapshotBefore: toItemDto(existing),
+        },
+      });
+    }
+
+    const archived = await tx.item.findUnique({
+      where: { id: existing.id },
+      include: { category: true },
+    });
+
+    return toItemDto(archived);
+  });
+}
+
+export async function restoreItem(id, context) {
+  const existing = await findScopedItem(id, context);
+  const actorUserId = String(context?.actorUserId || '').trim();
+  if (!actorUserId) {
+    throw new Error('Actor user id is required');
   }
 
-  await prisma.item.delete({
-    where: { id: targetId },
-  });
+  if (!existing.archivedAt) {
+    return toItemDto(existing);
+  }
 
-  return toItemDto(existing);
+  return prisma.$transaction(async (tx) => {
+    const claimed = await tx.item.updateMany({
+      where: { id: existing.id, archivedAt: { not: null } },
+      data: { archivedAt: null },
+    });
+
+    if (claimed.count === 1) {
+      await tx.auditLog.create({
+        data: {
+          actorUserId,
+          tenantId: context.tenantId,
+          branchId: context.branchId,
+          action: 'item.restore',
+          targetType: 'item',
+          targetId: existing.id,
+          snapshotBefore: toItemDto(existing),
+        },
+      });
+    }
+
+    const restored = await tx.item.findUnique({
+      where: { id: existing.id },
+      include: { category: true },
+    });
+
+    return toItemDto(restored);
+  });
 }
 
 export async function listRentals({ status } = {}, context) {
@@ -1209,7 +1262,7 @@ export async function getDashboardSummary({ recentStatus } = {}, context) {
 
   const [stock, activeRentals, itemsOut, finalTotal, originalTotal, recentRentals] = await Promise.all([
     prisma.item.aggregate({
-      where: withTenantBranchScope({}, context),
+      where: withTenantBranchScope({ archivedAt: null }, context),
       _sum: { stock: true },
     }),
     prisma.rental.count({ where: activeRentalWhere }),

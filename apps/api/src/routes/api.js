@@ -2,6 +2,7 @@ import { ZodError } from 'zod';
 import {
   changeOwnPassword,
   changeUserPasswordByAdmin,
+  archiveItem,
   createCategory,
   upsertCustomer,
   createItem,
@@ -11,7 +12,6 @@ import {
   createUser,
   deleteRentalByAdmin,
   deleteCategory,
-  deleteItem,
   deleteUserByAdmin,
   deleteTenantForPlatformAdmin,
   findUserById,
@@ -34,6 +34,7 @@ import {
   listPlansForPlatformAdmin,
   upsertBranchAccessForUser,
   removeBranchAccessForUser,
+  restoreItem,
   listTenantMembershipsForUser,
   upsertTenantMembershipForUser,
   updateTenantMembershipForUser,
@@ -1003,12 +1004,21 @@ export async function apiRoute(req, res, env) {
       return true;
     }
 
+    if (req.method === 'POST' && pathname.startsWith('/api/items/') && pathname.endsWith('/restore')) {
+      const user = await ensureAuth();
+      const context = await ensureRequestContext();
+      const itemId = decodeURIComponent(pathname.replace('/api/items/', '').replace('/restore', ''));
+      const restored = await restoreItem(itemId, { ...context, actorUserId: user.id });
+      sendSuccess(res, 200, restored);
+      return true;
+    }
+
     if (req.method === 'DELETE' && pathname.startsWith('/api/items/')) {
-      await ensureAuth();
+      const user = await ensureAuth();
       const context = await ensureRequestContext();
       const itemId = decodeURIComponent(pathname.replace('/api/items/', ''));
-      const removed = await deleteItem(itemId, context);
-      sendSuccess(res, 200, removed);
+      const archived = await archiveItem(itemId, { ...context, actorUserId: user.id });
+      sendSuccess(res, 200, archived);
       return true;
     }
 
@@ -1034,6 +1044,7 @@ export async function apiRoute(req, res, env) {
         query: searchParams.get('query') || undefined,
         cursor: searchParams.get('cursor') || undefined,
         limit: searchParams.get('limit') || undefined,
+        status: searchParams.get('status') || undefined,
       }, context));
       return true;
     }

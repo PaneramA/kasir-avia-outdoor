@@ -184,6 +184,48 @@ describe('critical API workflow integration', () => {
         expect(rental.status, `rental ke-${index} gagal: ${rental.body?.message || ''}`).toBe(201);
       }
 
+      const rentalItemCountBeforeArchive = await prisma.rentalItem.count({
+        where: { itemId },
+      });
+      const archived = await callApi('DELETE', `/api/items/${itemId}`, {
+        token: ownerToken, tenantId, branchId,
+      });
+      expect(archived.status).toBe(200);
+      expect(archived.body.data.archivedAt).toBeTruthy();
+      expect(await prisma.rentalItem.count({ where: { itemId } })).toBe(rentalItemCountBeforeArchive);
+      expect(await prisma.auditLog.count({
+        where: { action: 'item.archive', targetId: itemId },
+      })).toBe(1);
+
+      const activeItems = await callApi('GET', '/api/items', {
+        token: ownerToken, tenantId, branchId,
+      });
+      expect(activeItems.status).toBe(200);
+      expect(activeItems.body.data.some((item) => item.id === itemId)).toBe(false);
+
+      const dashboardWithArchivedItem = await callApi('GET', '/api/dashboard/summary', {
+        token: ownerToken, tenantId, branchId,
+      });
+      expect(dashboardWithArchivedItem.status).toBe(200);
+      expect(dashboardWithArchivedItem.body.data.stats.availableStock).toBe(2);
+
+      const archivedItems = await callApi('GET', '/api/items/page?status=archived', {
+        token: ownerToken, tenantId, branchId,
+      });
+      expect(archivedItems.status).toBe(200);
+      expect(archivedItems.body.data.items).toEqual([
+        expect.objectContaining({ id: itemId, archivedAt: expect.any(String) }),
+      ]);
+
+      const restored = await callApi('POST', `/api/items/${itemId}/restore`, {
+        token: ownerToken, tenantId, branchId,
+      });
+      expect(restored.status).toBe(200);
+      expect(restored.body.data.archivedAt).toBeNull();
+      expect(await prisma.auditLog.count({
+        where: { action: 'item.restore', targetId: itemId },
+      })).toBe(1);
+
       const rentals = await callApi('GET', '/api/rentals', {
         token: ownerToken, tenantId, branchId,
       });
