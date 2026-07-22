@@ -4147,12 +4147,19 @@ export async function deleteRentalByAdmin({ actorUserId, rentalId, reason, conte
       throw new Error('Rental already deleted');
     }
 
-    const claim = await tx.rental.updateMany({
+    const activeClaim = await tx.rental.updateMany({
       where: {
         id: rental.id,
         tenantId,
         branchId,
         deletedAt: null,
+        returnRecord: { is: null },
+        NOT: [...RETURNED_RENTAL_STATUSES].map((status) => ({
+          status: {
+            equals: status,
+            mode: 'insensitive',
+          },
+        })),
       },
       data: {
         deletedAt: new Date(),
@@ -4161,11 +4168,27 @@ export async function deleteRentalByAdmin({ actorUserId, rentalId, reason, conte
       },
     });
 
-    if (claim.count !== 1) {
-      throw new Error('Rental already deleted');
+    if (activeClaim.count === 0) {
+      const inactiveClaim = await tx.rental.updateMany({
+        where: {
+          id: rental.id,
+          tenantId,
+          branchId,
+          deletedAt: null,
+        },
+        data: {
+          deletedAt: new Date(),
+          deletedByUserId: actorId,
+          deleteReason,
+        },
+      });
+
+      if (inactiveClaim.count !== 1) {
+        throw new Error('Rental already deleted');
+      }
     }
 
-    if (isActiveRentalStatus(rental.status) && !rental.returnRecord) {
+    if (activeClaim.count === 1) {
       for (const rentalItem of rental.items) {
         await tx.item.updateMany({
           where: { id: rentalItem.itemId },
@@ -4182,6 +4205,7 @@ export async function deleteRentalByAdmin({ actorUserId, rentalId, reason, conte
       where: { id: rental.id },
       include: {
         items: true,
+        returnRecord: true,
       },
     });
 
@@ -4197,7 +4221,7 @@ export async function deleteRentalByAdmin({ actorUserId, rentalId, reason, conte
         action: 'rental.delete',
         targetType: 'rental',
         targetId: rental.id,
-        snapshotBefore: toAuditRentalSnapshot(rental),
+        snapshotBefore: toAuditRentalSnapshot(updated),
       },
     });
 
