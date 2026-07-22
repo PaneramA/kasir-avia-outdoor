@@ -38,6 +38,23 @@ describe('createLoginRateLimiter', () => {
     expect(limiter.retryAfter('user-1')).toBe(0);
   });
 
+  it('preserves an active block after the failure window expires', () => {
+    let now = 0;
+    const limiter = createLoginRateLimiter({
+      windowMs: 1_000,
+      blockMs: 2_000,
+      maxAttempts: 1,
+      maxBuckets: 10,
+      now: () => now,
+    });
+
+    expect(limiter.registerFailure('user-1')).toBe(2);
+    now = 1_000;
+    expect(limiter.retryAfter('user-1')).toBe(1);
+    now = 2_000;
+    expect(limiter.retryAfter('user-1')).toBe(0);
+  });
+
   it('resets attempts after block expiry and after the failure window expires', () => {
     let now = 0;
     const limiter = createLoginRateLimiter({
