@@ -129,6 +129,17 @@ describe('critical API workflow integration', () => {
       expect(secondItemResponse.status).toBe(201);
       const secondItemId = secondItemResponse.body.data.id;
 
+      const archivedAt = new Date('2026-07-22T00:00:00.000Z');
+      const archivedItem = await prisma.item.update({
+        where: { id: secondItemId },
+        data: { archivedAt },
+      });
+      expect(archivedItem.archivedAt).toEqual(archivedAt);
+      await prisma.item.update({
+        where: { id: secondItemId },
+        data: { archivedAt: null },
+      });
+
       const inventoryFirstPage = await callApi('GET', '/api/items/page?limit=1&query=Tenda', {
         token: ownerToken, tenantId, branchId,
       });
