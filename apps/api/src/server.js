@@ -1,5 +1,9 @@
 import { createServer } from 'node:http';
-import { getEnv, getSecurityWarnings } from './config/env.js';
+import {
+  assertSecureProductionConfig,
+  getEnv,
+  getSecurityWarnings,
+} from './config/env.js';
 import { initDatabase } from './data/db.js';
 import { withCors } from './middleware/cors.js';
 import { attachRequestLogger } from './middleware/logger.js';
@@ -8,6 +12,7 @@ import { healthRoute } from './routes/health.js';
 import { sendJson } from './utils/http.js';
 
 const env = getEnv();
+assertSecureProductionConfig(env);
 const shouldLogRequests = env.nodeEnv !== 'production';
 const securityWarnings = getSecurityWarnings(env);
 

@@ -22,6 +22,7 @@ coverage
 apps/api/data/db.json
 backups/
 .worktrees/
+.superpowers/
 
 # Env and local files
 .env

@@ -21,6 +21,23 @@ function parseOriginList(raw) {
     .filter(Boolean);
 }
 
+function toStrictBoolean(value, fallback = false) {
+  if (value == null || String(value).trim() === '') {
+    return fallback;
+  }
+
+  return String(value).trim().toLowerCase() === 'true';
+}
+
+function usesDefaultDatabaseCredentials(databaseUrl) {
+  try {
+    const parsed = new URL(databaseUrl);
+    return parsed.username === 'postgres' && parsed.password === 'postgres';
+  } catch {
+    return false;
+  }
+}
+
 export function getEnv() {
   return {
     port: Number(process.env.PORT || 4000),
@@ -35,12 +52,22 @@ export function getEnv() {
     loginRateLimitMaxAttempts: toPositiveInteger(process.env.LOGIN_RATE_LIMIT_MAX_ATTEMPTS, 5),
     loginRateLimitWindowMs: toPositiveInteger(process.env.LOGIN_RATE_LIMIT_WINDOW_MS, 10 * 60 * 1000),
     loginRateLimitBlockMs: toPositiveInteger(process.env.LOGIN_RATE_LIMIT_BLOCK_MS, 15 * 60 * 1000),
+    loginRateLimitMaxBuckets: toPositiveInteger(process.env.LOGIN_RATE_LIMIT_MAX_BUCKETS, 10_000),
+    requestBodyLimitBytes: toPositiveInteger(process.env.REQUEST_BODY_LIMIT_BYTES, 1_048_576),
+    requestBodyTimeoutMs: toPositiveInteger(process.env.REQUEST_BODY_TIMEOUT_MS, 10_000),
+    trustProxy: toStrictBoolean(process.env.TRUST_PROXY, false),
   };
 }
 
 export function getSecurityWarnings(env) {
   const warnings = [];
   const corsOrigins = parseOriginList(env.corsOrigin);
+
+  if (!String(env.databaseUrl || '').trim()) {
+    warnings.push('DATABASE_URL kosong.');
+  } else if (usesDefaultDatabaseCredentials(env.databaseUrl)) {
+    warnings.push('DATABASE_URL masih menggunakan kredensial postgres default.');
+  }
 
   if (INSECURE_JWT_SECRETS.has(env.jwtSecret) || env.jwtSecret.length < 16) {
     warnings.push('JWT_SECRET masih default atau terlalu pendek.');
@@ -75,4 +102,15 @@ export function getSecurityWarnings(env) {
   }
 
   return warnings;
+}
+
+export function assertSecureProductionConfig(env) {
+  if (env.nodeEnv !== 'production') {
+    return;
+  }
+
+  const warnings = getSecurityWarnings(env);
+  if (warnings.length > 0) {
+    throw new Error(`Insecure production configuration:\n- ${warnings.join('\n- ')}`);
+  }
 }
