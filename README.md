@@ -66,7 +66,7 @@ gzip_types application/json;
 
 ## Smoke Test Beban API
 
-Jalankan dari VPS atau staging yang mengarah ke API dan database yang sama. Mode default hanya menguji pembacaan dashboard, inventaris, dan riwayat transaksi.
+Jalankan dari VPS atau staging. Mode default hanya menguji pembacaan dashboard, inventaris, dan riwayat transaksi. Setiap request memiliki timeout 10 detik; ubah secara terbatas dengan `LOAD_TEST_REQUEST_TIMEOUT_MS` bila diperlukan.
 
 ```bash
 API_BASE_URL=http://127.0.0.1:4000 \
@@ -84,4 +84,24 @@ LOAD_TEST_ITEM_ID=<item-id> LOAD_TEST_CYCLE_COUNT=5 \
 npm run test:load --workspace @avia/api
 ```
 
-Gate gagal bila error rate di atas 1%, p95 pembacaan di atas 1500 ms, atau stok akhir berbeda dari stok awal. Data transaksi memakai ID berawalan `LOAD-` dan hanya record yang dibuat oleh proses tersebut yang dibersihkan.
+Mode transaksi hanya memakai `API_BASE_URL`: pembacaan stok, checkout, return cleanup, dan verifikasi stok akhir tidak mengakses `DATABASE_URL`. Ini mencegah cleanup berjalan pada database yang berbeda dari API yang sedang diuji. Transaksi `LOAD-...` yang sudah dikembalikan tetap ada di riwayat sebagai audit trail.
+
+Sebelum checkout pertama, skrip mencetak run prefix dan menyimpan manifest tanpa token/password di `.load-smoke-recovery/`. `SIGINT`, `SIGTERM`, request timeout, dan kegagalan lain memicu cleanup terbatas waktu. Manifest hanya dihapus setelah return cleanup berhasil dan stok kembali ke nilai awal. Bila manifest tertinggal, jangan mulai mode transaksi baru; pulihkan dengan konfigurasi API dan kredensial yang sama:
+
+```bash
+LOAD_TEST_RECOVERY_FILE="<path-manifest>" \
+npm run test:load --workspace @avia/api
+```
+
+Gunakan `LOAD_TEST_CLEANUP_TIMEOUT_MS` untuk batas cleanup (default 20000 ms). Gate gagal bila error rate di atas 1%, p95 pembacaan di atas 1500 ms, cleanup gagal, atau stok akhir berbeda dari stok awal.
+
+Verifikasi gzip public proxy bersifat eksplisit agar akses langsung ke Node di localhost tidak gagal palsu. Arahkan ke URL HTTPS publik dan endpoint JSON yang responsnya cukup besar untuk melewati `gzip_min_length`:
+
+```bash
+API_BASE_URL=https://kasir.example.com \
+LOAD_TEST_EXPECT_GZIP=true \
+LOAD_TEST_GZIP_PATH=/api/items \
+npm run test:load --workspace @avia/api
+```
+
+Saat aktif, gate memeriksa header response `Content-Encoding` sebelum body dibaca dan mewajibkan nilai `gzip`.
