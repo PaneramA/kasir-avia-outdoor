@@ -27,8 +27,9 @@ export function planAccessBackfill({
   };
 
   for (const user of Array.isArray(users) ? users : []) {
+    const globalRole = normalize(user?.role);
     if (
-      normalize(user?.role) === 'superuser'
+      globalRole === 'superuser'
       && configuredAdmin
       && normalize(user?.username) === configuredAdmin
     ) {
@@ -54,7 +55,11 @@ export function planAccessBackfill({
         }
 
         const membershipRole = normalize(membership?.role);
-        if (membershipRole === 'owner' || membershipRole === 'admin') {
+        if (
+          globalRole === 'admin'
+          || membershipRole === 'owner'
+          || membershipRole === 'admin'
+        ) {
           continue;
         }
 

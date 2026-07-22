@@ -125,6 +125,21 @@ describe('planAccessBackfill', () => {
     })).toEqual({ assignments: [], unresolved: [] });
   });
 
+  it('does not require branch assignments for a global admin role', () => {
+    expect(planAccessBackfill({
+      users: [{
+        id: 'global-admin-1',
+        role: 'admin',
+        memberships: [{
+          id: 'membership-1', tenantId: 'tenant-1', role: 'kasir', status: 'active',
+        }],
+        branchAccesses: [],
+      }],
+      tenants: [{ id: 'tenant-1', status: 'active' }],
+      branches: [{ id: 'branch-1', tenantId: 'tenant-1', status: 'active' }],
+    })).toEqual({ assignments: [], unresolved: [] });
+  });
+
   it('reports inactive and non-runtime status records as unresolved', () => {
     expect(planAccessBackfill({
       users: [{
