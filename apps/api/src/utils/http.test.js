@@ -22,13 +22,18 @@ describe('HTTP utilities', () => {
   });
 
   it('rejects request bodies larger than the configured byte limit', async () => {
-    await expect(readJsonBody(Readable.from([Buffer.from('123456')]), {
+    const stream = new PassThrough();
+    const bodyPromise = readJsonBody(stream, {
       limitBytes: 5,
       timeoutMs: 100,
-    })).rejects.toMatchObject({
+    });
+    stream.write('123456');
+
+    await expect(bodyPromise).rejects.toMatchObject({
       message: 'Request body too large',
       statusCode: 413,
     });
+    expect(stream.destroyed).toBe(true);
   });
 
   it('times out body streams that never finish', async () => {
@@ -41,8 +46,8 @@ describe('HTTP utilities', () => {
         statusCode: 408,
       });
       await vi.advanceTimersByTimeAsync(51);
-      stream.end();
       await timeoutAssertion;
+      expect(stream.destroyed).toBe(true);
     } finally {
       stream.destroy();
       vi.useRealTimers();

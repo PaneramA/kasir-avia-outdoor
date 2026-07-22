@@ -37,6 +37,12 @@ function httpError(statusCode, message) {
   return error;
 }
 
+function terminateRequestStream(req, error) {
+  if (typeof req?.destroy === 'function' && !req.destroyed) {
+    req.destroy(error);
+  }
+}
+
 export async function readJsonBody(req, {
   limitBytes = 1_048_576,
   timeoutMs = 10_000,
@@ -50,7 +56,9 @@ export async function readJsonBody(req, {
       const buffer = Buffer.from(chunk);
       size += buffer.byteLength;
       if (size > limitBytes) {
-        throw httpError(413, 'Request body too large');
+        const error = httpError(413, 'Request body too large');
+        terminateRequestStream(req, error);
+        throw error;
       }
       chunks.push(buffer);
     }
@@ -73,7 +81,9 @@ export async function readJsonBody(req, {
 
   const timeout = new Promise((_, reject) => {
     timeoutId = setTimeout(() => {
-      reject(httpError(408, 'Request body timeout'));
+      const error = httpError(408, 'Request body timeout');
+      terminateRequestStream(req, error);
+      reject(error);
     }, timeoutMs);
   });
 
