@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { prisma } from './prisma.js';
 import { hashPassword, verifyPassword } from '../auth/password.js';
+import {
+  canAccessAllTenantBranches,
+  isActiveStatus,
+} from './accessPolicy.js';
 
 const DEFAULT_CATEGORIES = ['Tenda', 'Carrier', 'Alat Masak', 'Lainnya'];
 const USER_ROLES = new Set(['admin', 'superuser', 'kasir']);
@@ -1921,11 +1925,15 @@ async function resolveTenantForUser({ userId, role, requestedTenantId }) {
       },
     });
 
-    if (!membership || membership.status !== 'active') {
-      throw new Error('Forbidden');
+    if (!membership) {
+      throw new Error('Tenant membership is required');
     }
 
-    if (tenant.status !== 'active') {
+    if (!isActiveStatus(membership.status)) {
+      throw new Error('Tenant membership is inactive');
+    }
+
+    if (!isActiveStatus(tenant.status)) {
       throw new Error('Tenant is not active');
     }
 
@@ -1978,9 +1986,7 @@ async function resolveTenantForUser({ userId, role, requestedTenantId }) {
     throw new Error('Tenant membership is inactive');
   }
 
-  // Backward compatibility: existing kasir accounts without membership
-  // still need to access default tenant while migration is in progress.
-  return ensureDefaultTenant();
+  throw new Error('Tenant membership is required');
 }
 
 async function ensureCanManageOwnerMembership({ actorUserId, actorRole, tenantId }) {
@@ -2099,8 +2105,7 @@ export async function listTenantsForUser({ userId, role }) {
       return [];
     }
 
-    const fallbackTenant = await ensureDefaultTenant();
-    return [toTenantDto(fallbackTenant)];
+    throw new Error('Tenant membership is required');
   }
 
   return memberships.map(({ tenant }) => toTenantDto(tenant));
@@ -2818,18 +2823,25 @@ export async function listBranchesForUser({ userId, role, tenantId }) {
     requestedTenantId: tenantId || 'current',
   });
 
-  const normalizedRole = normalizeRole(role);
-  const isAdminLike = normalizedRole === 'admin' || normalizedRole === 'superuser';
-  const hasAccessRules = await prisma.userBranchAccess.count({
-    where: { userId },
-  });
+  const membership = isSuperuserRole(role)
+    ? null
+    : await prisma.userMembership.findUnique({
+        where: {
+          userId_tenantId: {
+            userId,
+            tenantId: tenant.id,
+          },
+        },
+      });
+  const canAccessAll = canAccessAllTenantBranches(role, membership?.role);
 
-  if (!isAdminLike && hasAccessRules > 0) {
+  if (!canAccessAll) {
     const accessRows = await prisma.userBranchAccess.findMany({
       where: {
         userId,
         branch: {
           tenantId: tenant.id,
+          status: 'active',
         },
       },
       include: {
@@ -2838,12 +2850,17 @@ export async function listBranchesForUser({ userId, role, tenantId }) {
       orderBy: { createdAt: 'asc' },
     });
 
+    if (accessRows.length === 0) {
+      throw new Error('Branch access is required');
+    }
+
     return accessRows.map(({ branch }) => toBranchDto(branch));
   }
 
   const branches = await prisma.branch.findMany({
     where: {
       tenantId: tenant.id,
+      status: 'active',
     },
     orderBy: { createdAt: 'asc' },
   });
@@ -3377,16 +3394,25 @@ export async function resolveTenantBranchContextForUser({
   }
 
   const branchId = String(requestedBranchId || '').trim();
-  const hasAccessRules = await prisma.userBranchAccess.count({
-    where: { userId },
-  });
+  const membership = isSuperuserRole(role)
+    ? null
+    : await prisma.userMembership.findUnique({
+        where: {
+          userId_tenantId: {
+            userId,
+            tenantId: tenant.id,
+          },
+        },
+      });
+  const canAccessAll = canAccessAllTenantBranches(role, membership?.role);
 
   const baseBranchWhere = {
     tenantId: tenant.id,
+    status: 'active',
     ...(branchId ? { id: branchId } : {}),
   };
 
-  if (!isAdminLike && hasAccessRules > 0) {
+  if (!canAccessAll) {
     const accessBranch = await prisma.userBranchAccess.findFirst({
       where: {
         userId,
@@ -3399,7 +3425,7 @@ export async function resolveTenantBranchContextForUser({
     });
 
     if (!accessBranch?.branch) {
-      throw new Error('Forbidden');
+      throw new Error('Branch access is required');
     }
 
     return {
