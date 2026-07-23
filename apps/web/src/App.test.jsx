@@ -139,7 +139,7 @@ describe('application state orchestration', () => {
   });
 
   it('routes platform administrators into the isolated admin shell', async () => {
-    const admin = { id: 'admin-1', username: 'admin@gmail.com', role: 'superuser' };
+    const admin = { id: 'admin-1', username: 'admin@aviaoutdoor.com', role: 'superuser' };
     getStoredSession.mockReturnValue({ token: 'admin-token', user: admin });
     fetchCurrentUser.mockResolvedValue(admin);
     fetchTenants.mockResolvedValue([]);
@@ -153,7 +153,7 @@ describe('application state orchestration', () => {
   });
 
   it('redirects platform administrators away from the cashier shell', async () => {
-    const admin = { id: 'admin-1', username: 'admin@gmail.com', role: 'superuser' };
+    const admin = { id: 'admin-1', username: 'admin@aviaoutdoor.com', role: 'superuser' };
     getStoredSession.mockReturnValue({ token: 'admin-token', user: admin });
     fetchCurrentUser.mockResolvedValue(admin);
     fetchPlans.mockResolvedValue([]);
