@@ -24,6 +24,9 @@ describe('release-critical files', () => {
     expect(workflow).toContain('VPS_SSH_HOST_FINGERPRINT');
     expect(workflow).toContain("StrictHostKeyChecking=yes");
     expect(workflow).toContain("ref: ${{ github.sha }}");
+    expect(workflow).toContain('@tailwindcss/oxide-linux-x64-gnu');
+    expect(workflow).toContain('@rollup/rollup-linux-x64-gnu');
+    expect(workflow).toContain('lightningcss-linux-x64-gnu');
     expect(workflow).toContain("/usr/local/bin/deploy-kasir.sh '$DEPLOY_SHA'");
     expect(workflow).not.toContain('StrictHostKeyChecking=no');
     expect(workflow).not.toContain('VPS_SSH_PASSPHRASE');
