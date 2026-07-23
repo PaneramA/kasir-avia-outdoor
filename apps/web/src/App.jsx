@@ -8,7 +8,7 @@ import AdminLayout from './components/AdminLayout'
 import Login from './pages/Login'
 import AdminLogin from './pages/AdminLogin'
 import { APP_ROUTES, resolvePageInfo } from './lib/routes'
-import { APP_CACHE_KEYS } from './lib/appCache'
+import { APP_CACHE_KEYS, isInventoryMutationKeyForScope } from './lib/appCache'
 import {
   createCategory,
   createItem,
@@ -32,6 +32,7 @@ import {
   processReturn,
   removeCategory,
   removeItem,
+  restoreItem,
   updateCurrentTenantSettings,
   updateCurrentBranchSettings,
   updateItem,
@@ -53,8 +54,6 @@ const Users = lazy(() => import('./pages/Users'))
 const Account = lazy(() => import('./pages/Account'))
 const Branches = lazy(() => import('./pages/Branches'))
 const TeamSettings = lazy(() => import('./pages/TeamSettings'))
-const PLATFORM_ADMIN_USERNAME = 'admin@gmail.com'
-
 function NotFoundPage() {
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-text-muted text-center">
@@ -115,6 +114,19 @@ function resolveCurrentUser(user) {
   return user
 }
 
+function resolveCurrentUser(user, { trustPlatformAdmin = false } = {}) {
+  if (!user || typeof user !== 'object') {
+    return user
+  }
+
+  const role = String(user.role || '').trim().toLowerCase()
+  if (role === 'superuser' && !trustPlatformAdmin) {
+    return { ...user, role: 'kasir' }
+  }
+
+  return user
+}
+
 function App() {
   const { mutate: mutateCache } = useSWRConfig()
   const location = useLocation()
@@ -129,19 +141,32 @@ function App() {
   const [isHeaderDataRequested, setIsHeaderDataRequested] = useState(false)
   const [activeTenantId, setActiveTenantId] = useState(() => getActiveTenantContext().tenantId)
   const [activeBranchId, setActiveBranchId] = useState(() => getActiveTenantContext().branchId)
+  const resetOperationalDrafts = useCallback(() => {
+    setCart([])
+    setErrorMessage('')
+    setIsHeaderDataRequested(false)
+  }, [])
   const authQuery = useSWR(
     session.token ? APP_CACHE_KEYS.currentUser : null,
     fetchCurrentUser,
-    { fallbackData: session.user || undefined, keepPreviousData: false },
+    { keepPreviousData: false },
   )
-  const rawCurrentUser = session.token ? (authQuery.data || session.user || null) : null
-  const currentUser = useMemo(() => resolveCurrentUser(rawCurrentUser), [rawCurrentUser])
-  const isPlatformAdminUser = useMemo(() => isPlatformAdmin(currentUser), [currentUser])
+  const rawCurrentUser = session.token ? (authQuery.data || null) : null
+  const hasVerifiedCurrentUser = Boolean(authQuery.data)
+  const currentUser = useMemo(
+    () => resolveCurrentUser(rawCurrentUser, { trustPlatformAdmin: hasVerifiedCurrentUser }),
+    [hasVerifiedCurrentUser, rawCurrentUser],
+  )
+  const currentUserId = String(currentUser?.id || '').trim()
+  const isPlatformAdminUser = useMemo(
+    () => hasVerifiedCurrentUser && isPlatformAdmin(currentUser),
+    [currentUser, hasVerifiedCurrentUser],
+  )
   const shouldLoadOperationalData = Boolean(currentUser) && !isAdminPath && !isPlatformAdminUser
   const isAuthInitializing = Boolean(session.token) && !currentUser && authQuery.isLoading
 
   const tenantQuery = useSWR(
-    shouldLoadOperationalData ? APP_CACHE_KEYS.tenants : null,
+    shouldLoadOperationalData && currentUserId ? APP_CACHE_KEYS.tenants(currentUserId) : null,
     fetchTenants,
     { keepPreviousData: false },
   )
@@ -154,6 +179,7 @@ function App() {
     if (!shouldLoadOperationalData || tenantQuery.data === undefined) return
 
     if (tenantOptions.length === 0) {
+      resetOperationalDrafts()
       setActiveTenantId('')
       setActiveBranchId('')
       setActiveTenantContext({ tenantId: '', branchId: '' })
@@ -166,14 +192,17 @@ function App() {
       : (tenantOptions.some((tenant) => tenant.id === stored.tenantId) ? stored.tenantId : tenantOptions[0].id)
 
     if (preferredTenantId !== activeTenantId) {
+      resetOperationalDrafts()
       setActiveTenantId(preferredTenantId)
       setActiveBranchId('')
       setActiveTenantContext({ tenantId: preferredTenantId, branchId: '' })
     }
-  }, [activeTenantId, shouldLoadOperationalData, tenantOptions, tenantQuery.data])
+  }, [activeTenantId, resetOperationalDrafts, shouldLoadOperationalData, tenantOptions, tenantQuery.data])
 
   const branchQuery = useSWR(
-    shouldLoadOperationalData && activeTenantId ? APP_CACHE_KEYS.branches(activeTenantId) : null,
+    shouldLoadOperationalData && currentUserId && activeTenantId
+      ? APP_CACHE_KEYS.branches(currentUserId, activeTenantId)
+      : null,
     () => fetchBranches(activeTenantId),
     { keepPreviousData: false },
   )
@@ -195,13 +224,17 @@ function App() {
       )
 
     if (preferredBranchId !== activeBranchId) {
+      resetOperationalDrafts()
       setActiveBranchId(preferredBranchId)
       setActiveTenantContext({ tenantId: activeTenantId, branchId: preferredBranchId })
     }
-  }, [activeBranchId, activeTenantId, branchOptions, branchQuery.data])
+  }, [activeBranchId, activeTenantId, branchOptions, branchQuery.data, resetOperationalDrafts])
+
+  const operationalScopeKey = `${currentUserId}:${activeTenantId}:${activeBranchId}`
 
   const hasOperationalContext = Boolean(
     shouldLoadOperationalData
+    && currentUserId
     && activeTenantId
     && activeBranchId
     && branchOptions.some((branch) => branch.id === activeBranchId),
@@ -225,32 +258,32 @@ function App() {
   )
   const shouldLoadBranchSettings = hasOperationalContext && (isRentalRoute || isAccountRoute)
   const itemQuery = useSWR(
-    shouldLoadItems ? APP_CACHE_KEYS.items(activeTenantId, activeBranchId) : null,
+    shouldLoadItems ? APP_CACHE_KEYS.items(currentUserId, activeTenantId, activeBranchId) : null,
     fetchItems,
     tenantScopedOptions,
   )
   const categoryQuery = useSWR(
-    shouldLoadCategories ? APP_CACHE_KEYS.categories(activeTenantId) : null,
+    shouldLoadCategories ? APP_CACHE_KEYS.categories(currentUserId, activeTenantId, activeBranchId) : null,
     fetchCategories,
     tenantScopedOptions,
   )
   const rentalQuery = useSWR(
-    shouldLoadRentals ? APP_CACHE_KEYS.rentals(activeTenantId, activeBranchId) : null,
+    shouldLoadRentals ? APP_CACHE_KEYS.rentals(currentUserId, activeTenantId, activeBranchId) : null,
     fetchRentals,
     tenantScopedOptions,
   )
   const tenantSettingsQuery = useSWR(
-    shouldLoadTenantSettings ? APP_CACHE_KEYS.tenantSettings(activeTenantId) : null,
+    shouldLoadTenantSettings ? APP_CACHE_KEYS.tenantSettings(currentUserId, activeTenantId, activeBranchId) : null,
     fetchCurrentTenantSettings,
     tenantScopedOptions,
   )
   const branchSettingsQuery = useSWR(
-    shouldLoadBranchSettings ? APP_CACHE_KEYS.branchSettings(activeTenantId, activeBranchId) : null,
+    shouldLoadBranchSettings ? APP_CACHE_KEYS.branchSettings(currentUserId, activeTenantId, activeBranchId) : null,
     fetchCurrentBranchSettings,
     tenantScopedOptions,
   )
   const subscriptionQuery = useSWR(
-    hasOperationalContext ? APP_CACHE_KEYS.subscription(activeTenantId) : null,
+    hasOperationalContext ? APP_CACHE_KEYS.subscription(currentUserId, activeTenantId, activeBranchId) : null,
     fetchCurrentTenantSubscriptionSummary,
     tenantScopedOptions,
   )
@@ -277,16 +310,31 @@ function App() {
     error instanceof Error ? error.message : 'Gagal memuat data dari backend.'
   ), [])
 
+  const clearClientSession = useCallback(async ({ message = '' } = {}) => {
+    logout()
+    setSession({ token: '', user: null })
+    resetOperationalDrafts()
+    setActiveTenantId('')
+    setActiveBranchId('')
+    setActiveTenantContext({ tenantId: '', branchId: '' })
+    await mutateCache(() => true, undefined, { revalidate: false })
+    setAuthErrorMessage(message)
+  }, [mutateCache, resetOperationalDrafts])
+
   useEffect(() => {
-    const handleAuthExpired = () => {
-      setSession({ token: '', user: null })
-      setCart([])
-      setAuthErrorMessage('Sesi login berakhir. Silakan login kembali.')
+    const handleAuthExpired = (event) => {
+      if (event.detail?.token !== session.token) {
+        return
+      }
+
+      void clearClientSession({
+        message: 'Sesi login berakhir. Silakan login kembali.',
+      })
     }
 
     window.addEventListener('avia-auth-expired', handleAuthExpired)
     return () => window.removeEventListener('avia-auth-expired', handleAuthExpired)
-  }, [])
+  }, [clearClientSession, session.token])
 
   useEffect(() => {
     if (!isRentalRoute || itemQuery.data === undefined || cart.length === 0) {
@@ -318,8 +366,7 @@ function App() {
     try {
       const user = await login(username, password)
       if (isPlatformAdmin(user)) {
-        logout()
-        setSession({ token: '', user: null })
+        await clearClientSession()
         throw new Error('Akun platform admin hanya bisa masuk lewat /admin.')
       }
       setSession(getStoredSession())
@@ -331,7 +378,7 @@ function App() {
     } finally {
       setIsAuthSubmitting(false)
     }
-  }, [authQuery])
+  }, [authQuery, clearClientSession])
 
   const handleAdminLogin = useCallback(async ({ username, password }) => {
     setAuthErrorMessage('')
@@ -340,8 +387,7 @@ function App() {
     try {
       const user = await login(username, password)
       if (!isPlatformAdmin(user)) {
-        logout()
-        setSession({ token: '', user: null })
+        await clearClientSession()
         throw new Error('Akun ini tidak memiliki akses administrator.')
       }
       setSession(getStoredSession())
@@ -353,18 +399,11 @@ function App() {
     } finally {
       setIsAuthSubmitting(false)
     }
-  }, [authQuery])
+  }, [authQuery, clearClientSession])
 
   const handleLogout = useCallback(() => {
-    logout()
-    setSession({ token: '', user: null })
-    setCart([])
-    setActiveTenantId('')
-    setActiveBranchId('')
-    setActiveTenantContext({ tenantId: '', branchId: '' })
-    void mutateCache(() => true, undefined, { revalidate: false })
-    setAuthErrorMessage('')
-  }, [mutateCache])
+    void clearClientSession()
+  }, [clearClientSession])
 
   const handleCreateOrUpdateItem = useCallback(
     async (itemPayload, editingItem) => {
@@ -382,13 +421,13 @@ function App() {
       ), { revalidate: false })
       void itemQuery.mutate()
       void mutateCache(
-        (key) => Array.isArray(key) && key[0] === 'app/inventory-page',
+        (key) => isInventoryMutationKeyForScope(key, currentUserId, activeTenantId, activeBranchId),
         undefined,
         { revalidate: true },
       )
       return savedItem
     },
-    [itemQuery, mutateCache],
+    [activeBranchId, activeTenantId, currentUserId, itemQuery, mutateCache],
   )
 
   const handleImportItems = useCallback(
@@ -468,7 +507,7 @@ function App() {
         await itemQuery.mutate((current = []) => [...current, ...createdItems], { revalidate: false })
         void itemQuery.mutate()
         void mutateCache(
-          (key) => Array.isArray(key) && key[0] === 'app/inventory-page',
+          (key) => isInventoryMutationKeyForScope(key, currentUserId, activeTenantId, activeBranchId),
           undefined,
           { revalidate: true },
         )
@@ -485,21 +524,33 @@ function App() {
         failedItems,
       }
     },
-    [categories, categoryQuery, itemQuery, mutateCache],
+    [activeBranchId, activeTenantId, categories, categoryQuery, currentUserId, itemQuery, mutateCache],
   )
 
   const handleDeleteItem = useCallback(
     async (id) => {
       await removeItem(id)
       await itemQuery.mutate((current = []) => current.filter((item) => item.id !== id), { revalidate: false })
-      void itemQuery.mutate()
       void mutateCache(
-        (key) => Array.isArray(key) && key[0] === 'app/inventory-page',
+        (key) => isInventoryMutationKeyForScope(key, currentUserId, activeTenantId, activeBranchId),
         undefined,
         { revalidate: true },
       )
     },
-    [itemQuery, mutateCache],
+    [activeBranchId, activeTenantId, currentUserId, itemQuery, mutateCache],
+  )
+
+  const handleRestoreItem = useCallback(
+    async (id) => {
+      const restored = await restoreItem(id)
+      void mutateCache(
+        (key) => isInventoryMutationKeyForScope(key, currentUserId, activeTenantId, activeBranchId),
+        undefined,
+        { revalidate: true },
+      )
+      return restored
+    },
+    [activeBranchId, activeTenantId, currentUserId, mutateCache],
   )
 
   const handleCreateCategory = useCallback(
@@ -550,17 +601,14 @@ function App() {
         setErrorMessage(getErrorMessage(error))
       })
       void mutateCache(
-        (key) => Array.isArray(key) && (
-          key[0] === 'app/dashboard' || key[0] === 'app/financial-recap'
-          || key[0] === 'app/inventory-page'
-        ),
+        (key) => isInventoryMutationKeyForScope(key, currentUserId, activeTenantId, activeBranchId),
         undefined,
         { revalidate: true },
       )
 
       return createdRental
     },
-    [getErrorMessage, itemQuery, mutateCache, rentalQuery],
+    [activeBranchId, activeTenantId, currentUserId, getErrorMessage, itemQuery, mutateCache, rentalQuery],
   )
 
   const handleProcessReturn = useCallback(
@@ -608,16 +656,13 @@ function App() {
         setErrorMessage(getErrorMessage(error))
       })
       void mutateCache(
-        (key) => Array.isArray(key) && (
-          key[0] === 'app/dashboard' || key[0] === 'app/financial-recap'
-          || key[0] === 'app/inventory-page'
-        ),
+        (key) => isInventoryMutationKeyForScope(key, currentUserId, activeTenantId, activeBranchId),
         undefined,
         { revalidate: true },
       )
       return processed
     },
-    [getErrorMessage, itemQuery, mutateCache, rentalQuery],
+    [activeBranchId, activeTenantId, currentUserId, getErrorMessage, itemQuery, mutateCache, rentalQuery],
   )
 
   const handleVerifyRentalDelete = useCallback(
@@ -657,30 +702,32 @@ function App() {
 
   const handleTenantChange = useCallback(async (nextTenantId) => {
     const tenantId = String(nextTenantId || '').trim()
-    if (!tenantId) {
+    if (!tenantId || tenantId === activeTenantId) {
       return
     }
 
+    resetOperationalDrafts()
     setActiveTenantId(tenantId)
     setActiveBranchId('')
     setActiveTenantContext({
       tenantId,
       branchId: '',
     })
-  }, [])
+  }, [activeTenantId, resetOperationalDrafts])
 
   const handleBranchChange = useCallback(async (nextBranchId) => {
     const branchId = String(nextBranchId || '').trim()
-    if (!branchId) {
+    if (!branchId || branchId === activeBranchId) {
       return
     }
 
+    resetOperationalDrafts()
     setActiveBranchId(branchId)
     setActiveTenantContext({
       tenantId: activeTenantId,
       branchId,
     })
-  }, [activeTenantId])
+  }, [activeBranchId, activeTenantId, resetOperationalDrafts])
 
   const headerInfo = useMemo(() => resolvePageInfo(location.pathname), [location.pathname])
   useEffect(() => {
@@ -742,7 +789,7 @@ function App() {
               <Route path={APP_ROUTES.adminRegistrations} element={<Navigate to={APP_ROUTES.adminStores} replace />} />
               <Route path={APP_ROUTES.adminPlans} element={<AdminPlans />} />
               <Route path={APP_ROUTES.adminAccount} element={<AdminAccount currentUser={currentUser} />} />
-              <Route path={APP_ROUTES.adminUsers} element={<Users />} />
+              <Route path={APP_ROUTES.adminUsers} element={<Users userId={currentUserId} />} />
               <Route path={APP_ROUTES.adminBranches} element={<Navigate to={APP_ROUTES.adminStores} replace />} />
               <Route path="*" element={<Navigate to={APP_ROUTES.admin} replace />} />
             </Routes>
@@ -801,17 +848,19 @@ function App() {
             <Routes>
             <Route path={APP_ROUTES.login} element={<Navigate to={APP_ROUTES.dashboard} replace />} />
             <Route path="/" element={<Navigate to={APP_ROUTES.dashboard} replace />} />
-            <Route path={APP_ROUTES.dashboard} element={<Dashboard tenantId={activeTenantId} branchId={activeBranchId} />} />
+            <Route path={APP_ROUTES.dashboard} element={<Dashboard userId={currentUserId} tenantId={activeTenantId} branchId={activeBranchId} />} />
             <Route
               path={APP_ROUTES.inventory}
               element={
                 <Inventory
+                  userId={currentUserId}
                   tenantId={activeTenantId}
                   branchId={activeBranchId}
                   categories={categories}
                   onSaveItem={handleCreateOrUpdateItem}
                   onImportItems={handleImportItems}
                   onDeleteItem={handleDeleteItem}
+                  onRestoreItem={handleRestoreItem}
                   onAddCategory={handleCreateCategory}
                   onDeleteCategory={handleDeleteCategory}
                 />
@@ -821,12 +870,15 @@ function App() {
               path={APP_ROUTES.rental}
               element={
                 <Rental
+                  key={operationalScopeKey}
                   inventory={inventory}
                   categories={categories}
                   cart={cart}
                   setCart={setCart}
                   onCheckout={handleCheckout}
                   currentUser={currentUser}
+                  tenantId={activeTenantId}
+                  branchId={activeBranchId}
                   tenantSettings={tenantSettings}
                 />
               }
@@ -835,12 +887,13 @@ function App() {
               path={APP_ROUTES.return}
               element={
                 <Return
+                  key={operationalScopeKey}
                   rentals={rentals}
                   onProcessReturn={handleProcessReturn}
                 />
               }
             />
-            <Route path={APP_ROUTES.customers} element={<Customers />} />
+            <Route path={APP_ROUTES.customers} element={<Customers userId={currentUserId} tenantId={activeTenantId} branchId={activeBranchId} />} />
             <Route
               path={APP_ROUTES.financial}
               element={subscriptionSummary?.features?.canUseFinancialRecap === false
@@ -848,6 +901,7 @@ function App() {
                 : (
                 <FinancialRecap
                   key={`${tenantSettings?.tenantId || 'tenant'}-${tenantSettings?.financialClosingDay || 31}`}
+                  userId={currentUserId}
                   tenantId={activeTenantId}
                   branchId={activeBranchId}
                   tenantSettings={tenantSettings}
@@ -860,6 +914,8 @@ function App() {
               element={(
                 <History
                   currentUser={currentUser}
+                  tenantId={activeTenantId}
+                  branchId={activeBranchId}
                   onVerifyRentalDelete={handleVerifyRentalDelete}
                   onDeleteRentalByAdmin={handleDeleteRentalByAdmin}
                 />
@@ -877,13 +933,13 @@ function App() {
               path={APP_ROUTES.settingsBranches}
               element={subscriptionSummary?.features?.canManageBranches === false
                 ? <Navigate to={APP_ROUTES.dashboard} replace />
-                : <Branches />}
+                : <Branches userId={currentUserId} tenantId={activeTenantId} branchId={activeBranchId} />}
             />
             <Route
               path={APP_ROUTES.settingsTeam}
               element={subscriptionSummary?.features?.canManageStaff === false
                 ? <Navigate to={APP_ROUTES.dashboard} replace />
-                : <TeamSettings />}
+                : <TeamSettings userId={currentUserId} tenantId={activeTenantId} branchId={activeBranchId} />}
             />
             <Route
               path={APP_ROUTES.account}

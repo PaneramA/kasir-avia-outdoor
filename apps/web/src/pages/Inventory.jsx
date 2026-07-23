@@ -102,12 +102,14 @@ const escapeCsvCell = (value) => {
 };
 
 const Inventory = ({
+    userId,
     tenantId,
     branchId,
     categories,
     onSaveItem,
     onImportItems,
     onDeleteItem,
+    onRestoreItem,
     onAddCategory,
     onDeleteCategory,
 }) => {
@@ -119,6 +121,7 @@ const Inventory = ({
     const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+    const [inventoryStatus, setInventoryStatus] = useState('active');
     const importFileInputRef = useRef(null);
 
     useEffect(() => {
@@ -134,7 +137,7 @@ const Inventory = ({
         setSize,
     } = useSWRInfinite(
         (pageIndex, previousPageData) => {
-            if (!tenantId || !branchId) {
+            if (!userId || !tenantId || !branchId) {
                 return null;
             }
 
@@ -143,19 +146,21 @@ const Inventory = ({
             }
 
             return APP_CACHE_KEYS.inventoryPage(
+                userId,
                 tenantId,
                 branchId,
                 debouncedSearchQuery,
                 pageIndex === 0 ? '' : previousPageData.nextCursor,
+                inventoryStatus,
             );
         },
-        ([, , , query, cursor]) => fetchItemsPage({ query, cursor }),
+        ([, , , , query, cursor, status]) => fetchItemsPage({ query, cursor, status }),
         { keepPreviousData: true },
     );
 
     useEffect(() => {
         void setSize(1);
-    }, [debouncedSearchQuery, setSize]);
+    }, [debouncedSearchQuery, inventoryStatus, setSize]);
 
     const inventory = useMemo(
         () => inventoryPages.flatMap((page) => (Array.isArray(page?.items) ? page.items : [])),
@@ -172,15 +177,28 @@ const Inventory = ({
         window.localStorage.setItem(INVENTORY_VIEW_STORAGE_KEY, inventoryViewMode);
     }, [inventoryViewMode]);
 
-    const handleDeleteItem = async (id) => {
-        if (!window.confirm('Apakah Anda yakin ingin menghapus barang ini?')) {
+    const handleArchiveItem = async (id) => {
+        if (!window.confirm('Arsipkan barang ini? Barang tidak akan muncul pada transaksi baru.')) {
             return;
         }
 
         try {
             await onDeleteItem(id);
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Gagal menghapus barang.';
+            const message = error instanceof Error ? error.message : 'Gagal mengarsipkan barang.';
+            alert(message);
+        }
+    };
+
+    const handleRestoreItem = async (id) => {
+        if (!window.confirm('Pulihkan barang ini ke inventaris aktif?')) {
+            return;
+        }
+
+        try {
+            await onRestoreItem(id);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Gagal memulihkan barang.';
             alert(message);
         }
     };
@@ -366,6 +384,24 @@ const Inventory = ({
                             accept=".csv,.xlsx,.xls"
                             onChange={(event) => { void handleImportFile(event); }}
                         />
+                        <div className="grid min-h-11 grid-cols-2 rounded-DEFAULT border border-border bg-sidebar-bg p-1" aria-label="Status inventaris">
+                            <button
+                                type="button"
+                                aria-pressed={inventoryStatus === 'active'}
+                                className={`rounded px-3 py-2 text-xs font-semibold transition ${inventoryStatus === 'active' ? 'bg-accent text-white' : 'text-text-muted hover:text-text-main'}`}
+                                onClick={() => setInventoryStatus('active')}
+                            >
+                                Aktif
+                            </button>
+                            <button
+                                type="button"
+                                aria-pressed={inventoryStatus === 'archived'}
+                                className={`rounded px-3 py-2 text-xs font-semibold transition ${inventoryStatus === 'archived' ? 'bg-accent text-white' : 'text-text-muted hover:text-text-main'}`}
+                                onClick={() => setInventoryStatus('archived')}
+                            >
+                                Diarsipkan
+                            </button>
+                        </div>
                         <ViewModeToggle
                             value={inventoryViewMode}
                             onChange={setInventoryViewMode}
@@ -413,7 +449,11 @@ const Inventory = ({
                     <div className="py-10 text-center text-text-muted">Memuat inventaris...</div>
                 ) : inventory.length === 0 ? (
                     <div className="text-center py-10 text-text-muted">
-                        {debouncedSearchQuery ? 'Barang tidak ditemukan.' : 'Belum ada barang di inventaris. Silakan tambah barang baru.'}
+                        {debouncedSearchQuery
+                            ? 'Barang tidak ditemukan.'
+                            : inventoryStatus === 'archived'
+                                ? 'Belum ada barang yang diarsipkan.'
+                                : 'Belum ada barang di inventaris. Silakan tambah barang baru.'}
                     </div>
                 ) : inventoryViewMode === 'grid' ? (
                     <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 sm:gap-5 lg:grid-cols-[repeat(auto-fill,minmax(260px,1fr))] lg:gap-[25px]">
@@ -425,16 +465,24 @@ const Inventory = ({
                                         src={item.image || 'https://via.placeholder.com/300x200?text=No+Image'}
                                         alt={item.name}
                                     />
-                                    <span className={`absolute right-[10px] top-[10px] rounded-[20px] px-3 py-[5px] text-[0.72rem] font-bold uppercase ${item.stock > 0 ? 'bg-[#2ecc71] text-white' : 'bg-[#e74c3c] text-white'}`}>
-                                        {item.stock > 0 ? 'Available' : 'Out of Stock'}
+                                    <span className={`absolute right-[10px] top-[10px] rounded-[20px] px-3 py-[5px] text-[0.72rem] font-bold uppercase ${inventoryStatus === 'archived' ? 'bg-[#6b7280] text-white' : item.stock > 0 ? 'bg-[#2ecc71] text-white' : 'bg-[#e74c3c] text-white'}`}>
+                                        {inventoryStatus === 'archived' ? 'Archived' : item.stock > 0 ? 'Available' : 'Out of Stock'}
                                     </span>
                                     <div className="absolute inset-0 flex items-center justify-center gap-3 bg-black/35 opacity-100 transition-opacity duration-300 sm:opacity-0 sm:group-hover:opacity-100">
-                                        <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full bg-[#3498db] text-[1.1rem] text-white transition hover:scale-110" onClick={() => handleEditItem(item)}>
-                                            <i className="fas fa-edit"></i>
-                                        </button>
-                                        <button type="button" className="flex h-11 w-11 items-center justify-center rounded-full bg-[#e74c3c] text-[1.1rem] text-white transition hover:scale-110" onClick={() => handleDeleteItem(item.id)}>
-                                            <i className="fas fa-trash"></i>
-                                        </button>
+                                        {inventoryStatus === 'active' ? (
+                                            <>
+                                                <button type="button" aria-label={`Edit ${item.name}`} title="Edit barang" className="flex h-11 w-11 items-center justify-center rounded-full bg-[#3498db] text-[1.1rem] text-white transition hover:scale-110" onClick={() => handleEditItem(item)}>
+                                                    <i className="fas fa-edit"></i>
+                                                </button>
+                                                <button type="button" aria-label={`Arsipkan ${item.name}`} title="Arsipkan barang" className="flex h-11 w-11 items-center justify-center rounded-full bg-[#e74c3c] text-[1.1rem] text-white transition hover:scale-110" onClick={() => handleArchiveItem(item.id)}>
+                                                    <i className="fas fa-box-archive"></i>
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <button type="button" aria-label={`Pulihkan ${item.name}`} title="Pulihkan barang" className="flex h-11 w-11 items-center justify-center rounded-full bg-[#2ecc71] text-[1.1rem] text-white transition hover:scale-110" onClick={() => handleRestoreItem(item.id)}>
+                                                <i className="fas fa-rotate-left"></i>
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="p-4 sm:p-5">
@@ -469,19 +517,27 @@ const Inventory = ({
                                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs sm:text-sm">
                                             <span className="font-bold text-accent">Rp {parseInt(item.price, 10).toLocaleString()}/hari</span>
                                             <span className="text-text-muted">Stok: {item.stock}</span>
-                                            <span className={`rounded-full px-2 py-[2px] text-[0.65rem] font-semibold uppercase ${item.stock > 0 ? 'bg-[#2ecc71]/20 text-[#2ecc71]' : 'bg-[#e74c3c]/20 text-[#e74c3c]'}`}>
-                                                {item.stock > 0 ? 'Available' : 'Out of Stock'}
+                                            <span className={`rounded-full px-2 py-[2px] text-[0.65rem] font-semibold uppercase ${inventoryStatus === 'archived' ? 'bg-[#6b7280]/20 text-[#6b7280]' : item.stock > 0 ? 'bg-[#2ecc71]/20 text-[#2ecc71]' : 'bg-[#e74c3c]/20 text-[#e74c3c]'}`}>
+                                                {inventoryStatus === 'archived' ? 'Archived' : item.stock > 0 ? 'Available' : 'Out of Stock'}
                                             </span>
                                         </div>
                                     </div>
 
                                     <div className="flex shrink-0 items-center gap-2">
-                                        <button type="button" className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-sidebar-bg text-[#3498db] transition hover:border-[#3498db]/60" onClick={() => handleEditItem(item)}>
-                                            <i className="fas fa-edit"></i>
-                                        </button>
-                                        <button type="button" className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-sidebar-bg text-[#e74c3c] transition hover:border-[#e74c3c]/60" onClick={() => handleDeleteItem(item.id)}>
-                                            <i className="fas fa-trash"></i>
-                                        </button>
+                                        {inventoryStatus === 'active' ? (
+                                            <>
+                                                <button type="button" aria-label={`Edit ${item.name}`} title="Edit barang" className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-sidebar-bg text-[#3498db] transition hover:border-[#3498db]/60" onClick={() => handleEditItem(item)}>
+                                                    <i className="fas fa-edit"></i>
+                                                </button>
+                                                <button type="button" aria-label={`Arsipkan ${item.name}`} title="Arsipkan barang" className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-sidebar-bg text-[#e74c3c] transition hover:border-[#e74c3c]/60" onClick={() => handleArchiveItem(item.id)}>
+                                                    <i className="fas fa-box-archive"></i>
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <button type="button" aria-label={`Pulihkan ${item.name}`} title="Pulihkan barang" className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-sidebar-bg text-[#2ecc71] transition hover:border-[#2ecc71]/60" onClick={() => handleRestoreItem(item.id)}>
+                                                <i className="fas fa-rotate-left"></i>
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>

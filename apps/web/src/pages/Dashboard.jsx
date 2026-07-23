@@ -7,12 +7,11 @@ import { getPlannedReturnDate } from '../lib/rentalTime';
 import { fetchDashboardSummary } from '../lib/api';
 import { APP_CACHE_KEYS } from '../lib/appCache';
 
-const Dashboard = ({ tenantId = '', branchId = '' }) => {
+const Dashboard = ({ userId = '', tenantId = '', branchId = '' }) => {
     const [statusFilter, setStatusFilter] = React.useState('all');
     const { data: dashboardSummary, error: dashboardError, isLoading } = useSWR(
-        tenantId && branchId ? APP_CACHE_KEYS.dashboard(tenantId, branchId, statusFilter) : null,
-        ([, , , recentStatus]) => fetchDashboardSummary(recentStatus),
-        { keepPreviousData: true },
+        userId && tenantId && branchId ? APP_CACHE_KEYS.dashboard(userId, tenantId, branchId, statusFilter) : null,
+        ([, , , , recentStatus]) => fetchDashboardSummary(recentStatus),
     );
 
     const filterOptions = [

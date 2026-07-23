@@ -55,6 +55,36 @@ describe('shared component smoke and interaction tests', () => {
     expect(screen.getByText('Kelola Kategori')).toBeInTheDocument();
   });
 
+  it('submits the last observed item version when editing inventory', async () => {
+    const user = userEvent.setup();
+    const onSaveItem = vi.fn().mockResolvedValue(undefined);
+    const editingItem = {
+      id: 'item-1',
+      name: 'Tenda Dome',
+      category: 'Tenda',
+      stock: 4,
+      price: 50_000,
+      image: '',
+      updatedAt: '2026-07-22T04:30:00.000Z',
+    };
+
+    render(
+      <ItemModal
+        isOpen
+        setIsOpen={vi.fn()}
+        editingItem={editingItem}
+        categories={['Tenda']}
+        onSaveItem={onSaveItem}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Update Barang' }));
+
+    expect(onSaveItem).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedUpdatedAt: editingItem.updatedAt }),
+      editingItem,
+    );
+  });
+
   it('renders a receipt with print and WhatsApp commands', () => {
     render(<ReceiptModal isOpen rental={rental} onClose={vi.fn()} onPrint={vi.fn()} onShareWhatsApp={vi.fn()} />);
     expect(screen.getByText('Customer Test')).toBeInTheDocument();

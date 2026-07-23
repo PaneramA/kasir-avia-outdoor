@@ -1,4 +1,4 @@
-import { Readable } from 'node:stream';
+import { PassThrough, Readable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import { parsePath, readJsonBody, sendJson } from './http.js';
 
@@ -15,7 +15,43 @@ describe('HTTP utilities', () => {
   });
 
   it('rejects malformed JSON', async () => {
-    await expect(readJsonBody(Readable.from([Buffer.from('{bad-json}')]))).rejects.toThrow('Invalid JSON body');
+    await expect(readJsonBody(Readable.from([Buffer.from('{bad-json}')]))).rejects.toMatchObject({
+      message: 'Invalid JSON body',
+      statusCode: 400,
+    });
+  });
+
+  it('rejects request bodies larger than the configured byte limit', async () => {
+    const stream = new PassThrough();
+    const bodyPromise = readJsonBody(stream, {
+      limitBytes: 5,
+      timeoutMs: 100,
+    });
+    stream.write('123456');
+
+    await expect(bodyPromise).rejects.toMatchObject({
+      message: 'Request body too large',
+      statusCode: 413,
+    });
+    expect(stream.destroyed).toBe(true);
+  });
+
+  it('times out body streams that never finish', async () => {
+    vi.useFakeTimers();
+    const stream = new PassThrough();
+    try {
+      const bodyPromise = readJsonBody(stream, { limitBytes: 100, timeoutMs: 50 });
+      const timeoutAssertion = expect(bodyPromise).rejects.toMatchObject({
+        message: 'Request body timeout',
+        statusCode: 408,
+      });
+      await vi.advanceTimersByTimeAsync(51);
+      await timeoutAssertion;
+      expect(stream.destroyed).toBe(true);
+    } finally {
+      stream.destroy();
+      vi.useRealTimers();
+    }
   });
 
   it('writes no-store JSON responses', () => {
@@ -28,19 +64,18 @@ describe('HTTP utilities', () => {
     expect(res.end).toHaveBeenCalledWith('{"ok":true}');
   });
 
-  it('compresses sufficiently large JSON when the caller accepts gzip', () => {
+  it('leaves JSON compression to the reverse proxy', () => {
     const res = {
       __aviaAcceptEncoding: 'br, gzip, deflate',
       writeHead: vi.fn(),
       end: vi.fn(),
     };
     sendJson(res, 200, { message: 'x'.repeat(4_000) });
-    expect(res.writeHead).toHaveBeenCalledWith(200, expect.objectContaining({
-      'Content-Encoding': 'gzip',
-      Vary: 'Accept-Encoding',
-    }));
-    expect(Buffer.isBuffer(res.end.mock.calls[0][0])).toBe(true);
-    expect(res.__aviaResponseBytes).toBeLessThan(res.__aviaResponseUncompressedBytes);
+    const headers = res.writeHead.mock.calls[0][1];
+    expect(headers).not.toHaveProperty('Content-Encoding');
+    expect(headers).not.toHaveProperty('Vary');
+    expect(typeof res.end.mock.calls[0][0]).toBe('string');
+    expect(res.__aviaResponseBytes).toBe(res.__aviaResponseUncompressedBytes);
   });
 
   it('does not send a response body for 204 responses', () => {

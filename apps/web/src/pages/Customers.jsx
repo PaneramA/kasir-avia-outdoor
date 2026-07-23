@@ -17,7 +17,7 @@ const initialForm = {
     idNumber: '',
 }
 
-const Customers = () => {
+const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
     const [query, setQuery] = useState('')
     const [debouncedQuery, setDebouncedQuery] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -33,8 +33,8 @@ const Customers = () => {
     }, [query])
 
     const customerQuery = useSWR(
-        APP_CACHE_KEYS.customers(debouncedQuery),
-        ([, searchValue]) => fetchCustomers(searchValue),
+        userId && tenantId && branchId ? APP_CACHE_KEYS.customers(userId, tenantId, branchId, debouncedQuery) : null,
+        ([, , , , searchValue]) => fetchCustomers(searchValue),
     )
     const customers = useMemo(
         () => (Array.isArray(customerQuery.data) ? customerQuery.data : []),

@@ -3,7 +3,7 @@ import useSWR from 'swr'
 import { createUserAccount, fetchUsers, getStoredSession, removeUserAccount, resetUserPassword, updateUserAccount } from '../lib/api'
 import { APP_CACHE_KEYS } from '../lib/appCache'
 
-const Users = () => {
+const Users = ({ userId = '' }) => {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isSavingEdit, setIsSavingEdit] = useState(false)
     const [deletingUserId, setDeletingUserId] = useState('')
@@ -21,7 +21,7 @@ const Users = () => {
         role: 'kasir',
     })
     const currentUser = getStoredSession().user
-    const userQuery = useSWR(APP_CACHE_KEYS.users, fetchUsers)
+    const userQuery = useSWR(userId ? APP_CACHE_KEYS.users(userId) : null, fetchUsers)
     const users = useMemo(() => (Array.isArray(userQuery.data) ? userQuery.data : []), [userQuery.data])
     const isLoading = userQuery.isLoading
     const queryErrorMessage = userQuery.error instanceof Error ? userQuery.error.message : ''

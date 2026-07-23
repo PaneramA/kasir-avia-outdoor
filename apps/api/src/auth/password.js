@@ -1,4 +1,5 @@
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { promisify } from 'node:util';
 
 const SCRYPT_ALGO = 'scrypt';
 const SCRYPT_COST = 16384;
@@ -7,9 +8,10 @@ const SCRYPT_PARALLELIZATION = 1;
 const SCRYPT_KEY_LENGTH = 64;
 const SCRYPT_SALT_BYTES = 16;
 const SCRYPT_MAXMEM = 64 * 1024 * 1024;
+const scryptAsync = promisify(scrypt);
 
-function deriveKey(password, pepper, saltBuffer, options) {
-  return scryptSync(`${password}:${pepper}`, saltBuffer, SCRYPT_KEY_LENGTH, {
+async function deriveKey(password, pepper, saltBuffer, options) {
+  return scryptAsync(`${password}:${pepper}`, saltBuffer, SCRYPT_KEY_LENGTH, {
     cost: options.cost,
     blockSize: options.blockSize,
     parallelization: options.parallelization,
@@ -75,9 +77,9 @@ export function needsPasswordRehash(passwordHash) {
   );
 }
 
-export function hashPassword(password, pepper) {
+export async function hashPassword(password, pepper) {
   const salt = randomBytes(SCRYPT_SALT_BYTES);
-  const key = deriveKey(password, pepper, salt, {
+  const key = await deriveKey(password, pepper, salt, {
     cost: SCRYPT_COST,
     blockSize: SCRYPT_BLOCK_SIZE,
     parallelization: SCRYPT_PARALLELIZATION,
@@ -93,10 +95,10 @@ export function hashPassword(password, pepper) {
   ].join('$');
 }
 
-export function verifyPassword(password, passwordHash, pepper) {
+export async function verifyPassword(password, passwordHash, pepper) {
   const parsed = parseScryptHash(passwordHash);
   if (parsed) {
-    const derived = deriveKey(password, pepper, parsed.salt, parsed);
+    const derived = await deriveKey(password, pepper, parsed.salt, parsed);
     if (derived.length !== parsed.key.length) {
       return false;
     }

@@ -2,6 +2,7 @@ import { prisma } from '../src/data/prisma.js';
 import { pathToFileURL } from 'node:url';
 import {
   deleteTenantForPlatformAdmin,
+  listBranchesForUser,
   listTenantsForUser,
   resolveTenantBranchContextForUser,
   updateTenantMembershipForUser,
@@ -10,6 +11,15 @@ import {
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
+  }
+}
+
+async function captureError(operation) {
+  try {
+    await operation();
+    return '';
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
   }
 }
 
@@ -53,6 +63,26 @@ export async function runTenantAccessSmoke() {
     });
     ids.branches.push(branchA.id);
 
+    const branchASecond = await prisma.branch.create({
+      data: {
+        tenantId: tenantA.id,
+        code: `a-second-${suffix}`,
+        name: `Branch A Second ${suffix}`,
+        status: 'active',
+      },
+    });
+    ids.branches.push(branchASecond.id);
+
+    const branchAInactive = await prisma.branch.create({
+      data: {
+        tenantId: tenantA.id,
+        code: `a-inactive-${suffix}`,
+        name: `Branch A Inactive ${suffix}`,
+        status: 'inactive',
+      },
+    });
+    ids.branches.push(branchAInactive.id);
+
     const branchB = await prisma.branch.create({
       data: {
         tenantId: tenantB.id,
@@ -80,6 +110,33 @@ export async function runTenantAccessSmoke() {
       },
     });
     ids.users.push(ownerUser.id);
+
+    const noMembershipUser = await prisma.user.create({
+      data: {
+        username: `smoke-no-membership-${suffix}`,
+        passwordHash: 'smoke',
+        role: 'kasir',
+      },
+    });
+    ids.users.push(noMembershipUser.id);
+
+    const cashierUser = await prisma.user.create({
+      data: {
+        username: `smoke-cashier-${suffix}`,
+        passwordHash: 'smoke',
+        role: 'kasir',
+      },
+    });
+    ids.users.push(cashierUser.id);
+
+    const inactiveMembershipUser = await prisma.user.create({
+      data: {
+        username: `smoke-inactive-member-${suffix}`,
+        passwordHash: 'smoke',
+        role: 'kasir',
+      },
+    });
+    ids.users.push(inactiveMembershipUser.id);
 
     const superuser = await prisma.user.create({
       data: {
@@ -110,6 +167,114 @@ export async function runTenantAccessSmoke() {
     });
     ids.memberships.push(ownerMembership.id);
 
+    const cashierMembership = await prisma.userMembership.create({
+      data: {
+        userId: cashierUser.id,
+        tenantId: tenantA.id,
+        role: 'kasir',
+        status: 'active',
+      },
+    });
+    ids.memberships.push(cashierMembership.id);
+
+    const inactiveMembership = await prisma.userMembership.create({
+      data: {
+        userId: inactiveMembershipUser.id,
+        tenantId: tenantA.id,
+        role: 'kasir',
+        status: 'inactive',
+      },
+    });
+    ids.memberships.push(inactiveMembership.id);
+
+    const noMembershipError = await captureError(() => listTenantsForUser({
+      userId: noMembershipUser.id,
+      role: 'kasir',
+    }));
+    assert(
+      noMembershipError === 'Tenant membership is required',
+      'Cashier without membership must not inherit the default tenant',
+    );
+
+    const noBranchListError = await captureError(() => listBranchesForUser({
+      userId: cashierUser.id,
+      role: 'kasir',
+      tenantId: tenantA.id,
+    }));
+    assert(
+      noBranchListError === 'Branch access is required',
+      'Cashier without branch assignment must not list tenant branches',
+    );
+
+    const noBranchContextError = await captureError(() => resolveTenantBranchContextForUser({
+      userId: cashierUser.id,
+      role: 'kasir',
+      requestedTenantId: tenantA.id,
+      requestedBranchId: branchA.id,
+    }));
+    assert(
+      noBranchContextError === 'Branch access is required',
+      'Cashier without branch assignment must not resolve a branch context',
+    );
+
+    await prisma.userBranchAccess.create({
+      data: {
+        userId: cashierUser.id,
+        branchId: branchA.id,
+        role: 'kasir',
+      },
+    });
+    const cashierBranches = await listBranchesForUser({
+      userId: cashierUser.id,
+      role: 'kasir',
+      tenantId: tenantA.id,
+    });
+    assert(
+      cashierBranches.length === 1 && cashierBranches[0].id === branchA.id,
+      'Cashier must see exactly the assigned active branch',
+    );
+
+    await prisma.userBranchAccess.update({
+      where: {
+        userId_branchId: {
+          userId: cashierUser.id,
+          branchId: branchA.id,
+        },
+      },
+      data: { branchId: branchAInactive.id },
+    });
+    const inactiveBranchError = await captureError(() => listBranchesForUser({
+      userId: cashierUser.id,
+      role: 'kasir',
+      tenantId: tenantA.id,
+    }));
+    assert(
+      inactiveBranchError === 'Branch access is required',
+      'Inactive branch assignments must not grant cashier access',
+    );
+
+    const ownerBranches = await listBranchesForUser({
+      userId: ownerUser.id,
+      role: 'kasir',
+      tenantId: tenantA.id,
+    });
+    assert(
+      ownerBranches.length === 2
+      && ownerBranches.every((branch) => branch.status === 'active'),
+      'Tenant owner must see all and only active tenant branches',
+    );
+
+    const inactiveMembershipError = await captureError(() => resolveTenantBranchContextForUser({
+      userId: inactiveMembershipUser.id,
+      role: 'kasir',
+      requestedTenantId: tenantA.id,
+      requestedBranchId: branchA.id,
+    }));
+    assert(
+      inactiveMembershipError === 'Tenant membership is inactive',
+      'Inactive tenant membership must not resolve request context',
+    );
+
     const tenantsForTenantAdmin = await listTenantsForUser({
       userId: tenantAdmin.id,
       role: 'kasir',
@@ -138,7 +303,7 @@ export async function runTenantAccessSmoke() {
     }
 
     assert(
-      forbiddenError.toLowerCase().includes('forbidden'),
+      forbiddenError === 'Tenant membership is required',
       'Tenant admin must be forbidden to resolve tenant B context',
     );
 
@@ -147,6 +312,36 @@ export async function runTenantAccessSmoke() {
       role: 'kasir',
       requestedTenantId: tenantA.id,
       requestedBranchId: branchA.id,
+    });
+
+    const inactiveBranchContextError = await captureError(() => resolveTenantBranchContextForUser({
+      userId: ownerUser.id,
+      role: 'kasir',
+      requestedTenantId: tenantA.id,
+      requestedBranchId: branchAInactive.id,
+    }));
+    assert(
+      inactiveBranchContextError === 'Branch not found',
+      'Tenant owner must not resolve an inactive branch context',
+    );
+
+    await prisma.tenant.update({
+      where: { id: tenantA.id },
+      data: { status: 'suspended' },
+    });
+    const suspendedTenantError = await captureError(() => resolveTenantBranchContextForUser({
+      userId: ownerUser.id,
+      role: 'kasir',
+      requestedTenantId: tenantA.id,
+      requestedBranchId: branchA.id,
+    }));
+    assert(
+      suspendedTenantError === 'Tenant is not active',
+      'Suspended tenant must not resolve request context',
+    );
+    await prisma.tenant.update({
+      where: { id: tenantA.id },
+      data: { status: 'active' },
     });
 
     await prisma.tenantSubscription.update({
@@ -195,16 +390,32 @@ export async function runTenantAccessSmoke() {
       'Tenant admin must not be able to downgrade owner membership',
     );
 
+    const finalOwnerError = await captureError(() => updateTenantMembershipForUser({
+      actorUserId: superuser.id,
+      actorRole: 'superuser',
+      membershipId: ownerMembership.id,
+      payload: { role: 'admin' },
+    }));
+    assert(
+      finalOwnerError === 'At least one active tenant owner is required',
+      'Superuser must not remove the final active owner',
+    );
+
+    const promotedBySuperuser = await updateTenantMembershipForUser({
+      actorUserId: superuser.id,
+      actorRole: 'superuser',
+      membershipId: tenantAdminMembership.id,
+      payload: { role: 'owner' },
+    });
+    assert(promotedBySuperuser.role === 'owner', 'Superuser should be able to add a replacement owner');
+
     const updatedBySuperuser = await updateTenantMembershipForUser({
       actorUserId: superuser.id,
       actorRole: 'superuser',
       membershipId: ownerMembership.id,
-      payload: {
-        role: 'admin',
-      },
+      payload: { role: 'admin' },
     });
-
-    assert(updatedBySuperuser.role === 'admin', 'Superuser should be able to update owner membership');
+    assert(updatedBySuperuser.role === 'admin', 'Superuser should be able to transfer owner authority');
 
     const deletedTenant = await deleteTenantForPlatformAdmin(tenantB.id, tenantB.name);
     assert(deletedTenant.id === tenantB.id, 'Platform admin deletion should return deleted tenant');
