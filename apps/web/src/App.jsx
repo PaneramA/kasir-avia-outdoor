@@ -96,7 +96,22 @@ function PageLoader() {
 
 function isPlatformAdmin(user) {
   const role = String(user?.role || '').trim().toLowerCase()
-  return role === 'superuser'
+  const username = String(user?.username || '').trim().toLowerCase()
+  return role === 'superuser' && username === PLATFORM_ADMIN_USERNAME
+}
+
+function resolveCurrentUser(user) {
+  if (!user || typeof user !== 'object') {
+    return user
+  }
+
+  const role = String(user.role || '').trim().toLowerCase()
+  const username = String(user.username || '').trim().toLowerCase()
+  if (role === 'superuser' && username !== PLATFORM_ADMIN_USERNAME) {
+    return { ...user, role: 'kasir' }
+  }
+
+  return user
 }
 
 function resolveCurrentUser(user, { trustPlatformAdmin = false } = {}) {
