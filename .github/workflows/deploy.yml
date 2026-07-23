@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   quality:
-    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true) }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main') }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -61,7 +61,7 @@ jobs:
       - run: npm run build
 
   dependency-audit:
-    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true) }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -79,7 +79,7 @@ jobs:
         run: npm audit --omit=dev
 
   deploy:
-    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true) }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main') }}
     needs:
       - quality
       - dependency-audit
