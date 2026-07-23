@@ -218,8 +218,9 @@ NEW_CORS_ORIGIN="$NEW_CORS_ORIGIN" node -e '
 Production binds the API to `HOST=127.0.0.1`, so only a local reverse proxy can reach it. When Nginx fronts the API, set `TRUST_PROXY=true` only after inspecting the effective Nginx `location` and confirming it discards any client-supplied `X-Forwarded-For` and overwrites it with `$remote_addr`. Leaving it false behind Nginx makes every browser share the proxy IP rate-limit bucket and can cause a global login lockout. Do not infer safety from a directive in an unrelated virtual host or location. The application accepts a forwarded client IP only from a loopback peer and only when it is a valid IP address.
 
 ```bash
-export NEW_TRUST_PROXY=true
-# Production memakai Nginx dan HOST=127.0.0.1. Jangan lanjutkan sebelum exact API proxy location lulus pemeriksaan di atas.
+export NEW_TRUST_PROXY=false
+# Tetap false sampai exact API proxy location terbukti overwrite X-Forwarded-For dengan $remote_addr.
+# Hanya setelah verifikasi itu, ubah manual ke true pada sesi rollout yang sama.
 printf 'TRUST_PROXY will be set to %s\n' "$NEW_TRUST_PROXY"
 ```
 

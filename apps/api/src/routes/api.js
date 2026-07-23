@@ -65,7 +65,7 @@ import {
 import { createAccessToken, verifyAccessToken } from '../auth/jwt.js';
 import { assertFeatureEnabled, assertTenantManager } from '../auth/authorization.js';
 import { createLoginRateLimiter, resolveLoginClientIp } from '../auth/loginRateLimiter.js';
-import { hashPassword, needsPasswordRehash, verifyPassword } from '../auth/password.js';
+import { needsPasswordRehash, verifyPassword } from '../auth/password.js';
 import { createExpiringVerificationStore } from '../auth/verificationStore.js';
 import {
   adminChangePasswordSchema,
@@ -108,19 +108,14 @@ let loginRateLimiter;
 let loginRateLimiterSignature = '';
 let inFlightLoginHashes = 0;
 const inFlightLoginHashesByKey = new Map();
-let dummyPasswordHashPromise;
-let dummyPasswordHashPepper = '';
-
-function getDummyPasswordHash(passwordPepper) {
-  if (!dummyPasswordHashPromise || dummyPasswordHashPepper !== passwordPepper) {
-    dummyPasswordHashPepper = passwordPepper;
-    dummyPasswordHashPromise = hashPassword(
-      'avia-invalid-login-dummy-password',
-      passwordPepper,
-    );
-  }
-  return dummyPasswordHashPromise;
-}
+export const DUMMY_LOGIN_PASSWORD_HASH = [
+  'scrypt',
+  '16384',
+  '8',
+  '1',
+  '0d38b3876df919ed00e20311de64d67c',
+  '3ab4295620a7e55c39d318f09231547f984b50faf7c989e26556578e9c7a3c891b91e92d6b1433cad5dfd459d701390d0f593af2a1746c4a34467f4062df3134',
+].join('$');
 
 function normalizeUsername(value) {
   return String(value || '').trim().toLowerCase();
@@ -147,6 +142,7 @@ export function isSafeClientErrorMessage(message) {
     || value.startsWith('Insufficient stock for ')
     || value.startsWith('Rental already ')
     || value.startsWith('Transaksi belum lunas')
+    || value === 'At least one admin account is required'
     || value === 'Current password is incorrect'
     || value === 'You cannot delete your own account';
 }
@@ -463,9 +459,8 @@ export async function apiRoute(req, res, env) {
       }
 
       try {
-        const dummyHashPromise = getDummyPasswordHash(env.passwordPepper);
         const user = await findUserByUsername(normalizedUsername);
-        const candidateHash = user?.passwordHash || await dummyHashPromise;
+        const candidateHash = user?.passwordHash || DUMMY_LOGIN_PASSWORD_HASH;
         const passwordVerified = await verifyPassword(
           body.password,
           candidateHash,
@@ -1305,6 +1300,11 @@ export async function apiRoute(req, res, env) {
     }
 
     if (message.startsWith('Item changed after it was loaded')) {
+      sendError(res, 409, message);
+      return true;
+    }
+
+    if (message === 'At least one admin account is required') {
       sendError(res, 409, message);
       return true;
     }

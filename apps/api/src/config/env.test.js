@@ -36,7 +36,7 @@ describe('environment configuration', () => {
 
     expect(getEnv()).toMatchObject({
       host: '127.0.0.1',
-      trustProxy: true,
+      trustProxy: false,
     });
   });
 
