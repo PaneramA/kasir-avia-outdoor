@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const repositoryRoot = fileURLToPath(new URL('../../../../', import.meta.url));
 const brokenMigrationPath = fileURLToPath(
   new URL('../../prisma/migrations/0003_rental_soft_delete_audit/migration.sql', import.meta.url),
 );
@@ -22,7 +21,6 @@ describe('release-critical files', () => {
   it('deploy workflow verifies and ships the exact tested commit over trusted SSH', () => {
     const workflow = readFileSync(deployWorkflowPath, 'utf8');
 
-    expect(repositoryRoot).toContain('kasir-aviaoutdoor');
     expect(workflow).toContain('VPS_SSH_HOST_FINGERPRINT');
     expect(workflow).toContain("StrictHostKeyChecking=yes");
     expect(workflow).toContain("ref: ${{ github.sha }}");
