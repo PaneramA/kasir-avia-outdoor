@@ -79,6 +79,8 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      - name: Use npm audit bulk endpoint
+        run: npm install -g npm@11.6.2
       - run: npm ci
       - name: Report production dependency advisories
         run: npm audit --omit=dev
