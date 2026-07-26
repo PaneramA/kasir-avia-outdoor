@@ -209,4 +209,29 @@ describe('Rental page item picker', () => {
     expect(screen.getAllByDisplayValue('Jl. Merapi No. 7').length).toBeGreaterThan(0);
     expect(screen.getAllByDisplayValue('123456789').length).toBeGreaterThan(0);
   });
+
+  it('hides stale customer suggestions immediately when the customer name search is cleared', async () => {
+    fetchCustomers.mockResolvedValue([
+      {
+        id: 'customer-1',
+        name: 'Ayu Pratiwi',
+        phone: '08123456789',
+        address: 'Jl. Merapi No. 7',
+        guarantee: 'SIM',
+        idNumber: '123456789',
+      },
+    ]);
+
+    renderRental();
+
+    const nameInputs = screen.getAllByLabelText(/nama customer/i);
+    fireEvent.change(nameInputs[0], { target: { value: 'Ayu' } });
+
+    await waitFor(() => expect(fetchCustomers).toHaveBeenCalledWith('Ayu'));
+    expect(await screen.findAllByRole('button', { name: /ayu pratiwi/i })).toHaveLength(2);
+
+    fireEvent.change(nameInputs[0], { target: { value: '' } });
+
+    expect(screen.queryAllByRole('button', { name: /ayu pratiwi/i })).toHaveLength(0);
+  });
 });

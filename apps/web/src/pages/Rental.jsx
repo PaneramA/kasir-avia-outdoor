@@ -160,15 +160,19 @@ const Rental = ({
         return () => clearTimeout(timeoutId);
     }, [customer.name, selectedCustomerId]);
 
+    const normalizedCustomerNameSearch = customer.name.trim();
+    const isCustomerLookupActive = !selectedCustomerId && normalizedCustomerNameSearch.length >= 2;
+    const hasFreshCustomerLookup = isCustomerLookupActive && debouncedCustomerSearch === normalizedCustomerNameSearch;
+
     const customerSuggestionQuery = useSWR(
         debouncedCustomerSearch.length >= 2 ? APP_CACHE_KEYS.customers(debouncedCustomerSearch) : null,
         ([, keyword]) => fetchCustomers(keyword),
     );
     const customerSuggestions = useMemo(
-        () => (Array.isArray(customerSuggestionQuery.data) ? customerSuggestionQuery.data : []),
-        [customerSuggestionQuery.data],
+        () => (hasFreshCustomerLookup && Array.isArray(customerSuggestionQuery.data) ? customerSuggestionQuery.data : []),
+        [customerSuggestionQuery.data, hasFreshCustomerLookup],
     );
-    const isSearchingCustomer = customerSuggestionQuery.isLoading;
+    const isSearchingCustomer = hasFreshCustomerLookup && customerSuggestionQuery.isLoading;
 
     const normalizedInventorySearch = inventorySearch.trim().toLowerCase();
     const filteredItems = safeInventory.filter((item) => {
