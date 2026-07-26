@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import useSWR from 'swr';
 import { APP_ROUTES } from '../lib/routes';
 import { formatCurrency, formatMonthLabel } from '../lib/financial';

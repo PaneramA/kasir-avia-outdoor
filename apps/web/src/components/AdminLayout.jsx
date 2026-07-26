@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router'
 import { SWRConfig } from 'swr'
 import { APP_ROUTES, resolvePageInfo } from '../lib/routes'
 import { ADMIN_SWR_OPTIONS } from '../lib/adminCache'

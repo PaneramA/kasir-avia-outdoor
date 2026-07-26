@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { APP_ROUTES } from '../lib/routes'
 import { getPlannedReturnDate } from '../lib/rentalTime'
 
