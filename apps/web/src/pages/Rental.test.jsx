@@ -89,4 +89,12 @@ describe('Rental page item picker', () => {
     fireEvent.click(within(row).getByRole('button', { name: /kurangi tenda dome 4p/i }));
     expect(within(row).getByText('0')).toBeInTheDocument();
   });
+
+  it('places renter workspace and text item picker as the main desktop sections', () => {
+    renderRental();
+
+    expect(screen.getByRole('heading', { name: /detail penyewa/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /barang tersedia/i })).toBeInTheDocument();
+    expect(screen.getByText('Tenda Dome 4p')).toBeInTheDocument();
+  });
 });

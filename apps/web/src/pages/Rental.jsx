@@ -1174,10 +1174,10 @@ const Rental = ({
                 </p>
             )}
 
-            <div className="flex flex-col gap-6 lg:h-full lg:min-h-0 lg:flex-row lg:gap-[30px] lg:overflow-hidden">
-                <div className={`${mobileStep === 2 ? 'flex' : 'hidden'} flex-1 flex-col lg:flex lg:min-h-0 lg:overflow-hidden`}>
+            <div className="flex flex-col gap-5 lg:h-full lg:min-h-0 lg:flex-row lg:gap-5 lg:overflow-hidden">
+                <div className={`${mobileStep === 2 ? 'flex' : 'hidden'} w-full flex-col lg:order-2 lg:flex lg:w-[38%] lg:min-h-0 lg:overflow-hidden`}>
                     <div className="mb-5 sm:mb-[30px]">
-                        <h3 className="text-[1.1rem] font-bold text-text-main sm:text-[1.2rem]">Pilih Barang</h3>
+                        <h3 className="text-base font-bold text-[#10231c]">Barang Tersedia</h3>
                         <div className="sticky top-0 z-20 mt-3 rounded-xl border border-border/80 bg-bg-main/95 p-3 shadow-lg backdrop-blur lg:static lg:mt-0 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
                             <div className="flex flex-col gap-2 lg:gap-3">
                                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-end">
@@ -1226,7 +1226,7 @@ const Rental = ({
                     </div>
                 </div>
 
-                <div className="w-full lg:flex lg:w-[400px] lg:min-h-0 lg:flex-col">
+                <div className="w-full lg:order-1 lg:flex lg:w-[62%] lg:min-h-0 lg:flex-col">
                     <div className="rounded-xl border border-border bg-sidebar-bg p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] sm:p-6 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
                         <div className="lg:hidden">
                             {mobileStep === 1 && (
