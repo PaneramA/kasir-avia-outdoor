@@ -61,7 +61,9 @@ function RentalHarness() {
         cart={cart}
         setCart={setCart}
         onCheckout={vi.fn()}
-        currentUser={{ username: 'kasir', role: 'kasir' }}
+        currentUser={{ id: 'user-1', username: 'kasir', role: 'kasir' }}
+        tenantId="tenant-1"
+        branchId="branch-1"
         tenantSettings={null}
       />
     </SWRConfig>
@@ -200,7 +202,7 @@ describe('Rental page item picker', () => {
     const nameInputs = screen.getAllByLabelText(/nama customer/i);
     fireEvent.change(nameInputs[0], { target: { value: 'Ayu' } });
 
-    await waitFor(() => expect(fetchCustomers).toHaveBeenCalledWith('Ayu'));
+    await waitFor(() => expect(fetchCustomers).toHaveBeenCalledWith('ayu'));
     const matchingCustomers = await screen.findAllByRole('button', { name: /ayu pratiwi/i });
     fireEvent.click(matchingCustomers[0]);
 
@@ -227,7 +229,7 @@ describe('Rental page item picker', () => {
     const nameInputs = screen.getAllByLabelText(/nama customer/i);
     fireEvent.change(nameInputs[0], { target: { value: 'Ayu' } });
 
-    await waitFor(() => expect(fetchCustomers).toHaveBeenCalledWith('Ayu'));
+    await waitFor(() => expect(fetchCustomers).toHaveBeenCalledWith('ayu'));
     expect(await screen.findAllByRole('button', { name: /ayu pratiwi/i })).toHaveLength(2);
 
     fireEvent.change(nameInputs[0], { target: { value: '' } });

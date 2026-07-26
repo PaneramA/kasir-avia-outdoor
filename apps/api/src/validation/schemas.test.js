@@ -3,6 +3,7 @@ import {
   createPlanSchema,
   createRentalSchema,
   onboardTenantSchema,
+  updateItemSchema,
   updatePlanSchema,
   updateTenantSubscriptionSchema,
 } from './schemas.js';
@@ -60,6 +61,22 @@ describe('API validation schemas', () => {
   it('rejects empty partial updates', () => {
     expect(updatePlanSchema.safeParse({}).success).toBe(false);
     expect(updateTenantSubscriptionSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('requires the last observed item version when updating inventory', () => {
+    const item = {
+      name: 'Tenda Dome',
+      category: 'Tenda',
+      stock: 4,
+      price: 50_000,
+      image: '',
+    };
+
+    expect(updateItemSchema.safeParse(item).success).toBe(false);
+    expect(updateItemSchema.parse({
+      ...item,
+      expectedUpdatedAt: '2026-07-22T04:30:00.000Z',
+    }).expectedUpdatedAt).toBe('2026-07-22T04:30:00.000Z');
   });
 
   it('accepts feature values without losing their JSON type', () => {

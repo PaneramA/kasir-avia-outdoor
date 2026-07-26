@@ -59,7 +59,7 @@ export function assertSecureProductionConfig(env) {
 }
 ```
 
-Parse positive integers with defaults `REQUEST_BODY_LIMIT_BYTES=1048576`, `REQUEST_BODY_TIMEOUT_MS=10000`, `LOGIN_RATE_LIMIT_MAX_BUCKETS=10000`; parse `TRUST_PROXY=false` strictly.
+Parse positive integers with defaults `REQUEST_BODY_LIMIT_BYTES=1048576`, `REQUEST_BODY_TIMEOUT_MS=10000`, `LOGIN_RATE_LIMIT_MAX_BUCKETS=10000`; parse `TRUST_PROXY=false` strictly and require explicit production opt-in after proxy verification.
 
 - [ ] **Step 4: Assert before server listen**
 
@@ -247,7 +247,7 @@ function getRequestClientIp(req, env) {
 }
 ```
 
-Replace route-level Maps with limiter instances. Include a startup log that the limiter is process-local and reject `TRUST_PROXY=true` documentation unless Nginx overwrites forwarded headers.
+Replace route-level Maps with limiter instances. Include a startup log that the limiter is process-local and keep `TRUST_PROXY=false` by default until Nginx overwrite behavior is verified explicitly.
 
 - [ ] **Step 5: Run route/security tests and commit**
 

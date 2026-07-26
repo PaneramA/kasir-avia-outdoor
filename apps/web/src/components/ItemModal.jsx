@@ -91,6 +91,7 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
             stock: parseInt(formData.stock, 10),
             price: parseInt(formData.price, 10),
             image: formData.image || '',
+            ...(editingItem ? { expectedUpdatedAt: editingItem.updatedAt } : {}),
         };
 
         if (!itemData.category) {

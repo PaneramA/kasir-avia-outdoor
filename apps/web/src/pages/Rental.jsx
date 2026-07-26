@@ -57,6 +57,15 @@ const RENTAL_PRIMARY_BUTTON_CLASS = 'w-full rounded-md bg-[#146c43] py-3 text-sm
 const RENTAL_SECONDARY_BUTTON_CLASS = 'w-full rounded-md border border-[#cfd8d3] bg-white px-3 py-3 text-sm font-semibold text-[#10231c] transition hover:border-[#146c43]';
 const RENTAL_FIELD_CLASS = 'w-full rounded-md border border-[#cfd8d3] bg-white p-2.5 text-[#10231c] outline-none transition-colors focus:border-[#146c43]';
 
+const createRentalDraftStorageKey = (userId, tenantId, branchId) => {
+    const scope = [userId, tenantId, branchId].map((value) => String(value || '').trim());
+    if (scope.some((value) => !value)) {
+        return '';
+    }
+
+    return `${RENTAL_DRAFT_STORAGE_KEY}:${scope.map(encodeURIComponent).join(':')}`;
+};
+
 const getDefaultRentalTimeRange = () => {
     const startAt = new Date();
     startAt.setSeconds(0, 0);
@@ -74,6 +83,8 @@ const Rental = ({
     setCart,
     onCheckout,
     currentUser,
+    tenantId,
+    branchId,
     tenantSettings,
 }) => {
     const safeInventory = useMemo(() => (Array.isArray(inventory) ? inventory : []), [inventory]);
@@ -165,8 +176,10 @@ const Rental = ({
     const hasFreshCustomerLookup = isCustomerLookupActive && debouncedCustomerSearch === normalizedCustomerNameSearch;
 
     const customerSuggestionQuery = useSWR(
-        debouncedCustomerSearch.length >= 2 ? APP_CACHE_KEYS.customers(debouncedCustomerSearch) : null,
-        ([, keyword]) => fetchCustomers(keyword),
+        currentUser?.id && tenantId && branchId && debouncedCustomerSearch.length >= 2
+            ? APP_CACHE_KEYS.customers(currentUser.id, tenantId, branchId, debouncedCustomerSearch)
+            : null,
+        ([, , , , keyword]) => fetchCustomers(keyword),
     );
     const customerSuggestions = useMemo(
         () => (hasFreshCustomerLookup && Array.isArray(customerSuggestionQuery.data) ? customerSuggestionQuery.data : []),
@@ -199,6 +212,10 @@ const Rental = ({
         () => resolveRentalDayPolicy(tenantSettings),
         [tenantSettings],
     );
+    const rentalDraftStorageKey = useMemo(
+        () => createRentalDraftStorageKey(currentUser?.id, tenantId, branchId),
+        [branchId, currentUser?.id, tenantId],
+    );
     const rentalStartAt = useMemo(() => toDate(rentalTimeRange.startInput), [rentalTimeRange.startInput]);
     const rentalEndAt = useMemo(() => toDate(rentalTimeRange.endInput), [rentalTimeRange.endInput]);
 
@@ -208,7 +225,10 @@ const Rental = ({
         }
 
         window.localStorage.removeItem(RENTAL_DRAFT_STORAGE_KEY);
-    }, []);
+        if (rentalDraftStorageKey) {
+            window.localStorage.removeItem(rentalDraftStorageKey);
+        }
+    }, [rentalDraftStorageKey]);
 
     const restoreDraftFromStorage = useCallback((draftPayload) => {
         if (!draftPayload || typeof draftPayload !== 'object') {
@@ -294,7 +314,10 @@ const Rental = ({
         hasRestoredDraftRef.current = true;
 
         try {
-            const rawDraft = window.localStorage.getItem(RENTAL_DRAFT_STORAGE_KEY);
+            window.localStorage.removeItem(RENTAL_DRAFT_STORAGE_KEY);
+            const rawDraft = rentalDraftStorageKey
+                ? window.localStorage.getItem(rentalDraftStorageKey)
+                : null;
             if (!rawDraft) {
                 return;
             }
@@ -332,6 +355,7 @@ const Rental = ({
         duration,
         payment.status,
         payment.paidAmount,
+        rentalDraftStorageKey,
         restoreDraftFromStorage,
     ]);
 

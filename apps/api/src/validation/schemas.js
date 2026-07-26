@@ -45,6 +45,7 @@ export const updateItemSchema = z.object({
   stock: z.coerce.number().int().min(0),
   price: z.coerce.number().int().min(0),
   image: z.string().optional().default(''),
+  expectedUpdatedAt: z.string().datetime(),
 });
 
 export const updateTenantSettingsSchema = z.object({
