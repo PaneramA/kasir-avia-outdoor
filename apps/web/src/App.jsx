@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router'
 import useSWR, { useSWRConfig } from 'swr'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'

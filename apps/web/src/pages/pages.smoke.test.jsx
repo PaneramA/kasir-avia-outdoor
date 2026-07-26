@@ -3,7 +3,7 @@
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { render, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { SWRConfig } from 'swr';
 import { describe, expect, it, vi } from 'vitest';
 import Account from './Account.jsx';
