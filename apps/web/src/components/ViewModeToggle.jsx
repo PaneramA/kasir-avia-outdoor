@@ -14,7 +14,7 @@ const ViewModeToggle = ({
     ];
 
     return (
-        <div className={`grid grid-cols-2 rounded-md border border-border bg-sidebar-bg p-1 ${containerClassName}`.trim()}>
+        <div className={`grid grid-cols-2 rounded-md border border-border bg-card-bg p-1 ${containerClassName}`.trim()}>
             {options.map((option) => {
                 const isActive = value === option.key;
                 return (
