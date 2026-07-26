@@ -41,18 +41,18 @@ const CategoryModal = ({ isOpen, setIsOpen, categories, onAddCategory, onDeleteC
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-3 backdrop-blur-[5px] sm:p-4">
-            <div className="max-h-[92vh] w-full max-w-[500px] overflow-hidden rounded-DEFAULT border border-border bg-sidebar-bg animate-[modalIn_0.3s_ease-out]">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3 sm:p-4">
+            <div className="max-h-[92vh] w-full max-w-[500px] overflow-hidden rounded-md border border-border bg-card-bg animate-[modalIn_0.3s_ease-out]">
                 <div className="flex items-center justify-between border-b border-border px-4 py-4 sm:p-[20px_25px]">
                     <h3 className="text-[1.05rem] font-bold text-text-main sm:text-[1.2rem]">Kelola Kategori</h3>
-                    <button className="flex h-10 w-10 items-center justify-center rounded-full border border-transparent bg-transparent text-[1.5rem] text-text-muted transition hover:border-border hover:text-text-main" onClick={() => setIsOpen(false)}>&times;</button>
+                    <button className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card-bg text-[1.5rem] text-text-muted transition hover:border-accent hover:text-text-main" onClick={() => setIsOpen(false)}>&times;</button>
                 </div>
                 <div className="max-h-[calc(92vh-72px)] overflow-y-auto p-4 sm:max-h-[calc(92vh-86px)] sm:p-[25px]">
                     <div className="mb-5 space-y-2">
                         {categories.map((cat) => (
-                            <div className="group flex items-center justify-between rounded-lg border border-border bg-bg-main p-3 sm:p-[12px_20px] transition-all duration-300 hover:border-accent" key={cat}>
+                            <div className="group flex items-center justify-between rounded-md border border-border bg-bg-main p-3 transition-colors hover:border-accent sm:p-[12px_20px]" key={cat}>
                                 <span className="text-text-main font-medium">{cat}</span>
-                                <button disabled={isSubmitting} className="flex h-10 w-10 items-center justify-center rounded-full bg-transparent text-[1.4rem] text-[#e74c3c] transition-transform hover:scale-125 disabled:opacity-60" onClick={() => handleDeleteCategory(cat)}>&times;</button>
+                                <button disabled={isSubmitting} className="flex h-10 w-10 items-center justify-center rounded-md border border-transparent bg-card-bg text-[1.4rem] text-red-600 transition hover:border-red-600 disabled:opacity-60" onClick={() => handleDeleteCategory(cat)}>&times;</button>
                             </div>
                         ))}
                     </div>
@@ -60,13 +60,13 @@ const CategoryModal = ({ isOpen, setIsOpen, categories, onAddCategory, onDeleteC
                         <label className="block mb-2 text-[0.9rem] text-text-muted">Tambah Kategori Baru</label>
                         <div className="flex flex-col gap-2.5 sm:flex-row">
                             <input
-                                className="flex-1 bg-bg-main border border-border p-3 rounded-lg text-text-main outline-none focus:border-accent transition-colors"
+                                className="flex-1 rounded-md border border-border bg-bg-main p-3 text-text-main outline-none transition-colors focus:border-accent"
                                 type="text"
                                 placeholder="Nama kategori..."
                                 value={newCatName}
                                 onChange={(e) => setNewCatName(e.target.value)}
                             />
-                            <button disabled={isSubmitting} className="min-h-11 rounded-lg bg-accent px-6 py-3 font-semibold text-white transition hover:bg-accent-hover shadow-lg whitespace-nowrap disabled:opacity-60" onClick={handleAddCategory}>
+                            <button disabled={isSubmitting} className="min-h-11 whitespace-nowrap rounded-md bg-accent px-6 py-3 font-semibold text-white transition hover:bg-accent-hover disabled:opacity-60" onClick={handleAddCategory}>
                                 {isSubmitting ? 'Proses...' : 'Simpan'}
                             </button>
                         </div>

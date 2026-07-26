@@ -199,7 +199,7 @@ const Users = ({ userId = '' }) => {
 
     return (
         <div className="space-y-6 pt-0 pb-4 sm:pb-5">
-            <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">
+            <section className="rounded-md border border-border bg-card-bg p-4 sm:p-6">
                 <h3 className="text-[1.1rem] font-bold text-text-main mb-1">Tambah User Baru</h3>
                 <p className="text-text-muted text-sm mb-5">Buat akun admin atau kasir untuk akses aplikasi.</p>
 
@@ -207,7 +207,7 @@ const Users = ({ userId = '' }) => {
                     <div className="md:col-span-1">
                         <label className="block mb-1.5 text-[0.85rem] text-text-muted">Username</label>
                         <input
-                            className="w-full bg-bg-main border border-border p-2.5 rounded-lg text-text-main outline-none focus:border-accent"
+                            className="w-full rounded-md border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
                             value={form.username}
                             onChange={(event) => setForm((prev) => ({ ...prev, username: event.target.value }))}
                             placeholder="username"
@@ -218,7 +218,7 @@ const Users = ({ userId = '' }) => {
                         <label className="block mb-1.5 text-[0.85rem] text-text-muted">Password</label>
                         <input
                             type="password"
-                            className="w-full bg-bg-main border border-border p-2.5 rounded-lg text-text-main outline-none focus:border-accent"
+                            className="w-full rounded-md border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
                             value={form.password}
                             onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
                             placeholder="minimal 8 karakter"
@@ -228,7 +228,7 @@ const Users = ({ userId = '' }) => {
                     <div className="md:col-span-1">
                         <label className="block mb-1.5 text-[0.85rem] text-text-muted">Role</label>
                         <select
-                            className="w-full bg-bg-main border border-border p-2.5 rounded-lg text-text-main outline-none focus:border-accent"
+                            className="w-full rounded-md border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
                             value={form.role}
                             onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value }))}
                         >
@@ -240,7 +240,7 @@ const Users = ({ userId = '' }) => {
                     <button
                         type="submit"
                         disabled={isSubmitting}
-                        className="min-h-11 rounded-lg bg-accent px-5 py-2.5 font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
+                        className="min-h-11 rounded-md bg-accent px-5 py-2.5 font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
                     >
                         {isSubmitting ? 'Menyimpan...' : 'Buat User'}
                     </button>
@@ -248,14 +248,14 @@ const Users = ({ userId = '' }) => {
             </section>
 
             {message && (
-                <div className="rounded-lg border border-[#2ecc71]/40 bg-[#2ecc71]/10 p-3 text-sm text-[#6ee7a8]">{message}</div>
+                <div className="rounded-md border border-accent bg-card-bg p-3 text-sm text-accent">{message}</div>
             )}
 
             {(errorMessage || queryErrorMessage) && (
-                <div className="rounded-lg border border-[#e74c3c]/40 bg-[#e74c3c]/10 p-3 text-sm text-[#f3b2ad]">{errorMessage || queryErrorMessage}</div>
+                <div className="rounded-md border border-red-600 bg-card-bg p-3 text-sm text-red-600">{errorMessage || queryErrorMessage}</div>
             )}
 
-            <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">
+            <section className="rounded-md border border-border bg-card-bg p-4 sm:p-6">
                 <h3 className="text-[1.1rem] font-bold text-text-main mb-1">Daftar User</h3>
                 <p className="text-text-muted text-sm mb-5">Reset password, edit role, dan hapus user dari tabel ini.</p>
 
@@ -265,11 +265,11 @@ const Users = ({ userId = '' }) => {
                     <>
                         <div className="space-y-3 md:hidden">
                             {users.map((user) => (
-                                <article key={user.id} className="rounded-lg border border-border/50 bg-bg-main/30 p-4">
+                                <article key={user.id} className="rounded-md border border-border bg-bg-main p-4">
                                     <div className="mb-3">
                                         {editingUserId === user.id ? (
                                             <input
-                                                className="w-full rounded-lg border border-border bg-bg-main p-2 text-text-main outline-none focus:border-accent"
+                                                className="w-full rounded-md border border-border bg-bg-main p-2 text-text-main outline-none focus:border-accent"
                                                 value={editForm.username}
                                                 onChange={(event) => setEditForm((prev) => ({ ...prev, username: event.target.value }))}
                                             />
@@ -282,7 +282,7 @@ const Users = ({ userId = '' }) => {
                                     <div className="mb-3">
                                         {editingUserId === user.id ? (
                                             <select
-                                                className="w-full rounded-lg border border-border bg-bg-main p-2 text-text-main outline-none focus:border-accent"
+                                                className="w-full rounded-md border border-border bg-bg-main p-2 text-text-main outline-none focus:border-accent"
                                                 value={editForm.role}
                                                 onChange={(event) => setEditForm((prev) => ({ ...prev, role: event.target.value }))}
                                             >
@@ -299,14 +299,14 @@ const Users = ({ userId = '' }) => {
                                         {editingUserId === user.id ? (
                                             <>
                                                 <button
-                                                    className="min-h-11 rounded bg-accent px-3 py-2 text-sm text-white hover:bg-accent-hover disabled:opacity-60"
+                                                    className="min-h-11 rounded-md bg-accent px-3 py-2 text-sm text-white hover:bg-accent-hover disabled:opacity-60"
                                                     onClick={() => handleSaveEdit(user.id)}
                                                     disabled={isSavingEdit}
                                                 >
                                                     {isSavingEdit ? 'Menyimpan...' : 'Simpan'}
                                                 </button>
                                                 <button
-                                                    className="min-h-11 rounded border border-border bg-sidebar-bg px-3 py-2 text-sm text-text-main hover:border-accent"
+                                                    className="min-h-11 rounded-md border border-border bg-card-bg px-3 py-2 text-sm text-text-main hover:border-accent"
                                                     onClick={handleCancelEdit}
                                                 >
                                                     Batal
@@ -315,20 +315,20 @@ const Users = ({ userId = '' }) => {
                                         ) : (
                                             <>
                                                 <button
-                                                    className="min-h-11 rounded border border-border bg-sidebar-bg px-3 py-2 text-sm text-text-main hover:border-accent"
+                                                    className="min-h-11 rounded-md border border-border bg-card-bg px-3 py-2 text-sm text-text-main hover:border-accent"
                                                     onClick={() => handleStartEdit(user)}
                                                 >
                                                     Edit
                                                 </button>
                                                 <button
-                                                    className="min-h-11 rounded border border-border bg-sidebar-bg px-3 py-2 text-sm text-text-main hover:border-accent"
+                                                    className="min-h-11 rounded-md border border-border bg-card-bg px-3 py-2 text-sm text-text-main hover:border-accent"
                                                     onClick={() => handleResetPassword(user)}
                                                     disabled={deletingUserId === user.id}
                                                 >
                                                     Reset Password
                                                 </button>
                                                 <button
-                                                    className="min-h-11 rounded border border-[#e74c3c]/50 bg-[#e74c3c]/10 px-3 py-2 text-sm text-[#f3b2ad] hover:bg-[#e74c3c]/20 disabled:opacity-60"
+                                                    className="min-h-11 rounded-md border border-red-600 bg-red-600 px-3 py-2 text-sm text-white hover:border-red-700 hover:bg-red-700 disabled:opacity-60"
                                                     onClick={() => handleDeleteUser(user)}
                                                     disabled={deletingUserId === user.id || currentUser?.id === user.id}
                                                     title={currentUser?.id === user.id ? 'Akun yang sedang dipakai tidak bisa dihapus.' : ''}
@@ -356,10 +356,10 @@ const Users = ({ userId = '' }) => {
                                 <tbody>
                                     {users.map((user) => (
                                         <tr key={user.id} className="hover:bg-surface-hover">
-                                            <td className="border-b border-border/40 p-3 font-medium text-text-main">
+                                            <td className="border-b border-border p-3 font-medium text-text-main">
                                                 {editingUserId === user.id ? (
                                                     <input
-                                                        className="w-full rounded-lg border border-border bg-bg-main p-2 text-text-main outline-none focus:border-accent"
+                                                        className="w-full rounded-md border border-border bg-bg-main p-2 text-text-main outline-none focus:border-accent"
                                                         value={editForm.username}
                                                         onChange={(event) => setEditForm((prev) => ({ ...prev, username: event.target.value }))}
                                                     />
@@ -367,10 +367,10 @@ const Users = ({ userId = '' }) => {
                                                     user.username
                                                 )}
                                             </td>
-                                            <td className="border-b border-border/40 p-3 capitalize text-text-muted">
+                                            <td className="border-b border-border p-3 capitalize text-text-muted">
                                                 {editingUserId === user.id ? (
                                                     <select
-                                                        className="w-full rounded-lg border border-border bg-bg-main p-2 text-text-main outline-none focus:border-accent"
+                                                        className="w-full rounded-md border border-border bg-bg-main p-2 text-text-main outline-none focus:border-accent"
                                                         value={editForm.role}
                                                         onChange={(event) => setEditForm((prev) => ({ ...prev, role: event.target.value }))}
                                                     >
@@ -382,20 +382,20 @@ const Users = ({ userId = '' }) => {
                                                     user.role
                                                 )}
                                             </td>
-                                            <td className="border-b border-border/40 p-3 text-sm text-text-muted">{new Date(user.createdAt).toLocaleString('id-ID')}</td>
-                                            <td className="border-b border-border/40 p-3 text-right">
+                                            <td className="border-b border-border p-3 text-sm text-text-muted">{new Date(user.createdAt).toLocaleString('id-ID')}</td>
+                                            <td className="border-b border-border p-3 text-right">
                                                 <div className="flex justify-end gap-2">
                                                     {editingUserId === user.id ? (
                                                         <>
                                                             <button
-                                                                className="rounded bg-accent px-3 py-1.5 text-sm text-white hover:bg-accent-hover disabled:opacity-60"
+                                                                className="rounded-md bg-accent px-3 py-1.5 text-sm text-white hover:bg-accent-hover disabled:opacity-60"
                                                                 onClick={() => handleSaveEdit(user.id)}
                                                                 disabled={isSavingEdit}
                                                             >
                                                                 {isSavingEdit ? 'Menyimpan...' : 'Simpan'}
                                                             </button>
                                                             <button
-                                                                className="rounded border border-border bg-sidebar-bg px-3 py-1.5 text-sm text-text-main hover:border-accent"
+                                                                className="rounded-md border border-border bg-card-bg px-3 py-1.5 text-sm text-text-main hover:border-accent"
                                                                 onClick={handleCancelEdit}
                                                             >
                                                                 Batal
@@ -404,13 +404,13 @@ const Users = ({ userId = '' }) => {
                                                     ) : (
                                                         <>
                                                             <button
-                                                                className="rounded border border-border bg-sidebar-bg px-3 py-1.5 text-sm text-text-main hover:border-accent"
+                                                                className="rounded-md border border-border bg-card-bg px-3 py-1.5 text-sm text-text-main hover:border-accent"
                                                                 onClick={() => handleStartEdit(user)}
                                                             >
                                                                 Edit
                                                             </button>
                                                             <button
-                                                                className="rounded border border-border bg-sidebar-bg px-3 py-1.5 text-sm text-text-main hover:border-accent"
+                                                                className="rounded-md border border-border bg-card-bg px-3 py-1.5 text-sm text-text-main hover:border-accent"
                                                                 onClick={() => handleResetPassword(user)}
                                                                 disabled={deletingUserId === user.id}
                                                             >
@@ -420,9 +420,9 @@ const Users = ({ userId = '' }) => {
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="border-b border-border/40 p-3 text-right">
+                                            <td className="border-b border-border p-3 text-right">
                                                 <button
-                                                    className="rounded border border-[#e74c3c]/50 bg-[#e74c3c]/10 px-3 py-1.5 text-sm text-[#f3b2ad] hover:bg-[#e74c3c]/20 disabled:opacity-60"
+                                                    className="rounded-md border border-red-600 bg-red-600 px-3 py-1.5 text-sm text-white hover:border-red-700 hover:bg-red-700 disabled:opacity-60"
                                                     onClick={() => handleDeleteUser(user)}
                                                     disabled={deletingUserId === user.id || currentUser?.id === user.id || editingUserId === user.id}
                                                     title={currentUser?.id === user.id ? 'Akun yang sedang dipakai tidak bisa dihapus.' : ''}

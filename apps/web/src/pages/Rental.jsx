@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr';
 import { fetchCustomers } from '../lib/api';
 import { APP_CACHE_KEYS } from '../lib/appCache';
-import ViewModeToggle from '../components/ViewModeToggle';
+import RentalDateRangePicker from '../components/RentalDateRangePicker';
 import ReceiptModal from '../components/ReceiptModal';
 import { openReceiptWhatsApp, printReceipt } from '../lib/receipt';
 import {
@@ -51,9 +51,11 @@ const isEditableTarget = (target) => (
 );
 
 const STOCK_WARNING_MESSAGE = 'Stok item tidak mencukupi.';
-const RENTAL_VIEW_STORAGE_KEY = 'avia_rental_inventory_view_mode';
 const RENTAL_DRAFT_STORAGE_KEY = 'avia_rental_draft_v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
+const RENTAL_PRIMARY_BUTTON_CLASS = 'w-full rounded-md bg-[#146c43] py-3 text-sm font-bold text-white transition hover:bg-[#0f5132] disabled:cursor-not-allowed disabled:bg-[#aebbb5]';
+const RENTAL_SECONDARY_BUTTON_CLASS = 'w-full rounded-md border border-[#cfd8d3] bg-white px-3 py-3 text-sm font-semibold text-[#10231c] transition hover:border-[#146c43]';
+const RENTAL_FIELD_CLASS = 'w-full rounded-md border border-[#cfd8d3] bg-white p-2.5 text-[#10231c] outline-none transition-colors focus:border-[#146c43]';
 
 const createRentalDraftStorageKey = (userId, tenantId, branchId) => {
     const scope = [userId, tenantId, branchId].map((value) => String(value || '').trim());
@@ -72,15 +74,6 @@ const getDefaultRentalTimeRange = () => {
         startInput: formatDateTimeLocalInput(startAt),
         endInput: formatDateTimeLocalInput(endAt),
     };
-};
-
-const getInitialRentalInventoryView = () => {
-    if (typeof window === 'undefined') {
-        return 'grid';
-    }
-
-    const saved = window.localStorage.getItem(RENTAL_VIEW_STORAGE_KEY);
-    return saved === 'list' ? 'list' : 'grid';
 };
 
 const Rental = ({
@@ -102,8 +95,8 @@ const Rental = ({
     const [customer, setCustomer] = useState(INITIAL_CUSTOMER);
     const [duration, setDuration] = useState(1);
     const [rentalTimeRange, setRentalTimeRange] = useState(() => getDefaultRentalTimeRange());
-    const [customerSearch, setCustomerSearch] = useState('');
     const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState('');
+    const [selectedCustomerId, setSelectedCustomerId] = useState(null);
     const [payment, setPayment] = useState(INITIAL_PAYMENT);
     const [mobileStep, setMobileStep] = useState(1);
     const [customerErrors, setCustomerErrors] = useState(INITIAL_CUSTOMER_ERRORS);
@@ -111,7 +104,6 @@ const Rental = ({
     const [durationError, setDurationError] = useState('');
     const [paymentError, setPaymentError] = useState('');
     const [mobileStepHint, setMobileStepHint] = useState('');
-    const [inventoryViewMode, setInventoryViewMode] = useState(getInitialRentalInventoryView);
     const [receiptRental, setReceiptRental] = useState(null);
     const [isFinalReviewOpen, setIsFinalReviewOpen] = useState(false);
     const [isFinalReviewChecked, setIsFinalReviewChecked] = useState(false);
@@ -162,25 +154,26 @@ const Rental = ({
     }, []);
 
     useEffect(() => {
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        window.localStorage.setItem(RENTAL_VIEW_STORAGE_KEY, inventoryViewMode);
-    }, [inventoryViewMode]);
-
-    useEffect(() => {
         if (categoryFilter !== 'all' && !safeCategories.includes(categoryFilter)) {
             setCategoryFilter('all');
         }
     }, [categoryFilter, safeCategories]);
 
     useEffect(() => {
-        const keyword = customerSearch.trim();
+        if (selectedCustomerId) {
+            setDebouncedCustomerSearch('');
+            return undefined;
+        }
+
+        const keyword = customer.name.trim();
         const timeoutId = setTimeout(() => setDebouncedCustomerSearch(keyword), 250);
 
         return () => clearTimeout(timeoutId);
-    }, [customerSearch]);
+    }, [customer.name, selectedCustomerId]);
+
+    const normalizedCustomerNameSearch = customer.name.trim();
+    const isCustomerLookupActive = !selectedCustomerId && normalizedCustomerNameSearch.length >= 2;
+    const hasFreshCustomerLookup = isCustomerLookupActive && debouncedCustomerSearch === normalizedCustomerNameSearch;
 
     const customerSuggestionQuery = useSWR(
         currentUser?.id && tenantId && branchId && debouncedCustomerSearch.length >= 2
@@ -189,10 +182,10 @@ const Rental = ({
         ([, , , , keyword]) => fetchCustomers(keyword),
     );
     const customerSuggestions = useMemo(
-        () => (Array.isArray(customerSuggestionQuery.data) ? customerSuggestionQuery.data : []),
-        [customerSuggestionQuery.data],
+        () => (hasFreshCustomerLookup && Array.isArray(customerSuggestionQuery.data) ? customerSuggestionQuery.data : []),
+        [customerSuggestionQuery.data, hasFreshCustomerLookup],
     );
-    const isSearchingCustomer = customerSuggestionQuery.isLoading;
+    const isSearchingCustomer = hasFreshCustomerLookup && customerSuggestionQuery.isLoading;
 
     const normalizedInventorySearch = inventorySearch.trim().toLowerCase();
     const filteredItems = safeInventory.filter((item) => {
@@ -272,6 +265,7 @@ const Rental = ({
 
         setCustomer(normalizedCustomer);
         setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
+        setSelectedCustomerId(null);
         const draftStartAt = toDate(draftPayload.rentalStartAt || draftPayload.date);
         const draftEndAt = toDate(draftPayload.rentalEndAt);
         if (draftStartAt && draftEndAt) {
@@ -303,7 +297,6 @@ const Rental = ({
                 : 'all',
         );
         setMobileStep(Number.isFinite(draftPayload.mobileStep) ? Math.min(3, Math.max(1, draftPayload.mobileStep)) : 1);
-        setInventoryViewMode(draftPayload.inventoryViewMode === 'list' ? 'list' : 'grid');
         setItemsError('');
         setDurationError('');
         setPaymentError('');
@@ -395,72 +388,6 @@ const Rental = ({
         }
     }, [cart, setCart]);
 
-    const renderInventoryGridItem = (item) => {
-        const isOutOfStock = item.stock <= 0;
-        const qtyInCart = cartQtyByItemId.get(item.id) || 0;
-
-        return (
-            <button
-                key={item.id}
-                type="button"
-                className={`group relative w-full rounded-lg border p-4 text-left transition-all duration-150 ${isOutOfStock ? 'cursor-not-allowed border-border bg-card-bg opacity-50 grayscale' : qtyInCart > 0 ? 'border-accent/70 bg-accent/5 shadow-[0_8px_20px_rgba(230,126,34,0.14)] active:scale-[0.98] active:border-accent' : 'border-border bg-card-bg hover:-translate-y-1 hover:border-accent active:scale-[0.98] active:border-accent active:bg-accent/10'}`}
-                onClick={() => addToCart(item)}
-                disabled={isOutOfStock}
-            >
-            <div className="relative mb-3 h-[130px] overflow-hidden rounded-lg bg-[#1A2222] sm:mb-4 sm:h-[150px]">
-                <img className="w-full h-full object-cover transition-transform group-hover:scale-105" src={item.image || 'https://via.placeholder.com/150'} alt={item.name} />
-                {isOutOfStock && <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[0.8rem] font-bold uppercase">Habis</div>}
-                {!isOutOfStock && qtyInCart > 0 && (
-                    <span className="absolute left-2 top-2 rounded-full bg-accent px-2 py-1 text-[0.62rem] font-semibold uppercase tracking-wide text-white">
-                        x{qtyInCart} di keranjang
-                    </span>
-                )}
-            </div>
-            <div className="rc-info">
-                <h5 className="text-text-main font-semibold mb-1 line-clamp-1">{item.name}</h5>
-                <span className="text-accent font-bold text-[0.95rem] block">Rp {parseInt(item.price, 10).toLocaleString()} <small className="text-[0.7em] font-normal text-text-muted">/hari</small></span>
-                <span className="text-text-muted text-[0.75rem] block mt-1">Tersedia: {item.stock}</span>
-            </div>
-            </button>
-        );
-    };
-
-    const renderInventoryListItem = (item) => {
-        const isOutOfStock = item.stock <= 0;
-        const qtyInCart = cartQtyByItemId.get(item.id) || 0;
-
-        return (
-            <button
-                key={item.id}
-                type="button"
-                className={`w-full rounded-lg border bg-card-bg p-3 text-left transition-all duration-150 ${isOutOfStock ? 'opacity-50 cursor-not-allowed border-border' : qtyInCart > 0 ? 'border-accent/70 bg-accent/5 shadow-[0_6px_16px_rgba(230,126,34,0.12)] active:scale-[0.99] active:border-accent' : 'border-border hover:border-accent active:scale-[0.99] active:border-accent active:bg-accent/10'}`}
-                onClick={() => addToCart(item)}
-                disabled={isOutOfStock}
-            >
-            <div className="flex items-center gap-3">
-                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-[#1A2222] sm:h-16 sm:w-16">
-                    <img className="h-full w-full object-cover" src={item.image || 'https://via.placeholder.com/120'} alt={item.name} />
-                </div>
-                <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-text-main sm:text-[0.95rem]">{item.name}</p>
-                    <p className="mt-0.5 text-xs text-text-muted">Tersedia: {item.stock}</p>
-                    <p className="mt-1 text-xs font-bold text-accent sm:text-sm">Rp {parseInt(item.price, 10).toLocaleString()} /hari</p>
-                </div>
-                {isOutOfStock && (
-                    <span className="shrink-0 rounded-full bg-[#e74c3c]/20 px-2 py-1 text-[0.65rem] font-semibold uppercase text-[#e74c3c]">
-                        Habis
-                    </span>
-                )}
-                {!isOutOfStock && qtyInCart > 0 && (
-                    <span className="shrink-0 rounded-full bg-accent px-2.5 py-1 text-[0.64rem] font-semibold uppercase text-white">
-                        x{qtyInCart}
-                    </span>
-                )}
-            </div>
-        </button>
-        );
-    };
-
     useEffect(() => {
         if (typeof window === 'undefined') {
             return undefined;
@@ -525,6 +452,20 @@ const Rental = ({
         setCart(cart.filter((c) => c.id !== id));
     };
 
+    const handleDecreaseInventoryQty = (itemId) => {
+        const currentQty = cartQtyByItemId.get(itemId) || 0;
+        if (currentQty <= 0) {
+            return;
+        }
+
+        if (currentQty === 1) {
+            removeFromCart(itemId);
+            return;
+        }
+
+        updateCartQty(itemId, -1);
+    };
+
     const updateCartNote = (id, note) => {
         setCart(cart.map((c) => (c.id === id ? { ...c, notes: note } : c)));
     };
@@ -561,6 +502,78 @@ const Rental = ({
             hour: '2-digit',
             minute: '2-digit',
         });
+    };
+
+    const renderQuantityStepper = (item, qtyInCart, isOutOfStock) => {
+        const canDecrease = qtyInCart > 0;
+        const canIncrease = !isOutOfStock && qtyInCart < Number(item.stock || 0);
+
+        return (
+            <div className="flex h-9 shrink-0 items-center border border-[#cfd8d3] bg-white">
+                <button
+                    type="button"
+                    aria-label={`Kurangi ${item.name}`}
+                    disabled={!canDecrease}
+                    className="flex h-9 w-9 items-center justify-center border-r border-[#cfd8d3] text-sm font-bold text-[#0f3d2e] disabled:cursor-not-allowed disabled:text-[#9aa8a1]"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        handleDecreaseInventoryQty(item.id);
+                    }}
+                >
+                    -
+                </button>
+                <span className="flex h-9 min-w-10 items-center justify-center px-2 text-sm font-bold text-[#10231c]">
+                    {qtyInCart}
+                </span>
+                <button
+                    type="button"
+                    aria-label={`Tambah ${item.name}`}
+                    disabled={!canIncrease}
+                    className="flex h-9 w-9 items-center justify-center border-l border-[#cfd8d3] bg-[#146c43] text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-[#d8e0dc] disabled:text-[#7a8982]"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        addToCart(item);
+                    }}
+                >
+                    +
+                </button>
+            </div>
+        );
+    };
+
+    const renderInventoryTextRow = (item) => {
+        const stock = Number(item.stock || 0);
+        const price = Number(item.price || 0);
+        const isOutOfStock = stock <= 0;
+        const qtyInCart = cartQtyByItemId.get(item.id) || 0;
+        const isSelected = qtyInCart > 0;
+
+        return (
+            <div
+                key={item.id}
+                data-testid={`rental-inventory-row-${item.id}`}
+                className={`border bg-white p-3 ${isSelected ? 'border-[#146c43]' : 'border-[#d7ded9]'} ${isOutOfStock ? 'opacity-60' : ''}`}
+            >
+                <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <p className="truncate text-sm font-bold text-[#10231c]">{item.name}</p>
+                            {isOutOfStock && (
+                                <span className="border border-[#c0392b] bg-white px-2 py-0.5 text-[0.65rem] font-bold uppercase text-[#c0392b]">
+                                    Habis
+                                </span>
+                            )}
+                        </div>
+                        <p className="mt-1 text-xs text-[#5c6b64]">{item.category || 'Tanpa kategori'}</p>
+                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                            <span className="font-bold text-[#146c43]">{formatCurrency(price)} /hari</span>
+                            <span className="text-[#5c6b64]">Stok: {stock}</span>
+                        </div>
+                    </div>
+                    {renderQuantityStepper(item, qtyInCart, isOutOfStock)}
+                </div>
+            </div>
+        );
     };
 
     const validateCustomerStep = ({ focusOnError = false } = {}) => {
@@ -614,7 +627,7 @@ const Rental = ({
         if (!rentalStartAt || !rentalEndAt) {
             setDurationError('Tanggal mulai dan selesai wajib diisi.');
             if (focusOnError) {
-                scheduleFocusField('rentalStartAt');
+                scheduleFocusField('rentalRange');
             }
             return false;
         }
@@ -622,7 +635,7 @@ const Rental = ({
         if (rentalEndAt.getTime() <= rentalStartAt.getTime()) {
             setDurationError('Tanggal selesai harus setelah tanggal mulai.');
             if (focusOnError) {
-                scheduleFocusField('rentalEndAt');
+                scheduleFocusField('rentalRange');
             }
             return false;
         }
@@ -630,7 +643,7 @@ const Rental = ({
         if (!Number.isFinite(calculatedDuration) || calculatedDuration < 1) {
             setDurationError('Durasi sewa minimal 1 hari.');
             if (focusOnError) {
-                scheduleFocusField('rentalStartAt');
+                scheduleFocusField('rentalRange');
             }
             return false;
         }
@@ -826,7 +839,7 @@ const Rental = ({
             clearSavedDraft();
             setCustomer(INITIAL_CUSTOMER);
             setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
-            setCustomerSearch('');
+            setSelectedCustomerId(null);
             setDebouncedCustomerSearch('');
             setDuration(1);
             setRentalTimeRange(getDefaultRentalTimeRange());
@@ -906,13 +919,14 @@ const Rental = ({
             idNumber: sanitizeDigits(pickedCustomer.idNumber || ''),
         });
         setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
-        setCustomerSearch('');
+        setSelectedCustomerId(pickedCustomer.id || null);
         setDebouncedCustomerSearch('');
         setMobileStepHint('');
     };
 
     const handleNameChange = (value) => {
         setCustomer((previous) => ({ ...previous, name: value }));
+        setSelectedCustomerId(null);
         setMobileStepHint('');
         if (customerErrors.name) {
             setCustomerErrors((previous) => ({ ...previous, name: '' }));
@@ -953,17 +967,11 @@ const Rental = ({
         setMobileStepHint('');
     };
 
-    const handleRentalStartAtChange = (value) => {
-        setRentalTimeRange((previous) => ({ ...previous, startInput: value }));
-        setMobileStepHint('');
-
-        if (durationError) {
-            setDurationError('');
-        }
-    };
-
-    const handleRentalEndAtChange = (value) => {
-        setRentalTimeRange((previous) => ({ ...previous, endInput: value }));
+    const handleRentalRangeChange = (startInput, endInput) => {
+        setRentalTimeRange({
+            startInput,
+            endInput,
+        });
         setMobileStepHint('');
 
         if (durationError) {
@@ -1011,19 +1019,23 @@ const Rental = ({
         return (
             <>
             <div className="form-group relative">
-                <label className="block mb-1.5 text-[0.85rem] text-text-muted">Cari Customer Lama</label>
+                <label htmlFor={`${layout}-customer-name`} className="block mb-1.5 text-[0.85rem] text-text-muted">Nama Customer</label>
                 <input
-                    className="w-full bg-bg-main border border-border p-2.5 rounded-lg text-text-main outline-none focus:border-accent transition-colors"
+                    id={`${layout}-customer-name`}
+                    className={`${RENTAL_FIELD_CLASS} ${customerErrors.name ? 'border-[#c0392b]' : ''}`}
                     type="text"
-                    placeholder="Ketik nama / nomor HP..."
-                    value={customerSearch}
-                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    data-rental-field={`${layout}-name`}
+                    aria-invalid={Boolean(customerErrors.name)}
+                    aria-describedby={customerErrors.name ? nameErrorId : undefined}
+                    placeholder="Ketik nama customer..."
+                    value={customer.name}
+                    onChange={(e) => handleNameChange(e.target.value)}
                 />
                 {isSearchingCustomer && (
                     <p className="text-xs text-text-muted mt-1">Mencari customer...</p>
                 )}
                 {customerSuggestions.length > 0 && (
-                    <div className="absolute left-0 right-0 mt-2 bg-sidebar-bg border border-border rounded-lg shadow-lg max-h-52 overflow-y-auto z-20">
+                    <div className="absolute left-0 right-0 z-20 mt-2 max-h-52 overflow-y-auto rounded-md border border-[#d7ded9] bg-white">
                         {customerSuggestions.map((suggestion) => (
                             <button
                                 key={suggestion.id}
@@ -1039,26 +1051,12 @@ const Rental = ({
                         ))}
                     </div>
                 )}
-            </div>
-
-            <div className="form-group">
-                <label className="block mb-1.5 text-[0.85rem] text-text-muted">Nama Pelanggan</label>
-                <input
-                    className={`w-full bg-bg-main border p-2.5 rounded-lg text-text-main outline-none transition-colors ${customerErrors.name ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
-                    type="text"
-                    data-rental-field={`${layout}-name`}
-                    aria-invalid={Boolean(customerErrors.name)}
-                    aria-describedby={customerErrors.name ? nameErrorId : undefined}
-                    placeholder="Nama lengkap..."
-                    value={customer.name}
-                    onChange={(e) => handleNameChange(e.target.value)}
-                />
                 {customerErrors.name && <p id={nameErrorId} className="mt-1 text-xs text-[#e74c3c]">{customerErrors.name}</p>}
             </div>
             <div className="form-group">
                 <label className="block mb-1.5 text-[0.85rem] text-text-muted">Nomor HP</label>
                 <input
-                    className={`w-full bg-bg-main border p-2.5 rounded-lg text-text-main outline-none transition-colors ${customerErrors.phone ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                    className={`${RENTAL_FIELD_CLASS} ${customerErrors.phone ? 'border-[#c0392b]' : ''}`}
                     type="text"
                     data-rental-field={`${layout}-phone`}
                     aria-invalid={Boolean(customerErrors.phone)}
@@ -1074,7 +1072,7 @@ const Rental = ({
             <div className="form-group">
                 <label className="block mb-1.5 text-[0.85rem] text-text-muted">Alamat</label>
                 <textarea
-                    className="w-full min-h-[78px] resize-y bg-bg-main border border-border p-2.5 rounded-lg text-text-main outline-none focus:border-accent transition-colors"
+                    className={`${RENTAL_FIELD_CLASS} min-h-[78px] resize-y`}
                     placeholder="Alamat customer..."
                     value={customer.address}
                     onChange={(e) => setCustomer((previous) => ({ ...previous, address: e.target.value }))}
@@ -1084,7 +1082,7 @@ const Rental = ({
                 <div className="form-group">
                     <label className="block mb-1.5 text-[0.85rem] text-text-muted">Jaminan</label>
                     <select
-                        className="w-full bg-bg-main border border-border p-2.5 rounded-lg text-text-main outline-none focus:border-accent transition-colors cursor-pointer"
+                        className={`${RENTAL_FIELD_CLASS} cursor-pointer`}
                         value={customer.guarantee}
                         onChange={(e) => handleGuaranteeChange(e.target.value)}
                     >
@@ -1097,7 +1095,7 @@ const Rental = ({
                 <div className="form-group">
                     <label className="block mb-1.5 text-[0.85rem] text-text-muted">Nomor Identitas</label>
                     <input
-                        className="w-full bg-bg-main border border-border p-2.5 rounded-lg text-text-main outline-none focus:border-accent transition-colors"
+                        className={RENTAL_FIELD_CLASS}
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
@@ -1111,7 +1109,7 @@ const Rental = ({
                 <div className="form-group">
                     <label className="block mb-1.5 text-[0.85rem] text-text-muted">Sebutkan Jaminan Lainnya</label>
                     <input
-                        className={`w-full bg-bg-main border p-2.5 rounded-lg text-text-main outline-none transition-colors ${customerErrors.guaranteeOther ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                        className={`${RENTAL_FIELD_CLASS} ${customerErrors.guaranteeOther ? 'border-[#c0392b]' : ''}`}
                         type="text"
                         data-rental-field={`${layout}-guaranteeOther`}
                         aria-invalid={Boolean(customerErrors.guaranteeOther)}
@@ -1134,21 +1132,21 @@ const Rental = ({
                     <div className="text-center py-6 text-text-muted italic text-sm">Belum ada barang dipilih.</div>
                 ) : (
                     cart.map((item) => (
-                        <div className="bg-bg-main/50 border border-border/60 p-4 rounded-lg" key={item.id}>
+                        <div className="rounded-md border border-[#d7ded9] bg-white p-4" key={item.id}>
                             <div className="mb-3 flex items-start justify-between gap-3">
                                 <div className="flex min-w-0 flex-col">
                                     <span className="text-text-main font-medium">{item.name}</span>
                                     <small className="text-text-muted">Rp {parseInt(item.price, 10).toLocaleString()} x {item.qty}</small>
                                 </div>
                                 <div className="flex shrink-0 items-center gap-2">
-                                    <button type="button" className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-sidebar-bg text-text-main transition hover:border-accent" onClick={() => updateCartQty(item.id, -1)}>-</button>
+                                    <button type="button" className="flex h-9 w-9 items-center justify-center rounded-md border border-[#cfd8d3] bg-white text-[#10231c] transition hover:border-[#146c43]" onClick={() => updateCartQty(item.id, -1)}>-</button>
                                     <span className="w-6 text-center text-sm font-bold">{item.qty}</span>
-                                    <button type="button" className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-sidebar-bg text-text-main transition hover:border-accent" onClick={() => updateCartQty(item.id, 1)}>+</button>
+                                    <button type="button" className="flex h-9 w-9 items-center justify-center rounded-md border border-[#cfd8d3] bg-white text-[#10231c] transition hover:border-[#146c43]" onClick={() => updateCartQty(item.id, 1)}>+</button>
                                     <button type="button" className="rounded p-2 text-[#e74c3c] hover:bg-[#e74c3c]/10" onClick={() => removeFromCart(item.id)}>&times;</button>
                                 </div>
                             </div>
                             <textarea
-                                className="w-full bg-sidebar-bg border border-border p-2 rounded text-[0.85rem] text-text-muted min-h-[50px] resize-none outline-none focus:border-accent"
+                                className="min-h-[50px] w-full resize-none rounded-md border border-[#cfd8d3] bg-white p-2 text-[0.85rem] text-text-muted outline-none focus:border-[#146c43]"
                                 placeholder="Catatan (kondisi, kelengkapan...)"
                                 value={item.notes}
                                 onChange={(e) => updateCartNote(item.id, e.target.value)}
@@ -1165,6 +1163,32 @@ const Rental = ({
         </>
     );
 
+    const renderRentalDateRange = (layout) => {
+        const durationErrorId = `${layout}-duration-error`;
+
+        return (
+            <div className="mb-4 rounded-md border border-[#d7ded9] bg-white p-3">
+                <label className="block mb-1.5 text-[0.85rem] text-text-muted font-semibold">Rentang Waktu Sewa</label>
+                <RentalDateRangePicker
+                    startAt={rentalTimeRange.startInput}
+                    endAt={rentalTimeRange.endInput}
+                    onChange={handleRentalRangeChange}
+                    className={RENTAL_FIELD_CLASS}
+                    error={Boolean(durationError)}
+                    fieldKey={`${layout}-rentalRange`}
+                    describedBy={durationError ? durationErrorId : undefined}
+                />
+                <p className="mt-2 text-xs text-text-muted">
+                    Sistem: {rentalDayPolicy.mode === 'DAILY_CUTOFF'
+                        ? `Cut-off ${String(rentalDayPolicy.cutoffHour).padStart(2, '0')}:${String(rentalDayPolicy.cutoffMinute).padStart(2, '0')}`
+                        : 'Per 24 jam'}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-text-main">Durasi terhitung: {effectiveDuration} hari</p>
+                {durationError && <p id={durationErrorId} className="mt-1 text-xs text-[#e74c3c]">{durationError}</p>}
+            </div>
+        );
+    };
+
     return (
         <div className="pt-0 pb-4 sm:pb-5 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:pb-0">
             <div className="mb-4 grid grid-cols-3 gap-2 lg:hidden">
@@ -1179,7 +1203,7 @@ const Rental = ({
                             key={stepLabel}
                             type="button"
                             onClick={() => goToMobileStep(stepNumber)}
-                            className={`rounded-lg border px-2 py-2 text-center transition-all ${isActive ? 'border-accent bg-accent/10' : 'border-border'} ${isPassed ? 'border-emerald-500/40 bg-emerald-500/10' : ''} ${isClickable ? 'hover:border-accent' : 'opacity-70'}`}
+                            className={`rounded-md border px-2 py-2 text-center transition-all ${isActive ? 'border-[#146c43] bg-white text-[#146c43]' : 'border-[#d7ded9] bg-white'} ${isPassed ? 'border-[#146c43] bg-white text-[#146c43]' : ''} ${isClickable ? 'hover:border-[#146c43]' : 'opacity-70'}`}
                         >
                             <p className="text-[0.65rem] uppercase tracking-wide text-text-muted">Langkah {stepNumber}</p>
                             <p className="text-[0.75rem] font-semibold text-text-main">
@@ -1199,16 +1223,16 @@ const Rental = ({
                 </p>
             )}
 
-            <div className="flex flex-col gap-6 lg:h-full lg:min-h-0 lg:flex-row lg:gap-[30px] lg:overflow-hidden">
-                <div className={`${mobileStep === 2 ? 'flex' : 'hidden'} flex-1 flex-col lg:flex lg:min-h-0 lg:overflow-hidden`}>
-                    <div className="mb-5 sm:mb-[30px]">
-                        <h3 className="text-[1.1rem] font-bold text-text-main sm:text-[1.2rem]">Pilih Barang</h3>
-                        <div className="sticky top-0 z-20 mt-3 rounded-xl border border-border/80 bg-bg-main/95 p-3 shadow-lg backdrop-blur lg:static lg:mt-0 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+            <div className="flex flex-col gap-5 lg:h-full lg:min-h-0 lg:flex-row lg:gap-5 lg:overflow-hidden">
+                <div className={`${mobileStep === 2 ? 'flex' : 'hidden'} w-full flex-col lg:order-2 lg:flex lg:w-[38%] lg:min-h-0 lg:overflow-hidden`}>
+                    <div className="mb-3">
+                        <h3 className="text-base font-bold text-[#10231c]">Barang Tersedia</h3>
+                        <div className="sticky top-0 z-20 mt-3 rounded-md border border-[#d7ded9] bg-white p-3 lg:static lg:mt-0 lg:border-0 lg:p-0">
                             <div className="flex flex-col gap-2 lg:gap-3">
                                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-end">
-                                    <div className="w-full rounded-lg border border-border bg-sidebar-bg px-4 py-2 lg:min-w-[340px] lg:max-w-[500px]">
+                                    <div className="w-full rounded-md border border-[#cfd8d3] bg-white px-4 py-2 lg:min-w-[220px]">
                                         <input
-                                            className="w-full border-none bg-transparent text-sm text-text-main outline-none placeholder:text-text-muted"
+                                            className="w-full border-none bg-white text-sm text-[#10231c] outline-none placeholder:text-text-muted"
                                             type="text"
                                             data-rental-field="shared-inventorySearch"
                                             placeholder="Cari barang atau kategori..."
@@ -1216,9 +1240,9 @@ const Rental = ({
                                             onChange={(e) => setInventorySearch(e.target.value)}
                                         />
                                     </div>
-                                    <div className="w-full rounded-lg border border-border bg-sidebar-bg px-4 py-2 lg:w-[230px]">
+                                    <div className="w-full rounded-md border border-[#cfd8d3] bg-white px-4 py-2 lg:w-[180px]">
                                         <select
-                                            className="w-full cursor-pointer border-none bg-transparent text-sm text-text-main outline-none"
+                                            className="w-full cursor-pointer border-none bg-white text-sm text-[#10231c] outline-none"
                                             data-rental-field="shared-inventoryFilter"
                                             value={categoryFilter}
                                             onChange={(e) => setCategoryFilter(e.target.value)}
@@ -1229,48 +1253,35 @@ const Rental = ({
                                             ))}
                                         </select>
                                     </div>
-                                    <ViewModeToggle
-                                        value={inventoryViewMode}
-                                        onChange={setInventoryViewMode}
-                                        containerClassName="w-full lg:w-auto"
-                                        buttonClassName="px-3 py-1.5 text-[0.72rem]"
-                                    />
                                 </div>
-                                <p className="hidden text-[0.68rem] text-text-muted lg:block lg:text-right">
-                                    Shortcut desktop: `/` fokus pencarian, `Enter` tambah hasil teratas.
-                                </p>
                             </div>
                         </div>
                     </div>
                     <div className="custom-scrollbar lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-y-contain lg:pr-2">
                         {filteredItems.length === 0 ? (
-                            <div className="mt-4 rounded-lg border border-border bg-card-bg/40 p-4 text-center text-sm text-text-muted">
+                            <div className="mt-4 border border-[#d7ded9] bg-white p-4 text-center text-sm text-[#5c6b64]">
                                 {normalizedInventorySearch
                                     ? 'Barang tidak ditemukan. Coba kata kunci lain.'
                                     : 'Tidak ada barang pada kategori ini.'}
                             </div>
-                        ) : inventoryViewMode === 'grid' ? (
-                            <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 sm:mt-5 sm:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] sm:gap-5">
-                                {filteredItems.map((item) => renderInventoryGridItem(item))}
-                            </div>
                         ) : (
-                            <div className="mt-4 flex flex-col gap-3 sm:mt-5">
-                                {filteredItems.map((item) => renderInventoryListItem(item))}
+                            <div className="mt-2 flex flex-col gap-2">
+                                {filteredItems.map((item) => renderInventoryTextRow(item))}
                             </div>
                         )}
                     </div>
                 </div>
 
-                <div className="w-full lg:flex lg:w-[400px] lg:min-h-0 lg:flex-col">
-                    <div className="rounded-xl border border-border bg-sidebar-bg p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] sm:p-6 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+                <div className="w-full lg:order-1 lg:flex lg:w-[62%] lg:min-h-0 lg:flex-col">
+                    <div className="rounded-md border border-[#d7ded9] bg-white p-4 shadow-none sm:p-6 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
                         <div className="lg:hidden">
                             {mobileStep === 1 && (
                                 <>
-                                    <h4 className="mb-4 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.1rem]">Langkah 1: Data Penyewa</h4>
+                                    <h4 className="mb-4 border-b border-[#d7ded9] pb-2 text-[1rem] font-bold uppercase tracking-wide text-[#146c43] sm:text-[1.1rem]">Langkah 1: Data Penyewa</h4>
                                     <div className="space-y-4">{renderCustomerFields('mobile')}</div>
                                     <button
                                         type="button"
-                                        className="mt-5 w-full bg-accent text-white py-3.5 rounded-lg font-bold transition-all hover:bg-accent-hover"
+                                        className={`mt-5 ${RENTAL_PRIMARY_BUTTON_CLASS}`}
                                         onClick={goToNextMobileStep}
                                     >
                                         Lanjut ke Pilih Barang
@@ -1280,7 +1291,7 @@ const Rental = ({
 
                             {mobileStep === 2 && (
                                 <>
-                                    <h4 className="mb-4 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.1rem]">Langkah 2: Pilih Barang</h4>
+                                    <h4 className="mb-4 border-b border-[#d7ded9] pb-2 text-[1rem] font-bold uppercase tracking-wide text-[#146c43] sm:text-[1.1rem]">Langkah 2: Pilih Barang</h4>
                                     <p className="mb-2 text-xs text-text-muted">Tap barang di daftar inventaris untuk menambah ke keranjang.</p>
                                     <p className="mb-4 text-xs text-text-muted">
                                         {cart.length === 0 ? 'Belum ada item dipilih.' : `${cart.length} item aktif (${cartQuantity} total unit)`}
@@ -1289,7 +1300,7 @@ const Rental = ({
                                     <div className="grid grid-cols-2 gap-3">
                                         <button
                                             type="button"
-                                            className="w-full border border-border text-text-main py-3.5 rounded-lg font-semibold transition-all hover:border-accent"
+                                            className={RENTAL_SECONDARY_BUTTON_CLASS}
                                             onClick={goToPreviousMobileStep}
                                         >
                                             Kembali
@@ -1297,7 +1308,7 @@ const Rental = ({
                                         <button
                                             type="button"
                                             disabled={!isItemsStepComplete}
-                                            className="w-full bg-accent text-white py-3.5 rounded-lg font-bold transition-all hover:bg-accent-hover disabled:opacity-60 disabled:cursor-not-allowed"
+                                            className={RENTAL_PRIMARY_BUTTON_CLASS}
                                             onClick={goToNextMobileStep}
                                         >
                                             Lanjut ke Konfirmasi
@@ -1308,22 +1319,22 @@ const Rental = ({
 
                             {mobileStep === 3 && (
                                 <>
-                                    <h4 className="mb-4 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.1rem]">Langkah 3: Konfirmasi Sewa</h4>
-                                    <div className="mb-5 rounded-lg border border-border bg-bg-main/40 p-3 text-sm text-text-muted">
+                                    <h4 className="mb-4 border-b border-[#d7ded9] pb-2 text-[1rem] font-bold uppercase tracking-wide text-[#146c43] sm:text-[1.1rem]">Langkah 3: Konfirmasi Sewa</h4>
+                                    <div className="mb-5 rounded-md border border-[#d7ded9] bg-white p-3 text-sm text-text-muted">
                                         <p className="text-text-main font-semibold">{customer.name || '-'}</p>
                                         <p>{customer.phone || '-'}</p>
                                         <p>{cart.length} item dipilih ({cartQuantity} unit)</p>
                                         <div className="mt-3 flex gap-2">
                                             <button
                                                 type="button"
-                                                className="rounded-md border border-border px-2 py-1 text-[0.72rem] text-text-main transition hover:border-accent"
+                                                className="rounded-md border border-[#cfd8d3] bg-white px-2 py-1 text-[0.72rem] text-[#10231c] transition hover:border-[#146c43]"
                                                 onClick={() => goToMobileStep(1)}
                                             >
                                                 Ubah Data
                                             </button>
                                             <button
                                                 type="button"
-                                                className="rounded-md border border-border px-2 py-1 text-[0.72rem] text-text-main transition hover:border-accent"
+                                                className="rounded-md border border-[#cfd8d3] bg-white px-2 py-1 text-[0.72rem] text-[#10231c] transition hover:border-[#146c43]"
                                                 onClick={() => goToMobileStep(2)}
                                             >
                                                 Ubah Barang
@@ -1331,44 +1342,13 @@ const Rental = ({
                                         </div>
                                     </div>
 
-                                    <div className="mb-4 rounded-lg border border-border bg-bg-main/40 p-3">
-                                        <label className="block mb-1.5 text-[0.85rem] text-text-muted font-semibold">Rentang Waktu Sewa</label>
-                                        <div className="grid grid-cols-1 gap-3">
-                                            <div>
-                                                <label className="mb-1 block text-[0.78rem] text-text-muted">Mulai Sewa</label>
-                                                <input
-                                                    className={`w-full rounded-lg border bg-bg-main p-2.5 text-text-main outline-none ${durationError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
-                                                    type="datetime-local"
-                                                    data-rental-field="mobile-rentalStartAt"
-                                                    value={rentalTimeRange.startInput}
-                                                    onChange={(e) => handleRentalStartAtChange(e.target.value)}
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="mb-1 block text-[0.78rem] text-text-muted">Rencana Kembali</label>
-                                                <input
-                                                    className={`w-full rounded-lg border bg-bg-main p-2.5 text-text-main outline-none ${durationError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
-                                                    type="datetime-local"
-                                                    data-rental-field="mobile-rentalEndAt"
-                                                    value={rentalTimeRange.endInput}
-                                                    onChange={(e) => handleRentalEndAtChange(e.target.value)}
-                                                />
-                                            </div>
-                                        </div>
-                                        <p className="mt-2 text-xs text-text-muted">
-                                            Sistem: {rentalDayPolicy.mode === 'DAILY_CUTOFF'
-                                                ? `Cut-off ${String(rentalDayPolicy.cutoffHour).padStart(2, '0')}:${String(rentalDayPolicy.cutoffMinute).padStart(2, '0')}`
-                                                : 'Per 24 jam'}
-                                        </p>
-                                        <p className="mt-1 text-sm font-semibold text-text-main">Durasi terhitung: {effectiveDuration} hari</p>
-                                        {durationError && <p id="mobile-duration-error" className="mt-1 text-xs text-[#e74c3c]">{durationError}</p>}
-                                    </div>
+                                    {renderRentalDateRange('mobile')}
 
                                     <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                                         <div>
                                             <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Status Pembayaran</label>
                                             <select
-                                                className="w-full rounded-lg border border-border bg-bg-main p-3 text-sm text-text-main outline-none focus:border-accent"
+                                                className={`${RENTAL_FIELD_CLASS} p-3 text-sm`}
                                                 value={payment.status}
                                                 onChange={(e) => handlePaymentStatusChange(e.target.value)}
                                             >
@@ -1379,7 +1359,7 @@ const Rental = ({
                                         <div>
                                             <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Metode</label>
                                             <select
-                                                className="w-full rounded-lg border border-border bg-bg-main p-3 text-sm text-text-main outline-none focus:border-accent"
+                                                className={`${RENTAL_FIELD_CLASS} p-3 text-sm`}
                                                 value={payment.method}
                                                 onChange={(e) => handlePaymentMethodChange(e.target.value)}
                                             >
@@ -1394,7 +1374,7 @@ const Rental = ({
                                         <div className="mb-4">
                                             <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Nominal DP</label>
                                             <input
-                                                className={`w-full rounded-lg border bg-bg-main p-3 text-text-main outline-none ${paymentError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                                                className={`${RENTAL_FIELD_CLASS} p-3 ${paymentError ? 'border-[#c0392b]' : ''}`}
                                                 type="text"
                                                 inputMode="numeric"
                                                 data-rental-field="mobile-paymentAmount"
@@ -1406,17 +1386,17 @@ const Rental = ({
                                         </div>
                                     )}
 
-                                    <div className="rounded-lg border border-accent/20 bg-accent/10 p-4 sm:p-5">
+                                    <div className="rounded-md border border-[#146c43] bg-white p-4 sm:p-5">
                                         <div className="mb-1 flex items-center justify-between gap-3">
                                             <span className="text-text-muted text-[0.9rem]">Total Bayar</span>
                                             <span className="text-text-muted text-[0.7rem] uppercase tracking-tighter">({effectiveDuration} Hari)</span>
                                         </div>
-                                        <h3 className="text-[1.5rem] font-bold text-accent sm:text-[1.8rem]">Rp {totalAmount.toLocaleString()}</h3>
+                                        <h3 className="text-[1.5rem] font-bold text-[#146c43] sm:text-[1.8rem]">Rp {totalAmount.toLocaleString()}</h3>
                                         <p className="mt-1 text-xs text-text-muted">Terbayar: Rp {computedPaidAmount.toLocaleString()} • Sisa: Rp {remainingAmount.toLocaleString()}</p>
                                         <div className="mt-4 grid grid-cols-2 gap-3">
                                             <button
                                                 type="button"
-                                                className="w-full border border-border text-text-main py-3.5 rounded-lg font-semibold transition-all hover:border-accent"
+                                                className={RENTAL_SECONDARY_BUTTON_CLASS}
                                                 onClick={goToPreviousMobileStep}
                                             >
                                                 Kembali
@@ -1424,7 +1404,7 @@ const Rental = ({
                                             <button
                                                 type="button"
                                                 disabled={isSubmitting}
-                                                className="w-full bg-accent text-white py-3.5 rounded-lg font-bold flex items-center justify-center gap-2 transition-all hover:bg-accent-hover disabled:opacity-60"
+                                                className={`${RENTAL_PRIMARY_BUTTON_CLASS} flex items-center justify-center gap-2`}
                                                 onClick={handleOpenFinalReview}
                                             >
                                                 {isSubmitting ? 'Menyimpan...' : 'Lanjut ke Review'}
@@ -1436,53 +1416,22 @@ const Rental = ({
                         </div>
 
                         <div className="hidden lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:overflow-hidden">
-                            <h4 className="mb-4 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.1rem]">Detail Penyewa</h4>
+                            <h4 className="mb-4 border-b border-[#d7ded9] pb-2 text-[1rem] font-bold uppercase tracking-wide text-[#146c43] sm:text-[1.1rem]">Detail Penyewa</h4>
                             <div className="custom-scrollbar space-y-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-y-contain lg:pr-1">
                                 {renderCustomerFields('desktop')}
 
                                 <div className="h-[1px] bg-border my-6"></div>
 
-                                <h4 className="mb-3 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.1rem]">Keranjang Sewa</h4>
+                                <h4 className="mb-3 border-b border-[#d7ded9] pb-2 text-[1rem] font-bold uppercase tracking-wide text-[#146c43] sm:text-[1.1rem]">Keranjang Sewa</h4>
                                 {renderCartItems()}
 
-                                <div className="mb-4 rounded-lg border border-border bg-bg-main/40 p-3">
-                                    <label className="block mb-1.5 text-[0.85rem] text-text-muted font-semibold">Rentang Waktu Sewa</label>
-                                    <div className="grid grid-cols-1 gap-3">
-                                        <div>
-                                            <label className="mb-1 block text-[0.78rem] text-text-muted">Mulai Sewa</label>
-                                            <input
-                                                className={`w-full rounded-lg border bg-bg-main p-2.5 text-text-main outline-none ${durationError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
-                                                type="datetime-local"
-                                                data-rental-field="desktop-rentalStartAt"
-                                                value={rentalTimeRange.startInput}
-                                                onChange={(e) => handleRentalStartAtChange(e.target.value)}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="mb-1 block text-[0.78rem] text-text-muted">Rencana Kembali</label>
-                                            <input
-                                                className={`w-full rounded-lg border bg-bg-main p-2.5 text-text-main outline-none ${durationError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
-                                                type="datetime-local"
-                                                data-rental-field="desktop-rentalEndAt"
-                                                value={rentalTimeRange.endInput}
-                                                onChange={(e) => handleRentalEndAtChange(e.target.value)}
-                                            />
-                                        </div>
-                                    </div>
-                                    <p className="mt-2 text-xs text-text-muted">
-                                        Sistem: {rentalDayPolicy.mode === 'DAILY_CUTOFF'
-                                            ? `Cut-off ${String(rentalDayPolicy.cutoffHour).padStart(2, '0')}:${String(rentalDayPolicy.cutoffMinute).padStart(2, '0')}`
-                                            : 'Per 24 jam'}
-                                    </p>
-                                    <p className="mt-1 text-sm font-semibold text-text-main">Durasi terhitung: {effectiveDuration} hari</p>
-                                    {durationError && <p id="desktop-duration-error" className="mt-1 text-xs text-[#e74c3c]">{durationError}</p>}
-                                </div>
+                                {renderRentalDateRange('desktop')}
 
                                 <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                                     <div>
                                         <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Status Pembayaran</label>
                                         <select
-                                            className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-sm text-text-main outline-none focus:border-accent"
+                                            className={`${RENTAL_FIELD_CLASS} text-sm`}
                                             value={payment.status}
                                             onChange={(e) => handlePaymentStatusChange(e.target.value)}
                                         >
@@ -1493,7 +1442,7 @@ const Rental = ({
                                     <div>
                                         <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Metode</label>
                                         <select
-                                            className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-sm text-text-main outline-none focus:border-accent"
+                                            className={`${RENTAL_FIELD_CLASS} text-sm`}
                                             value={payment.method}
                                             onChange={(e) => handlePaymentMethodChange(e.target.value)}
                                         >
@@ -1508,7 +1457,7 @@ const Rental = ({
                                     <div className="mb-4">
                                         <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Nominal DP</label>
                                         <input
-                                            className={`w-full rounded-lg border bg-bg-main p-2.5 text-text-main outline-none ${paymentError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                                            className={`${RENTAL_FIELD_CLASS} ${paymentError ? 'border-[#c0392b]' : ''}`}
                                             type="text"
                                             inputMode="numeric"
                                             data-rental-field="desktop-paymentAmount"
@@ -1521,17 +1470,17 @@ const Rental = ({
                                 )}
                             </div>
 
-                            <div className="mt-4 rounded-lg border border-accent/20 bg-accent/10 p-4 sm:p-5">
+                            <div className="mt-4 rounded-md border border-[#146c43] bg-white p-4 sm:p-5">
                                 <div className="mb-1 flex items-center justify-between gap-3">
                                     <span className="text-text-muted text-[0.9rem]">Total Bayar</span>
                                     <span className="text-text-muted text-[0.7rem] uppercase tracking-tighter">({effectiveDuration} Hari)</span>
                                 </div>
-                                <h3 className="text-[1.5rem] font-bold text-accent sm:text-[1.8rem]">Rp {totalAmount.toLocaleString()}</h3>
+                                <h3 className="text-[1.5rem] font-bold text-[#146c43] sm:text-[1.8rem]">Rp {totalAmount.toLocaleString()}</h3>
                                 <p className="mt-1 text-xs text-text-muted">Terbayar: Rp {computedPaidAmount.toLocaleString()} • Sisa: Rp {remainingAmount.toLocaleString()}</p>
                                 <button
                                     type="button"
                                     disabled={isSubmitting}
-                                    className="w-full bg-accent text-white py-4 rounded-lg font-bold flex items-center justify-center gap-3 transition-all hover:bg-accent-hover shadow-[0_4px_15px_rgba(230,126,34,0.4)] mt-4 group disabled:opacity-60"
+                                    className={`mt-4 flex items-center justify-center gap-3 py-4 ${RENTAL_PRIMARY_BUTTON_CLASS}`}
                                     onClick={handleOpenFinalReview}
                                 >
                                     <i className="fas fa-shopping-cart group-hover:animate-bounce"></i> {isSubmitting ? 'Menyimpan...' : 'Lanjut ke Review'}
@@ -1544,15 +1493,15 @@ const Rental = ({
 
             {isFinalReviewOpen && (
                 <div className="fixed inset-0 z-[95] flex items-end justify-center bg-black/60 p-3 sm:items-center sm:p-5">
-                    <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-sidebar-bg shadow-2xl">
-                        <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
+                    <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-md border border-[#d7ded9] bg-white shadow-none">
+                        <div className="flex items-start justify-between gap-3 border-b border-[#d7ded9] px-4 py-3 sm:px-5">
                             <div>
                                 <p className="text-xs uppercase tracking-wide text-text-muted">Tahap Akhir</p>
                                 <h4 className="text-lg font-bold text-text-main">Konfirmasi & Review Sewa</h4>
                             </div>
                             <button
                                 type="button"
-                                className="rounded-md border border-border px-2 py-1 text-xs text-text-main transition hover:border-accent disabled:opacity-60"
+                                className="rounded-md border border-[#cfd8d3] bg-white px-2 py-1 text-xs text-[#10231c] transition hover:border-[#146c43] disabled:opacity-60"
                                 onClick={handleCloseFinalReview}
                                 disabled={isSubmitting}
                             >
@@ -1561,19 +1510,19 @@ const Rental = ({
                         </div>
 
                         <div className="custom-scrollbar max-h-[62vh] space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
-                            <div className="rounded-lg border border-border bg-bg-main/40 p-3">
+                            <div className="rounded-md border border-[#d7ded9] bg-white p-3">
                                 <p className="text-xs uppercase tracking-wide text-text-muted">Penyewa</p>
                                 <p className="mt-1 font-semibold text-text-main">{customer.name || '-'}</p>
                                 <p className="text-sm text-text-muted">{customer.phone || '-'}</p>
                             </div>
 
-                            <div className="rounded-lg border border-border bg-bg-main/40 p-3">
+                            <div className="rounded-md border border-[#d7ded9] bg-white p-3">
                                 <p className="text-xs uppercase tracking-wide text-text-muted">Waktu Sewa</p>
                                 <p className="mt-1 text-sm text-text-main">{formatDateTimeForSummary(rentalStartAt)} - {formatDateTimeForSummary(rentalEndAt)}</p>
                                 <p className="mt-1 text-sm text-text-muted">Durasi: <span className="font-semibold text-text-main">{effectiveDuration} hari</span></p>
                             </div>
 
-                            <div className="rounded-lg border border-border bg-bg-main/40 p-3">
+                            <div className="rounded-md border border-[#d7ded9] bg-white p-3">
                                 <p className="mb-2 text-xs uppercase tracking-wide text-text-muted">Review Barang</p>
                                 <div className="space-y-2">
                                     {cart.map((item) => {
@@ -1581,10 +1530,10 @@ const Rental = ({
                                         const itemQty = Number(item.qty || 0);
                                         const lineTotal = perDay * itemQty * effectiveDuration;
                                         return (
-                                            <div key={`review-${item.id}`} className="rounded-md border border-border/70 bg-sidebar-bg/70 p-2.5">
+                                            <div key={`review-${item.id}`} className="rounded-md border border-[#d7ded9] bg-white p-2.5">
                                                 <div className="flex items-start justify-between gap-3">
                                                     <p className="text-sm font-semibold text-text-main">{item.name}</p>
-                                                    <p className="text-sm font-bold text-accent">{formatCurrency(lineTotal)}</p>
+                                                    <p className="text-sm font-bold text-[#146c43]">{formatCurrency(lineTotal)}</p>
                                                 </div>
                                                 <p className="mt-1 text-xs text-text-muted">
                                                     {itemQty} x {formatCurrency(perDay)} x {effectiveDuration} hari
@@ -1595,7 +1544,7 @@ const Rental = ({
                                 </div>
                             </div>
 
-                            <div className="rounded-lg border border-accent/30 bg-accent/10 p-3">
+                            <div className="rounded-md border border-[#146c43] bg-white p-3">
                                 <div className="flex items-center justify-between text-sm text-text-muted">
                                     <span>Status Pembayaran</span>
                                     <span className="font-semibold text-text-main">{payment.status}</span>
@@ -1612,18 +1561,18 @@ const Rental = ({
                                     <span>Sisa</span>
                                     <span className="font-semibold text-text-main">{formatCurrency(remainingAmount)}</span>
                                 </div>
-                                <div className="mt-3 border-t border-accent/20 pt-3">
+                                <div className="mt-3 border-t border-[#d7ded9] pt-3">
                                     <div className="flex items-center justify-between">
                                         <span className="text-sm text-text-muted">Total Sewa</span>
-                                        <span className="text-lg font-bold text-accent">{formatCurrency(totalAmount)}</span>
+                                        <span className="text-lg font-bold text-[#146c43]">{formatCurrency(totalAmount)}</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-bg-main/40 p-3">
+                            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-[#d7ded9] bg-white p-3">
                                 <input
                                     type="checkbox"
-                                    className="mt-0.5 h-4 w-4 accent-accent"
+                                    className="mt-0.5 h-4 w-4 accent-[#146c43]"
                                     checked={isFinalReviewChecked}
                                     onChange={(event) => setIsFinalReviewChecked(event.target.checked)}
                                     disabled={isSubmitting}
@@ -1634,7 +1583,7 @@ const Rental = ({
                             </label>
                         </div>
 
-                        <div className="border-t border-border px-4 py-3 sm:px-5">
+                        <div className="border-t border-[#d7ded9] px-4 py-3 sm:px-5">
                             {!isFinalReviewChecked && !isSubmitting && (
                                 <p className="mb-2 text-xs text-text-muted">
                                     Centang konfirmasi review terlebih dahulu untuk melanjutkan.
@@ -1643,7 +1592,7 @@ const Rental = ({
                             <div className="grid grid-cols-2 gap-3">
                             <button
                                 type="button"
-                                className="rounded-lg border border-border py-3 text-sm font-semibold text-text-main transition hover:border-accent disabled:opacity-60"
+                                className={`${RENTAL_SECONDARY_BUTTON_CLASS} disabled:opacity-60`}
                                 onClick={handleCloseFinalReview}
                                 disabled={isSubmitting}
                             >
@@ -1651,7 +1600,7 @@ const Rental = ({
                             </button>
                             <button
                                 type="button"
-                                className="rounded-lg bg-accent py-3 text-sm font-bold text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                                className={`${RENTAL_PRIMARY_BUTTON_CLASS} disabled:opacity-60`}
                                 onClick={handleConfirmCheckout}
                                 disabled={isSubmitting || !isFinalReviewChecked}
                             >

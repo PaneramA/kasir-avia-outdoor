@@ -5,17 +5,17 @@
   :root,
   [data-theme="light"] {
     --primary: #ffffff;
-    --secondary: #f7f9fa;
-    --accent: #dc5f00;
-    --accent-hover: #b84d00;
-    --text-main: #1f2933;
-    --text-muted: #5f6b76;
-    --bg-main: #f5f7f9;
+    --secondary: #f6f8f6;
+    --accent: #146c43;
+    --accent-hover: #0f5132;
+    --text-main: #10231c;
+    --text-muted: #5c6b64;
+    --bg-main: #f6f8f6;
     --sidebar-bg: #ffffff;
     --card-bg: #ffffff;
-    --surface-hover: #eef2f5;
-    --border: rgba(15, 23, 42, 0.14);
-    --radius: 12px;
+    --surface-hover: #eef5f1;
+    --border: #d7ded9;
+    --radius: 6px;
     --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
@@ -23,15 +23,15 @@
   [data-theme="dark"] {
     --primary: #2d3a3a;
     --secondary: #1e2727;
-    --accent: #dc5f00;
-    --accent-hover: #b84d00;
+    --accent: #5fd08a;
+    --accent-hover: #7ae0a1;
     --text-main: #f2f4f3;
     --text-muted: #a0a5a3;
     --bg-main: #141a1a;
     --sidebar-bg: #1a2222;
     --card-bg: #1d2626;
-    --surface-hover: #243030;
-    --border: rgba(255, 255, 255, 0.12);
+    --surface-hover: #20382e;
+    --border: rgba(184, 210, 197, 0.22);
   }
 
   body {
@@ -78,4 +78,67 @@
 
 ::-webkit-scrollbar-thumb {
   @apply rounded-full bg-text-muted/35 hover:bg-text-muted/60;
+}
+
+.flatpickr-calendar {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+  box-shadow: none;
+  color: var(--text-main);
+  font-family: inherit;
+}
+
+.flatpickr-months,
+.flatpickr-weekdays,
+.flatpickr-time {
+  background: var(--card-bg);
+}
+
+.flatpickr-current-month,
+.flatpickr-current-month input.cur-year,
+.flatpickr-monthDropdown-months,
+.flatpickr-weekday,
+.flatpickr-day {
+  color: var(--text-main);
+}
+
+.flatpickr-monthDropdown-months,
+.flatpickr-time input,
+.flatpickr-time .flatpickr-am-pm {
+  background: var(--card-bg);
+}
+
+.flatpickr-day {
+  border-radius: 4px;
+}
+
+.flatpickr-day:hover,
+.flatpickr-day:focus,
+.flatpickr-time input:hover,
+.flatpickr-time input:focus,
+.flatpickr-time .flatpickr-am-pm:hover {
+  border-color: var(--accent);
+  background: var(--surface-hover);
+}
+
+.flatpickr-day.today {
+  border-color: var(--accent);
+}
+
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange,
+.flatpickr-day.selected:hover,
+.flatpickr-day.startRange:hover,
+.flatpickr-day.endRange:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.flatpickr-day.inRange {
+  border-color: var(--surface-hover);
+  background: var(--surface-hover);
+  box-shadow: -5px 0 0 var(--surface-hover), 5px 0 0 var(--surface-hover);
 }

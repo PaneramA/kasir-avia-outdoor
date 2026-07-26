@@ -13,6 +13,7 @@ describe('environment configuration', () => {
   it('normalizes defaults and invalid positive integers', () => {
     delete process.env.PORT;
     delete process.env.JWT_SECRET;
+    delete process.env.CORS_ORIGIN;
     process.env.LOGIN_RATE_LIMIT_MAX_ATTEMPTS = '0';
 
     const env = getEnv();

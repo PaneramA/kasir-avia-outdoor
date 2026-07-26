@@ -405,34 +405,34 @@ const Inventory = ({
                         <ViewModeToggle
                             value={inventoryViewMode}
                             onChange={setInventoryViewMode}
-                            containerClassName="min-h-11 rounded-DEFAULT"
+                            containerClassName="min-h-11 rounded-md"
                             buttonClassName="px-3 py-2 text-xs"
                         />
                         <input
                             type="search"
-                            className="min-h-11 w-full rounded-DEFAULT border border-border bg-sidebar-bg px-3 text-sm text-text-main outline-none placeholder:text-text-muted focus:border-accent sm:w-56"
+                            className="min-h-11 w-full rounded-md border border-border bg-card-bg px-3 text-sm text-text-main outline-none placeholder:text-text-muted focus:border-accent sm:w-56"
                             value={searchQuery}
                             onChange={(event) => setSearchQuery(event.target.value)}
                             placeholder="Cari barang atau kategori"
                         />
                         <button
-                            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-DEFAULT border border-border bg-sidebar-bg px-5 py-2.5 font-semibold text-text-main transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-border bg-card-bg px-5 py-2.5 font-semibold text-text-main transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
                             onClick={() => { void handleDownloadTemplate(); }}
                             disabled={isDownloadingTemplate}
                         >
                             <i className="fas fa-download"></i> {isDownloadingTemplate ? 'Menyiapkan...' : 'Download Template'}
                         </button>
                         <button
-                            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-DEFAULT border border-border bg-sidebar-bg px-5 py-2.5 font-semibold text-text-main transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
+                            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-border bg-card-bg px-5 py-2.5 font-semibold text-text-main transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
                             onClick={handleOpenImportDialog}
                             disabled={isImporting}
                         >
                             <i className="fas fa-file-import"></i> {isImporting ? 'Memproses...' : 'Import CSV/Excel'}
                         </button>
-                        <button className="flex min-h-11 w-full items-center justify-center gap-2 rounded-DEFAULT border border-border bg-sidebar-bg px-5 py-2.5 font-semibold text-text-main transition hover:bg-surface-hover sm:w-auto" onClick={() => setIsCategoryModalOpen(true)}>
+                        <button className="flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-border bg-card-bg px-5 py-2.5 font-semibold text-text-main transition hover:bg-surface-hover sm:w-auto" onClick={() => setIsCategoryModalOpen(true)}>
                             <i className="fas fa-tags"></i> Kategori
                         </button>
-                        <button className="flex min-h-11 w-full items-center justify-center gap-2 rounded-DEFAULT bg-accent px-5 py-2.5 font-semibold text-white transition hover:bg-accent-hover shadow-[0_4px_15px_rgba(230,126,34,0.3)] sm:w-auto" onClick={handleAddItem}>
+                        <button className="flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-accent px-5 py-2.5 font-semibold text-white transition hover:bg-accent-hover sm:w-auto" onClick={handleAddItem}>
                             <i className="fas fa-plus"></i> Tambah Barang
                         </button>
                     </div>
@@ -444,7 +444,7 @@ const Inventory = ({
 
             <div className="custom-scrollbar lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-y-contain lg:pr-2">
                 {inventoryError ? (
-                    <div className="py-10 text-center text-[#e74c3c]">{inventoryError.message || 'Gagal memuat inventaris.'}</div>
+                    <div className="py-10 text-center text-red-600">{inventoryError.message || 'Gagal memuat inventaris.'}</div>
                 ) : isInventoryLoading ? (
                     <div className="py-10 text-center text-text-muted">Memuat inventaris...</div>
                 ) : inventory.length === 0 ? (
@@ -458,31 +458,23 @@ const Inventory = ({
                 ) : inventoryViewMode === 'grid' ? (
                     <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 sm:gap-5 lg:grid-cols-[repeat(auto-fill,minmax(260px,1fr))] lg:gap-[25px]">
                         {inventory.map((item) => (
-                            <div className="bg-card-bg border border-border rounded-DEFAULT overflow-hidden transition-all hover:border-accent group" key={item.id}>
-                                <div className="relative h-[160px] overflow-hidden bg-[#1A2222] sm:h-[180px]">
+                            <div className="group overflow-hidden rounded-md border border-border bg-card-bg transition-colors hover:border-accent" key={item.id}>
+                                <div className="relative h-[160px] overflow-hidden bg-bg-main sm:h-[180px]">
                                     <img
                                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                                         src={item.image || 'https://via.placeholder.com/300x200?text=No+Image'}
                                         alt={item.name}
                                     />
-                                    <span className={`absolute right-[10px] top-[10px] rounded-[20px] px-3 py-[5px] text-[0.72rem] font-bold uppercase ${inventoryStatus === 'archived' ? 'bg-[#6b7280] text-white' : item.stock > 0 ? 'bg-[#2ecc71] text-white' : 'bg-[#e74c3c] text-white'}`}>
-                                        {inventoryStatus === 'archived' ? 'Archived' : item.stock > 0 ? 'Available' : 'Out of Stock'}
+                                    <span className={`absolute right-[10px] top-[10px] rounded-md px-3 py-[5px] text-[0.72rem] font-bold uppercase ${item.stock > 0 ? 'bg-accent text-white' : 'bg-red-600 text-white'}`}>
+                                        {item.stock > 0 ? 'Available' : 'Out of Stock'}
                                     </span>
                                     <div className="absolute inset-0 flex items-center justify-center gap-3 bg-black/35 opacity-100 transition-opacity duration-300 sm:opacity-0 sm:group-hover:opacity-100">
-                                        {inventoryStatus === 'active' ? (
-                                            <>
-                                                <button type="button" aria-label={`Edit ${item.name}`} title="Edit barang" className="flex h-11 w-11 items-center justify-center rounded-full bg-[#3498db] text-[1.1rem] text-white transition hover:scale-110" onClick={() => handleEditItem(item)}>
-                                                    <i className="fas fa-edit"></i>
-                                                </button>
-                                                <button type="button" aria-label={`Arsipkan ${item.name}`} title="Arsipkan barang" className="flex h-11 w-11 items-center justify-center rounded-full bg-[#e74c3c] text-[1.1rem] text-white transition hover:scale-110" onClick={() => handleArchiveItem(item.id)}>
-                                                    <i className="fas fa-box-archive"></i>
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <button type="button" aria-label={`Pulihkan ${item.name}`} title="Pulihkan barang" className="flex h-11 w-11 items-center justify-center rounded-full bg-[#2ecc71] text-[1.1rem] text-white transition hover:scale-110" onClick={() => handleRestoreItem(item.id)}>
-                                                <i className="fas fa-rotate-left"></i>
-                                            </button>
-                                        )}
+                                        <button type="button" className="flex h-11 w-11 items-center justify-center rounded-md bg-accent text-[1.1rem] text-white transition hover:bg-accent-hover" onClick={() => handleEditItem(item)}>
+                                            <i className="fas fa-edit"></i>
+                                        </button>
+                                        <button type="button" className="flex h-11 w-11 items-center justify-center rounded-md bg-red-600 text-[1.1rem] text-white transition hover:bg-red-700" onClick={() => handleDeleteItem(item.id)}>
+                                            <i className="fas fa-trash"></i>
+                                        </button>
                                     </div>
                                 </div>
                                 <div className="p-4 sm:p-5">
@@ -501,9 +493,9 @@ const Inventory = ({
                 ) : (
                     <div className="flex flex-col gap-3 sm:gap-4">
                         {inventory.map((item) => (
-                            <div key={item.id} className="rounded-DEFAULT border border-border bg-card-bg p-3 sm:p-4">
+                            <div key={item.id} className="rounded-md border border-border bg-card-bg p-3 sm:p-4">
                                 <div className="flex items-center gap-3 sm:gap-4">
-                                    <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-[#1A2222] sm:h-20 sm:w-20">
+                                    <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md bg-bg-main sm:h-20 sm:w-20">
                                         <img
                                             className="h-full w-full object-cover"
                                             src={item.image || 'https://via.placeholder.com/160?text=No+Image'}
@@ -517,27 +509,19 @@ const Inventory = ({
                                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs sm:text-sm">
                                             <span className="font-bold text-accent">Rp {parseInt(item.price, 10).toLocaleString()}/hari</span>
                                             <span className="text-text-muted">Stok: {item.stock}</span>
-                                            <span className={`rounded-full px-2 py-[2px] text-[0.65rem] font-semibold uppercase ${inventoryStatus === 'archived' ? 'bg-[#6b7280]/20 text-[#6b7280]' : item.stock > 0 ? 'bg-[#2ecc71]/20 text-[#2ecc71]' : 'bg-[#e74c3c]/20 text-[#e74c3c]'}`}>
-                                                {inventoryStatus === 'archived' ? 'Archived' : item.stock > 0 ? 'Available' : 'Out of Stock'}
+                                            <span className={`rounded-md px-2 py-[2px] text-[0.65rem] font-semibold uppercase ${item.stock > 0 ? 'bg-accent text-white' : 'bg-red-600 text-white'}`}>
+                                                {item.stock > 0 ? 'Available' : 'Out of Stock'}
                                             </span>
                                         </div>
                                     </div>
 
                                     <div className="flex shrink-0 items-center gap-2">
-                                        {inventoryStatus === 'active' ? (
-                                            <>
-                                                <button type="button" aria-label={`Edit ${item.name}`} title="Edit barang" className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-sidebar-bg text-[#3498db] transition hover:border-[#3498db]/60" onClick={() => handleEditItem(item)}>
-                                                    <i className="fas fa-edit"></i>
-                                                </button>
-                                                <button type="button" aria-label={`Arsipkan ${item.name}`} title="Arsipkan barang" className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-sidebar-bg text-[#e74c3c] transition hover:border-[#e74c3c]/60" onClick={() => handleArchiveItem(item.id)}>
-                                                    <i className="fas fa-box-archive"></i>
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <button type="button" aria-label={`Pulihkan ${item.name}`} title="Pulihkan barang" className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-sidebar-bg text-[#2ecc71] transition hover:border-[#2ecc71]/60" onClick={() => handleRestoreItem(item.id)}>
-                                                <i className="fas fa-rotate-left"></i>
-                                            </button>
-                                        )}
+                                        <button type="button" className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card-bg text-accent transition hover:border-accent hover:bg-surface-hover" onClick={() => handleEditItem(item)}>
+                                            <i className="fas fa-edit"></i>
+                                        </button>
+                                        <button type="button" className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card-bg text-red-600 transition hover:border-red-600 hover:bg-surface-hover" onClick={() => handleDeleteItem(item.id)}>
+                                            <i className="fas fa-trash"></i>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -550,7 +534,7 @@ const Inventory = ({
                 <div className="mt-4 flex justify-center lg:shrink-0">
                     <button
                         type="button"
-                        className="rounded-DEFAULT border border-border bg-sidebar-bg px-4 py-2 text-sm font-semibold text-text-main transition hover:border-accent disabled:cursor-wait disabled:opacity-60"
+                        className="rounded-md border border-border bg-card-bg px-4 py-2 text-sm font-semibold text-text-main transition hover:border-accent disabled:cursor-wait disabled:opacity-60"
                         onClick={() => { void setSize((size) => size + 1); }}
                         disabled={isLoadingMoreInventory}
                     >

@@ -30,8 +30,8 @@ const ReceiptModal = ({
     const remainingAmount = Number(rental?.payment?.remainingAmount ?? Math.max(0, total - paidAmount)) || 0;
 
     return (
-        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/80 p-3 backdrop-blur-[3px] sm:p-4">
-            <div className="flex max-h-[92vh] w-full max-w-[760px] flex-col overflow-hidden rounded-lg border border-border bg-sidebar-bg shadow-xl">
+        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/70 p-3 sm:p-4">
+            <div className="flex max-h-[92vh] w-full max-w-[760px] flex-col overflow-hidden rounded-md border border-border bg-card-bg shadow-none">
                 <div className="mb-0 flex items-start justify-between gap-4 border-b border-border px-4 pb-3 pt-4 sm:px-5">
                     <div>
                         <h4 className="text-[1.1rem] font-bold text-text-main">Receipt Transaksi</h4>
@@ -53,7 +53,7 @@ const ReceiptModal = ({
 
                 <div className="custom-scrollbar flex-1 overflow-y-auto px-4 py-4 sm:px-5">
                 <div className="grid gap-4 md:grid-cols-2">
-                    <div className="rounded-lg border border-border/60 bg-bg-main/40 p-3">
+                    <div className="rounded-md border border-border bg-bg-main p-3">
                         <p className="mb-1 text-xs uppercase tracking-wide text-text-muted">Penyewa</p>
                         <p className="font-semibold text-text-main">{rental.customer?.name || '-'}</p>
                         <p className="text-sm text-text-muted">{rental.customer?.phone || '-'}</p>
@@ -62,7 +62,7 @@ const ReceiptModal = ({
                         </p>
                     </div>
 
-                    <div className="rounded-lg border border-border/60 bg-bg-main/40 p-3">
+                    <div className="rounded-md border border-border bg-bg-main p-3">
                         <p className="mb-1 text-xs uppercase tracking-wide text-text-muted">Detail Sewa</p>
                         <p className="text-sm text-text-main">Tanggal: {formatDateTime(rental.date)}</p>
                         <p className="text-sm text-text-main">Durasi: {duration} hari</p>
@@ -74,10 +74,10 @@ const ReceiptModal = ({
                     </div>
                 </div>
 
-                <div className="mt-4 overflow-x-auto rounded-lg border border-border/60 bg-bg-main/30">
+                <div className="mt-4 overflow-x-auto rounded-md border border-border bg-bg-main">
                     <table className="w-full min-w-[560px] border-collapse">
                         <thead>
-                            <tr className="bg-sidebar-bg">
+                            <tr className="bg-card-bg">
                                 <th className="border-b border-border p-3 text-left text-[0.75rem] uppercase tracking-wide text-text-muted">Item</th>
                                 <th className="border-b border-border p-3 text-right text-[0.75rem] uppercase tracking-wide text-text-muted">Qty</th>
                                 <th className="border-b border-border p-3 text-right text-[0.75rem] uppercase tracking-wide text-text-muted">Harga/Hari</th>
@@ -100,13 +100,13 @@ const ReceiptModal = ({
                     </table>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between rounded-lg border border-accent/30 bg-accent/10 p-3">
+                <div className="mt-4 flex items-center justify-between rounded-md border border-accent bg-card-bg p-3">
                     <span className="text-sm font-semibold text-text-main">Total</span>
                     <span className="text-[1.1rem] font-bold text-accent">{formatCurrency(total)}</span>
                 </div>
 
                 {receiptProfile.legalFooterLines.length > 0 && (
-                    <div className="mt-3 rounded-lg border border-border/50 bg-bg-main/30 p-3">
+                    <div className="mt-3 rounded-md border border-border bg-bg-main p-3">
                         {receiptProfile.legalFooterLines.map((line) => (
                             <p key={line} className="text-xs text-text-muted">{line}</p>
                         ))}
@@ -117,21 +117,21 @@ const ReceiptModal = ({
                 <div className="mt-0 flex flex-col gap-2 border-t border-border px-4 py-3 sm:flex-row sm:justify-end sm:px-5">
                     <button
                         type="button"
-                        className="rounded-lg border border-border bg-sidebar-bg px-4 py-2.5 text-sm font-semibold text-text-main hover:border-accent"
+                        className="rounded-md border border-border bg-card-bg px-4 py-2.5 text-sm font-semibold text-text-main hover:border-accent"
                         onClick={() => onPrint(58)}
                     >
                         <i className="fas fa-print mr-2"></i>Print 58mm
                     </button>
                     <button
                         type="button"
-                        className="rounded-lg border border-border bg-sidebar-bg px-4 py-2.5 text-sm font-semibold text-text-main hover:border-accent"
+                        className="rounded-md border border-border bg-card-bg px-4 py-2.5 text-sm font-semibold text-text-main hover:border-accent"
                         onClick={() => onPrint(80)}
                     >
                         <i className="fas fa-print mr-2"></i>Print 80mm
                     </button>
                     <button
                         type="button"
-                        className="rounded-lg bg-[#25d366] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1da955]"
+                        className="rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover"
                         onClick={onShareWhatsApp}
                     >
                         <i className="fab fa-whatsapp mr-2"></i>Share WA

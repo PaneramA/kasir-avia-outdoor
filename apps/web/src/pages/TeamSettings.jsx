@@ -241,14 +241,14 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
   return (
     <div className="space-y-6 pt-0 pb-4 sm:pb-5">
       {message && (
-        <div className="rounded-lg border border-[#2ecc71]/40 bg-[#2ecc71]/10 p-3 text-sm text-[#6ee7a8]">{message}</div>
+        <div className="rounded-md border border-accent bg-card-bg p-3 text-sm text-accent">{message}</div>
       )}
 
       {displayedErrorMessage && (
-        <div className="rounded-lg border border-[#e74c3c]/40 bg-[#e74c3c]/10 p-3 text-sm text-[#f3b2ad]">{displayedErrorMessage}</div>
+        <div className="rounded-md border border-red-600 bg-card-bg p-3 text-sm text-red-600">{displayedErrorMessage}</div>
       )}
 
-      <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">
+      <section className="rounded-md border border-border bg-card-bg p-4 sm:p-6">
         <h3 className="mb-1 text-[1rem] font-bold text-text-main">Ringkasan Tim Tenant</h3>
         <p className="text-sm text-text-muted">
           Role global: <span className="font-semibold text-text-main">{currentUser?.role || '-'}</span>
@@ -259,13 +259,13 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
           Area ini dipakai owner/admin tenant untuk mengatur user toko, membership tenant, dan izin akses ke masing-masing cabang.
         </p>
         {!canAdministerTenant && (
-          <p className="mt-2 text-xs text-[#f3b2ad]">
+          <p className="mt-2 text-xs text-red-600">
             Kamu belum punya role owner/admin aktif di tenant ini, jadi aksi manajemen tim dibatasi.
           </p>
         )}
       </section>
 
-      <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">
+      <section className="rounded-md border border-border bg-card-bg p-4 sm:p-6">
         <h3 className="mb-1 text-[1.1rem] font-bold text-text-main">Buat User Toko</h3>
         <p className="mb-5 text-sm text-text-muted">Owner/admin tenant bisa langsung membuat akun kasir/admin untuk toko ini. Kuota user aktif mengikuti paket tenant.</p>
 
@@ -273,7 +273,7 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
           <div>
             <label className="mb-1.5 block text-[0.85rem] text-text-muted">Username</label>
             <input
-              className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+              className="w-full rounded-md border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
               placeholder="kasir.bandung"
               value={tenantUserForm.username}
               onChange={(event) => setTenantUserForm((prev) => ({ ...prev, username: event.target.value }))}
@@ -285,7 +285,7 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
             <label className="mb-1.5 block text-[0.85rem] text-text-muted">Password Awal</label>
             <input
               type="password"
-              className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+              className="w-full rounded-md border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
               placeholder="Minimal 8 karakter"
               value={tenantUserForm.password}
               onChange={(event) => setTenantUserForm((prev) => ({ ...prev, password: event.target.value }))}
@@ -297,7 +297,7 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
           <div>
             <label className="mb-1.5 block text-[0.85rem] text-text-muted">Role Tenant</label>
             <select
-              className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+              className="w-full rounded-md border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
               value={tenantUserForm.tenantRole}
               onChange={(event) => setTenantUserForm((prev) => ({ ...prev, tenantRole: event.target.value }))}
               disabled={!canAdministerTenant}
@@ -309,14 +309,14 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
           <button
             type="submit"
             disabled={isSubmittingTenantUser || !canAdministerTenant}
-            className="min-h-11 rounded-lg bg-accent px-5 py-2.5 font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
+            className="min-h-11 rounded-md bg-accent px-5 py-2.5 font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
           >
             {isSubmittingTenantUser ? 'Menyimpan...' : 'Buat User Toko'}
           </button>
         </form>
       </section>
 
-      <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">
+      <section className="rounded-md border border-border bg-card-bg p-4 sm:p-6">
         <h3 className="mb-1 text-[1.1rem] font-bold text-text-main">Membership Tenant</h3>
         <p className="mb-5 text-sm text-text-muted">Daftarkan user agar menjadi bagian tenant toko ini dan tentukan role tenant-nya.</p>
 
@@ -324,7 +324,7 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
           <div>
             <label className="mb-1.5 block text-[0.85rem] text-text-muted">User</label>
             <select
-              className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+              className="w-full rounded-md border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
               value={membershipForm.userId}
               onChange={(event) => setMembershipForm((prev) => ({ ...prev, userId: event.target.value }))}
               required
@@ -339,7 +339,7 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
           <div>
             <label className="mb-1.5 block text-[0.85rem] text-text-muted">Role</label>
             <select
-              className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+              className="w-full rounded-md border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
               value={membershipForm.role}
               onChange={(event) => setMembershipForm((prev) => ({ ...prev, role: event.target.value }))}
               disabled={!canAdministerTenant}
@@ -352,7 +352,7 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
           <div>
             <label className="mb-1.5 block text-[0.85rem] text-text-muted">Status</label>
             <select
-              className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+              className="w-full rounded-md border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
               value={membershipForm.status}
               onChange={(event) => setMembershipForm((prev) => ({ ...prev, status: event.target.value }))}
               disabled={!canAdministerTenant}
@@ -364,7 +364,7 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
           <button
             type="submit"
             disabled={isSubmittingMembership || !canAdministerTenant}
-            className="min-h-11 rounded-lg bg-accent px-5 py-2.5 font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
+            className="min-h-11 rounded-md bg-accent px-5 py-2.5 font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
           >
             {isSubmittingMembership ? 'Menyimpan...' : 'Tambah Membership'}
           </button>
@@ -373,11 +373,11 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
         {isLoading ? (
           <div className="mt-5 text-text-muted">Memuat membership tenant...</div>
         ) : memberships.length === 0 ? (
-          <div className="mt-5 rounded-lg border border-border/50 bg-bg-main/30 p-4 text-center text-text-muted">Belum ada membership tenant.</div>
+          <div className="mt-5 rounded-md border border-border bg-bg-main p-4 text-center text-text-muted">Belum ada membership tenant.</div>
         ) : (
           <div className="mt-5 space-y-2">
             {memberships.map((membership) => (
-              <article key={membership.id} className="rounded-lg border border-border/50 bg-bg-main/30 p-3">
+              <article key={membership.id} className="rounded-md border border-border bg-bg-main p-3">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <p className="font-medium text-text-main">{membership.username}</p>
@@ -385,7 +385,7 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button
-                      className="rounded border border-border bg-sidebar-bg px-3 py-1.5 text-xs text-text-main hover:border-accent"
+                      className="rounded-md border border-border bg-card-bg px-3 py-1.5 text-xs text-text-main hover:border-accent"
                       onClick={() => handleUpdateMembership(membership.id, {
                         status: membership.status === 'active' ? 'inactive' : 'active',
                       })}
@@ -394,7 +394,7 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
                       {membership.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'}
                     </button>
                     <button
-                      className="rounded border border-border bg-sidebar-bg px-3 py-1.5 text-xs text-text-main hover:border-accent"
+                      className="rounded-md border border-border bg-card-bg px-3 py-1.5 text-xs text-text-main hover:border-accent"
                       onClick={() => {
                         const nextRole = getNextMembershipRole(membership.role)
                         handleUpdateMembership(membership.id, { role: nextRole })
@@ -411,7 +411,7 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
         )}
       </section>
 
-      <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">
+      <section className="rounded-md border border-border bg-card-bg p-4 sm:p-6">
         <h3 className="mb-1 text-[1.1rem] font-bold text-text-main">Akses User ke Cabang</h3>
         <p className="mb-5 text-sm text-text-muted">Tentukan user mana yang boleh bekerja di cabang tertentu.</p>
 
@@ -419,7 +419,7 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
           <div>
             <label className="mb-1.5 block text-[0.85rem] text-text-muted">User</label>
             <select
-              className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+              className="w-full rounded-md border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
               value={accessForm.userId}
               onChange={(event) => setAccessForm((prev) => ({ ...prev, userId: event.target.value }))}
               required
@@ -434,7 +434,7 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
           <div>
             <label className="mb-1.5 block text-[0.85rem] text-text-muted">Cabang</label>
             <select
-              className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+              className="w-full rounded-md border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
               value={accessForm.branchId}
               onChange={(event) => setAccessForm((prev) => ({ ...prev, branchId: event.target.value }))}
               required
@@ -449,7 +449,7 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
           <div>
             <label className="mb-1.5 block text-[0.85rem] text-text-muted">Role Cabang</label>
             <select
-              className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+              className="w-full rounded-md border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
               value={accessForm.role}
               onChange={(event) => setAccessForm((prev) => ({ ...prev, role: event.target.value }))}
               disabled={!canAdministerTenant}
@@ -461,7 +461,7 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
           <button
             type="submit"
             disabled={isSubmittingAccess || !canAdministerTenant}
-            className="min-h-11 rounded-lg bg-accent px-5 py-2.5 font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
+            className="min-h-11 rounded-md bg-accent px-5 py-2.5 font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
           >
             {isSubmittingAccess ? 'Menyimpan...' : 'Simpan Akses'}
           </button>
@@ -470,18 +470,18 @@ const TeamSettings = ({ userId = '', tenantId = '', branchId = '' }) => {
         {isLoading ? (
           <div className="mt-5 text-text-muted">Memuat akses cabang...</div>
         ) : accesses.length === 0 ? (
-          <div className="mt-5 rounded-lg border border-border/50 bg-bg-main/30 p-4 text-center text-text-muted">Belum ada akses cabang yang diatur.</div>
+          <div className="mt-5 rounded-md border border-border bg-bg-main p-4 text-center text-text-muted">Belum ada akses cabang yang diatur.</div>
         ) : (
           <div className="mt-5 space-y-2">
             {accesses.map((access) => (
-              <article key={access.id} className="rounded-lg border border-border/50 bg-bg-main/30 p-3">
+              <article key={access.id} className="rounded-md border border-border bg-bg-main p-3">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <p className="font-medium text-text-main">{access.username}</p>
                     <p className="text-xs text-text-muted">{access.branchName} ({access.branchCode}) • role: {access.role}</p>
                   </div>
                   <button
-                    className="rounded border border-[#e74c3c]/40 bg-[#e74c3c]/10 px-3 py-1.5 text-xs text-[#f3b2ad] hover:bg-[#e74c3c]/20"
+                    className="rounded-md border border-red-600 bg-red-600 px-3 py-1.5 text-xs text-white hover:border-red-700 hover:bg-red-700"
                     onClick={() => handleRemoveAccess(access)}
                     disabled={!canAdministerTenant}
                   >

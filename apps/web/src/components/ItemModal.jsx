@@ -126,18 +126,18 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
     const safeCategories = modalCategories;
 
     return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-3 backdrop-blur-[5px] sm:p-4">
-            <div className="max-h-[92vh] w-full max-w-[500px] overflow-hidden rounded-DEFAULT border border-border bg-sidebar-bg animate-[modalIn_0.3s_ease-out]">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3 sm:p-4">
+            <div className="max-h-[92vh] w-full max-w-[500px] overflow-hidden rounded-md border border-border bg-card-bg animate-[modalIn_0.3s_ease-out]">
                 <div className="flex items-center justify-between border-b border-border px-4 py-4 sm:p-[20px_25px]">
                     <h3 className="text-[1.05rem] font-bold text-text-main sm:text-[1.2rem]">{editingItem ? 'Edit Barang' : 'Tambah Barang Baru'}</h3>
-                    <button className="flex h-10 w-10 items-center justify-center rounded-full border border-transparent bg-transparent text-[1.5rem] text-text-muted transition hover:border-border hover:text-text-main" onClick={() => setIsOpen(false)}>&times;</button>
+                    <button className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card-bg text-[1.5rem] text-text-muted transition hover:border-accent hover:text-text-main" onClick={() => setIsOpen(false)}>&times;</button>
                 </div>
                 <div className="max-h-[calc(92vh-72px)] overflow-y-auto p-4 sm:max-h-[calc(92vh-86px)] sm:p-[25px]">
                     <form onSubmit={handleSubmit}>
                         <div className="mb-5">
                             <label className="block mb-2 text-[0.9rem] text-text-muted">Nama Barang</label>
                             <input
-                                className="w-full bg-bg-main border border-border p-3 rounded-lg text-text-main outline-none focus:border-accent transition-colors"
+                                className="w-full rounded-md border border-border bg-bg-main p-3 text-text-main outline-none transition-colors focus:border-accent"
                                 type="text"
                                 id="item-name"
                                 placeholder="Contoh: Tenda Dome 4P"
@@ -150,7 +150,7 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
                             <div>
                                 <label className="block mb-2 text-[0.9rem] text-text-muted">Kategori</label>
                                 <select
-                                    className="w-full bg-bg-main border border-border p-3 rounded-lg text-text-main outline-none focus:border-accent transition-colors cursor-pointer"
+                                    className="w-full cursor-pointer rounded-md border border-border bg-bg-main p-3 text-text-main outline-none transition-colors focus:border-accent"
                                     id="item-category"
                                     value={formData.category}
                                     onChange={handleInputChange}
@@ -165,7 +165,7 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
                             <div>
                                 <label className="block mb-2 text-[0.9rem] text-text-muted">Stok Awal</label>
                                 <input
-                                    className="w-full bg-bg-main border border-border p-3 rounded-lg text-text-main outline-none focus:border-accent transition-colors"
+                                    className="w-full rounded-md border border-border bg-bg-main p-3 text-text-main outline-none transition-colors focus:border-accent"
                                     type="number"
                                     id="item-stock"
                                     min="0"
@@ -178,7 +178,7 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
                         <div className="mb-5">
                             <label className="block mb-2 text-[0.9rem] text-text-muted">Harga Sewa / Hari (Rp)</label>
                             <input
-                                className="w-full bg-bg-main border border-border p-3 rounded-lg text-text-main outline-none focus:border-accent transition-colors"
+                                className="w-full rounded-md border border-border bg-bg-main p-3 text-text-main outline-none transition-colors focus:border-accent"
                                 type="number"
                                 id="item-price"
                                 placeholder="25000"
@@ -190,10 +190,10 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
                         </div>
                         <div className="mb-5">
                             <label className="block mb-2 text-[0.9rem] text-text-muted">Gambar Barang</label>
-                            <div className="cursor-pointer rounded-DEFAULT border-2 border-dashed border-border p-5 text-center transition hover:border-accent hover:bg-accent/5 sm:p-[30px]" onClick={() => fileInputRef.current?.click()}>
+                            <div className="cursor-pointer rounded-md border-2 border-dashed border-border bg-bg-main p-5 text-center transition hover:border-accent hover:bg-surface-hover sm:p-[30px]" onClick={() => fileInputRef.current?.click()}>
                                 {formData.image ? (
                                     <>
-                                        <img src={formData.image} alt="Preview" className="mt-[10px] max-h-[150px] w-full object-cover rounded-lg block" />
+                                        <img src={formData.image} alt="Preview" className="mt-[10px] block max-h-[150px] w-full rounded-md object-cover" />
                                         <div className="mt-2 text-accent text-sm flex items-center justify-center gap-2">
                                             <i className="fas fa-camera"></i> Ganti Gambar
                                         </div>
@@ -213,7 +213,7 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
                                 />
                             </div>
                         </div>
-                        <button disabled={isSubmitting} type="submit" className="w-full flex items-center justify-center gap-2 bg-accent px-5 py-3 rounded-DEFAULT text-white font-semibold transition hover:bg-accent-hover shadow-[0_4px_15px_rgba(230,126,34,0.3)] mt-2.5 disabled:opacity-60">
+                        <button disabled={isSubmitting} type="submit" className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-md bg-accent px-5 py-3 font-semibold text-white transition hover:bg-accent-hover disabled:opacity-60">
                             <span>{isSubmitting ? 'Menyimpan...' : editingItem ? 'Update Barang' : 'Simpan Barang'}</span>
                         </button>
                     </form>

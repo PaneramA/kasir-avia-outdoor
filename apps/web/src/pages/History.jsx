@@ -243,7 +243,7 @@ const History = ({
     return (
         <div className="flex h-full flex-col pt-0 pb-4 sm:pb-5">
             {deleteSuccessMessage && (
-                <div className="mb-4 rounded-lg border border-[#2ecc71]/40 bg-[#2ecc71]/10 p-3 text-sm text-[#6ee7a8]">
+                <div className="mb-4 rounded-md border border-accent bg-card-bg p-3 text-sm font-medium text-accent">
                     {deleteSuccessMessage}
                 </div>
             )}
@@ -255,7 +255,7 @@ const History = ({
                 </div>
 
                 <div className="w-full overflow-x-auto md:w-auto">
-                    <div className="flex min-w-max overflow-hidden rounded-lg border border-border bg-sidebar-bg shadow-sm">
+                    <div className="flex min-w-max overflow-hidden rounded-md border border-border bg-card-bg shadow-none">
                     <div className="px-4 py-2 text-center border-r border-border">
                         <span className="block text-[0.7rem] uppercase font-bold text-text-muted mb-0.5">Semua</span>
                         <span className="font-bold text-text-main">{totalTransactions}</span>
@@ -266,9 +266,9 @@ const History = ({
                     </div>
                     <div className="px-4 py-2 text-center border-r border-border">
                         <span className="block text-[0.7rem] uppercase font-bold text-text-muted mb-0.5">Selesai</span>
-                        <span className="font-bold text-[#2ecc71]">{returnedTransactions}</span>
+                        <span className="font-bold text-accent">{returnedTransactions}</span>
                     </div>
-                    <div className="px-4 py-2 text-center bg-accent/5">
+                    <div className="px-4 py-2 text-center bg-bg-main">
                         <span className="block text-[0.7rem] uppercase font-bold text-text-muted mb-0.5">Pendapatan Periode</span>
                         <span className="font-bold text-accent">{formatCurrency(totalRevenue)}</span>
                     </div>
@@ -276,13 +276,13 @@ const History = ({
                 </div>
             </div>
 
-            <div className="mb-6 flex flex-col gap-4 rounded-lg border border-border bg-sidebar-bg p-4">
+            <div className="mb-6 flex flex-col gap-4 rounded-md border border-border bg-card-bg p-4">
                 <div className="flex flex-col sm:flex-row gap-4">
                     <div className="flex-1 relative">
                         <i className="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-text-muted"></i>
                         <input
                             type="text"
-                            className="w-full bg-bg-main border border-border py-2.5 pl-11 pr-4 rounded-lg text-text-main outline-none focus:border-accent text-sm"
+                            className="w-full rounded-md border border-border bg-bg-main py-2.5 pl-11 pr-4 text-sm text-text-main outline-none focus:border-accent"
                             placeholder="Cari berdasarkan Nama atau ID Transaksi..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -290,7 +290,7 @@ const History = ({
                     </div>
                     <div className="w-full sm:w-[220px]">
                         <select
-                            className="w-full bg-bg-main border border-border py-2.5 px-4 rounded-lg text-text-main outline-none focus:border-accent text-sm cursor-pointer appearance-none"
+                            className="w-full cursor-pointer appearance-none rounded-md border border-border bg-bg-main px-4 py-2.5 text-sm text-text-main outline-none focus:border-accent"
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}
                         >
@@ -305,20 +305,20 @@ const History = ({
                     <span className="text-text-muted text-[0.85rem] font-semibold"><i className="fas fa-calendar-alt mr-1.5"></i> Filter Tanggal:</span>
                     <input
                         type="date"
-                        className="w-full bg-bg-main border border-border py-2 px-3 rounded-lg text-text-main outline-none focus:border-accent text-sm custom-date-input sm:w-auto"
+                        className="w-full rounded-md border border-border bg-bg-main px-3 py-2 text-sm text-text-main outline-none focus:border-accent custom-date-input sm:w-auto"
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
                     />
                     <span className="text-text-muted text-[0.85rem]">s/d</span>
                     <input
                         type="date"
-                        className="w-full bg-bg-main border border-border py-2 px-3 rounded-lg text-text-main outline-none focus:border-accent text-sm custom-date-input sm:w-auto"
+                        className="w-full rounded-md border border-border bg-bg-main px-3 py-2 text-sm text-text-main outline-none focus:border-accent custom-date-input sm:w-auto"
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
                     />
                     {(startDate || endDate) && (
                         <button
-                            className="text-[#e74c3c] bg-[#e74c3c]/10 hover:bg-[#e74c3c]/20 px-3 py-2 rounded-lg text-sm font-semibold transition-colors"
+                            className="rounded-md border border-border bg-bg-main px-3 py-2 text-sm font-semibold text-text-main transition-colors hover:border-accent"
                             onClick={() => {
                                 setStartDate(currentMonthRange.startDate);
                                 setEndDate(currentMonthRange.endDate);
@@ -330,7 +330,7 @@ const History = ({
                 </div>
             </div>
 
-            <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-sidebar-bg/50">
+            <div className="flex flex-1 flex-col overflow-hidden rounded-md border border-border bg-card-bg">
                 <div className="custom-scrollbar flex-1 overflow-x-auto">
                     {isHistoryLoading ? (
                         <div className="h-full py-12 text-center text-text-muted">Memuat riwayat transaksi...</div>
@@ -345,7 +345,7 @@ const History = ({
                                 {sortedFilteredRentals.map((rental) => {
                                     const payment = formatPaymentSummary(rental);
                                     return (
-                                    <article key={rental.id} className="rounded-lg border border-border/60 bg-bg-main/40 p-4">
+                                    <article key={rental.id} className="rounded-md border border-border bg-bg-main p-4">
                                         <div className="mb-2 flex items-start justify-between gap-2">
                                             <div>
                                                 <p className="font-mono text-[0.8rem] font-semibold text-text-main">{rental.id}</p>
@@ -354,12 +354,12 @@ const History = ({
                                                 </p>
                                             </div>
                                             {rental.status === 'Active' ? (
-                                                <span className="inline-flex items-center gap-1 rounded-full border border-accent/20 bg-accent/10 px-2 py-1 text-[0.72rem] font-bold text-accent">
-                                                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent"></span>
+                                                <span className="inline-flex items-center gap-1 rounded-md border border-accent bg-accent px-2 py-1 text-[0.72rem] font-bold text-white">
+                                                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white"></span>
                                                     Aktif
                                                 </span>
                                             ) : (
-                                                <span className="inline-flex items-center gap-1 rounded-full border border-[#2ecc71]/20 bg-[#2ecc71]/10 px-2 py-1 text-[0.72rem] font-bold text-[#2ecc71]">
+                                                <span className="inline-flex items-center gap-1 rounded-md border border-accent bg-card-bg px-2 py-1 text-[0.72rem] font-bold text-accent">
                                                     <i className="fas fa-check"></i> Selesai
                                                 </span>
                                             )}
@@ -387,7 +387,7 @@ const History = ({
                                         <div className="mt-3 flex flex-wrap gap-2">
                                             <button
                                                 type="button"
-                                                className="inline-flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-3 py-1.5 text-[0.75rem] font-semibold text-accent hover:bg-accent/20"
+                                                className="inline-flex items-center gap-2 rounded-md border border-accent bg-accent px-3 py-1.5 text-[0.75rem] font-semibold text-white hover:bg-accent-hover"
                                                 onClick={() => openReceiptModal(rental)}
                                             >
                                                 <i className="fas fa-receipt"></i> Receipt
@@ -408,7 +408,7 @@ const History = ({
                             </div>
 
                             <table className="hidden w-full min-w-[980px] border-collapse md:table">
-                                <thead className="sticky top-0 z-10 bg-sidebar-bg">
+                                <thead className="sticky top-0 z-10 bg-card-bg">
                                     <tr>
                                         <th className="border-b border-border p-4 text-left text-[0.8rem] font-semibold uppercase tracking-wider text-text-muted">ID & Tanggal</th>
                                         <th className="border-b border-border p-4 text-left text-[0.8rem] font-semibold uppercase tracking-wider text-text-muted">Pelanggan</th>
@@ -456,8 +456,8 @@ const History = ({
                                             <td className="align-top border-b border-border/50 p-4">
                                                 {rental.status === 'Active' ? (
                                                     <div>
-                                                        <span className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-accent/20 bg-accent/10 px-2.5 py-1 text-[0.75rem] font-bold text-accent">
-                                                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent"></span>
+                                                        <span className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-accent bg-accent px-2.5 py-1 text-[0.75rem] font-bold text-white">
+                                                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white"></span>
                                                             Aktif
                                                         </span>
                                                         <div className="text-[0.7rem] text-text-muted">
@@ -466,7 +466,7 @@ const History = ({
                                                     </div>
                                                 ) : (
                                                     <div>
-                                                        <span className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-[#2ecc71]/20 bg-[#2ecc71]/10 px-2.5 py-1 text-[0.75rem] font-bold text-[#2ecc71]">
+                                                        <span className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-accent bg-card-bg px-2.5 py-1 text-[0.75rem] font-bold text-accent">
                                                             <i className="fas fa-check"></i> Selesai
                                                         </span>
                                                         <div className="text-[0.7rem] text-text-muted">
@@ -502,7 +502,7 @@ const History = ({
                                                 <div className="flex justify-end gap-2">
                                                     <button
                                                         type="button"
-                                                        className="inline-flex items-center gap-2 rounded border border-accent/40 bg-accent/10 px-3 py-1.5 text-[0.75rem] font-semibold text-accent hover:bg-accent/20"
+                                                        className="inline-flex items-center gap-2 rounded-md border border-accent bg-accent px-3 py-1.5 text-[0.75rem] font-semibold text-white hover:bg-accent-hover"
                                                         onClick={() => openReceiptModal(rental)}
                                                     >
                                                         <i className="fas fa-receipt"></i> Receipt
@@ -536,7 +536,7 @@ const History = ({
                         <button
                             type="button"
                             disabled={isLoadingMoreHistory}
-                            className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-2 text-sm font-semibold text-accent hover:bg-accent/20 disabled:cursor-wait disabled:opacity-60"
+                            className="rounded-md border border-accent bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover disabled:cursor-wait disabled:opacity-60"
                             onClick={() => setSize((currentSize) => currentSize + 1)}
                         >
                             {isLoadingMoreHistory ? 'Memuat...' : 'Muat transaksi berikutnya'}
@@ -546,15 +546,15 @@ const History = ({
             </div>
 
             {selectedRental && (
-                <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/80 p-4 backdrop-blur-[3px]">
-                    <div className="w-full max-w-[560px] rounded-lg border border-border bg-sidebar-bg p-5">
+                <div className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70 p-4">
+                    <div className="w-full max-w-[560px] rounded-md border border-border bg-card-bg p-5">
                         <h4 className="mb-1 text-[1.05rem] font-bold text-text-main">Hapus Riwayat Transaksi</h4>
                         <p className="mb-4 text-sm text-text-muted">
                             Transaksi: <span className="font-mono text-text-main">{selectedRental.id}</span>
                         </p>
 
                         {deleteErrorMessage && (
-                            <div className="mb-4 rounded-lg border border-[#dc2626]/35 bg-[#fee2e2] p-3 text-sm text-[#991b1b]">
+                            <div className="mb-4 rounded-md border border-[#dc2626]/35 bg-[#fee2e2] p-3 text-sm text-[#991b1b]">
                                 {deleteErrorMessage}
                             </div>
                         )}
@@ -564,7 +564,7 @@ const History = ({
                                 <p className="text-sm text-text-muted">Masukkan password admin untuk membuka opsi penghapusan.</p>
                                 <input
                                     type="password"
-                                    className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                                    className="w-full rounded-md border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
                                     placeholder="Password admin"
                                     value={deletePassword}
                                     onChange={(event) => setDeletePassword(event.target.value)}
@@ -573,14 +573,14 @@ const History = ({
                                     <button
                                         type="button"
                                         disabled={isVerifyingDelete}
-                                        className="rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
+                                        className="rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
                                         onClick={handleVerifyDeletePassword}
                                     >
                                         {isVerifyingDelete ? 'Memverifikasi...' : 'Verifikasi Password'}
                                     </button>
                                     <button
                                         type="button"
-                                        className="rounded-lg border border-border bg-sidebar-bg px-4 py-2.5 text-sm font-semibold text-text-main hover:border-accent"
+                                        className="rounded-md border border-border bg-card-bg px-4 py-2.5 text-sm font-semibold text-text-main hover:border-accent"
                                         onClick={closeDeleteModal}
                                     >
                                         Batal
@@ -589,18 +589,18 @@ const History = ({
                             </div>
                         ) : (
                             <div className="space-y-3">
-                                <div className="rounded border border-[#2ecc71]/30 bg-[#2ecc71]/10 p-3 text-sm text-[#6ee7a8]">
+                                <div className="rounded-md border border-accent bg-card-bg p-3 text-sm font-medium text-accent">
                                     Password terverifikasi. Lanjutkan konfirmasi penghapusan.
                                 </div>
                                 <textarea
-                                    className="min-h-[90px] w-full resize-y rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                                    className="min-h-[90px] w-full resize-y rounded-md border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
                                     placeholder="Alasan penghapusan transaksi..."
                                     value={deleteReason}
                                     onChange={(event) => setDeleteReason(event.target.value)}
                                 ></textarea>
                                 <input
                                     type="text"
-                                    className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                                    className="w-full rounded-md border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
                                     placeholder={`Ketik: HAPUS ${selectedRental.id}`}
                                     value={deleteConfirmationText}
                                     onChange={(event) => setDeleteConfirmationText(event.target.value)}
@@ -609,14 +609,14 @@ const History = ({
                                     <button
                                         type="button"
                                         disabled={isDeletingRental}
-                                        className="rounded-lg bg-[#e74c3c] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#c0392b] disabled:opacity-60"
+                                        className="rounded-md bg-[#c0392b] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#a93226] disabled:opacity-60"
                                         onClick={handleDeleteRental}
                                     >
                                         {isDeletingRental ? 'Menghapus...' : 'Hapus Riwayat'}
                                     </button>
                                     <button
                                         type="button"
-                                        className="rounded-lg border border-border bg-sidebar-bg px-4 py-2.5 text-sm font-semibold text-text-main hover:border-accent"
+                                        className="rounded-md border border-border bg-card-bg px-4 py-2.5 text-sm font-semibold text-text-main hover:border-accent"
                                         onClick={closeDeleteModal}
                                     >
                                         Batal

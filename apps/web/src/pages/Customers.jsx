@@ -17,7 +17,12 @@ const initialForm = {
     idNumber: '',
 }
 
-const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
+const fieldClass = 'w-full rounded-md border border-border bg-sidebar-bg p-2.5 text-text-main outline-none transition-colors focus:border-accent'
+const primaryButtonClass = 'min-h-11 rounded-md bg-accent px-5 py-2.5 font-semibold text-white transition hover:bg-accent-hover disabled:opacity-60'
+const secondaryButtonClass = 'rounded-md border border-border bg-sidebar-bg px-3 py-1.5 text-xs text-text-main transition hover:border-accent'
+const destructiveButtonClass = 'rounded-md border border-border bg-sidebar-bg px-3 py-1.5 text-xs text-[#c0392b] transition hover:border-[#c0392b]'
+
+const Customers = () => {
     const [query, setQuery] = useState('')
     const [debouncedQuery, setDebouncedQuery] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -147,7 +152,7 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
 
     return (
         <div className="space-y-5 pt-0 pb-4 sm:pb-5">
-            <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">
+            <section className="rounded-md border border-border bg-sidebar-bg p-4 sm:p-6">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h3 className="mb-1 text-[1.1rem] font-bold text-text-main">Data Customer</h3>
@@ -158,7 +163,7 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
                     <button
                         type="button"
                         onClick={openCreateModal}
-                        className="min-h-11 rounded-lg bg-accent px-5 py-2.5 font-semibold text-white hover:bg-accent-hover"
+                        className={primaryButtonClass}
                     >
                         <i className="fas fa-user-plus mr-2"></i>
                         Add Customer
@@ -169,7 +174,7 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
                     <div className="w-full md:max-w-[380px]">
                         <label className="mb-1.5 block text-[0.85rem] text-text-muted">Cari Customer</label>
                         <input
-                            className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                            className={fieldClass}
                             type="text"
                             placeholder="Nama / No HP / Alamat / No Identitas"
                             value={query}
@@ -184,27 +189,27 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
             </section>
 
             {message && (
-                <div className="rounded-lg border border-[#2ecc71]/40 bg-[#2ecc71]/10 p-3 text-sm text-[#6ee7a8]">{message}</div>
+                <div className="rounded-md border border-accent bg-sidebar-bg p-3 text-sm font-medium text-accent">{message}</div>
             )}
 
             {(messageError || queryErrorMessage) && (
-                <div className="rounded-lg border border-[#e74c3c]/40 bg-[#e74c3c]/10 p-3 text-sm text-[#f3b2ad]">
+                <div className="rounded-md border border-[#c0392b] bg-sidebar-bg p-3 text-sm font-medium text-[#c0392b]">
                     {messageError || queryErrorMessage}
                 </div>
             )}
 
-            <section className="rounded-DEFAULT border border-border bg-sidebar-bg/60 p-4 sm:p-6">
+            <section className="rounded-md border border-border bg-sidebar-bg p-4 sm:p-6">
                 {isLoading ? (
                     <div className="text-text-muted">Memuat data customer...</div>
                 ) : (
                     <>
                         {customers.length === 0 ? (
-                            <div className="rounded-lg border border-border/50 bg-bg-main/30 p-4 text-center text-text-muted">Belum ada data customer.</div>
+                            <div className="rounded-md border border-border bg-sidebar-bg p-4 text-center text-text-muted">Belum ada data customer.</div>
                         ) : (
                             <>
                                 <div className="space-y-3 md:hidden">
                                     {customers.map((customer) => (
-                                        <article key={customer.id} className="rounded-lg border border-border/50 bg-bg-main/30 p-4">
+                                        <article key={customer.id} className="rounded-md border border-border bg-sidebar-bg p-4">
                                             <p className="font-semibold text-text-main">{customer.name}</p>
                                             <p className="mt-1 text-sm text-text-main">{customer.phone}</p>
                                             <p className="mt-1 text-xs text-text-muted">Alamat: {customer.address || '-'}</p>
@@ -213,13 +218,13 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
                                             <p className="mt-2 text-xs text-text-muted">Update: {new Date(customer.updatedAt).toLocaleString('id-ID')}</p>
                                             <div className="mt-3 flex gap-2">
                                                 <button
-                                                    className="rounded border border-border bg-sidebar-bg px-3 py-1.5 text-xs text-text-main hover:border-accent"
+                                                    className={secondaryButtonClass}
                                                     onClick={() => openEditModal(customer)}
                                                 >
                                                     Edit
                                                 </button>
                                                 <button
-                                                    className="rounded border border-[#e74c3c]/40 bg-[#e74c3c]/10 px-3 py-1.5 text-xs text-[#f3b2ad] hover:bg-[#e74c3c]/20"
+                                                    className={destructiveButtonClass}
                                                     onClick={() => handleDelete(customer)}
                                                 >
                                                     Hapus
@@ -245,22 +250,22 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
                                         <tbody>
                                             {customers.map((customer) => (
                                                 <tr key={customer.id} className="hover:bg-surface-hover">
-                                                    <td className="border-b border-border/40 p-3 font-medium text-text-main">{customer.name}</td>
-                                                    <td className="border-b border-border/40 p-3 text-text-main">{customer.phone}</td>
-                                                    <td className="border-b border-border/40 p-3 text-text-muted">{customer.address || '-'}</td>
-                                                    <td className="border-b border-border/40 p-3 text-text-muted">{customer.guarantee}</td>
-                                                    <td className="border-b border-border/40 p-3 text-text-muted">{customer.idNumber || '-'}</td>
-                                                    <td className="border-b border-border/40 p-3 text-sm text-text-muted">{new Date(customer.updatedAt).toLocaleString('id-ID')}</td>
-                                                    <td className="border-b border-border/40 p-3">
+                                                    <td className="border-b border-border p-3 font-medium text-text-main">{customer.name}</td>
+                                                    <td className="border-b border-border p-3 text-text-main">{customer.phone}</td>
+                                                    <td className="border-b border-border p-3 text-text-muted">{customer.address || '-'}</td>
+                                                    <td className="border-b border-border p-3 text-text-muted">{customer.guarantee}</td>
+                                                    <td className="border-b border-border p-3 text-text-muted">{customer.idNumber || '-'}</td>
+                                                    <td className="border-b border-border p-3 text-sm text-text-muted">{new Date(customer.updatedAt).toLocaleString('id-ID')}</td>
+                                                    <td className="border-b border-border p-3">
                                                         <div className="flex justify-end gap-2">
                                                             <button
-                                                                className="rounded border border-border bg-sidebar-bg px-3 py-1.5 text-xs text-text-main hover:border-accent"
+                                                                className={secondaryButtonClass}
                                                                 onClick={() => openEditModal(customer)}
                                                             >
                                                                 Edit
                                                             </button>
                                                             <button
-                                                                className="rounded border border-[#e74c3c]/40 bg-[#e74c3c]/10 px-3 py-1.5 text-xs text-[#f3b2ad] hover:bg-[#e74c3c]/20"
+                                                                className={destructiveButtonClass}
                                                                 onClick={() => handleDelete(customer)}
                                                             >
                                                                 Hapus
@@ -279,14 +284,14 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
             </section>
 
             {isModalOpen && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-3 backdrop-blur-[5px] sm:p-4">
-                    <div className="max-h-[92vh] w-full max-w-[680px] overflow-hidden rounded-DEFAULT border border-border bg-sidebar-bg animate-[modalIn_0.3s_ease-out]">
+                <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3 sm:p-4">
+                    <div className="max-h-[92vh] w-full max-w-[680px] overflow-hidden rounded-md border border-border bg-sidebar-bg animate-[modalIn_0.3s_ease-out]">
                         <div className="flex items-center justify-between border-b border-border px-4 py-4 sm:p-[20px_25px]">
                             <h3 className="text-[1.05rem] font-bold text-text-main sm:text-[1.2rem]">
                                 {modalMode === 'edit' ? 'Edit Customer' : 'Tambah Customer'}
                             </h3>
                             <button
-                                className="flex h-10 w-10 items-center justify-center rounded-full border border-transparent bg-transparent text-[1.5rem] text-text-muted transition hover:border-border hover:text-text-main"
+                                className="flex h-10 w-10 items-center justify-center rounded-md border border-transparent bg-transparent text-[1.5rem] text-text-muted transition hover:border-border hover:text-text-main"
                                 onClick={closeModal}
                             >
                                 &times;
@@ -295,7 +300,7 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
 
                         <div className="max-h-[calc(92vh-72px)] overflow-y-auto p-4 sm:max-h-[calc(92vh-86px)] sm:p-[25px]">
                             {messageError && (
-                                <div className="mb-4 rounded-lg border border-[#e74c3c]/40 bg-[#e74c3c]/10 p-3 text-sm text-[#f3b2ad]">
+                                <div className="mb-4 rounded-md border border-[#c0392b] bg-sidebar-bg p-3 text-sm font-medium text-[#c0392b]">
                                     {messageError}
                                 </div>
                             )}
@@ -304,7 +309,7 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
                                 <div>
                                     <label className="mb-1.5 block text-[0.85rem] text-text-muted">Nama Customer</label>
                                     <input
-                                        className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                                        className={fieldClass}
                                         type="text"
                                         placeholder="Nama lengkap..."
                                         value={form.name}
@@ -315,7 +320,7 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
                                 <div>
                                     <label className="mb-1.5 block text-[0.85rem] text-text-muted">Nomor HP</label>
                                     <input
-                                        className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                                        className={fieldClass}
                                         type="text"
                                         placeholder="0812..."
                                         value={form.phone}
@@ -326,7 +331,7 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
                                 <div className="md:col-span-2">
                                     <label className="mb-1.5 block text-[0.85rem] text-text-muted">Alamat</label>
                                     <textarea
-                                        className="min-h-[90px] w-full resize-y rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                                        className={`${fieldClass} min-h-[90px] resize-y`}
                                         placeholder="Alamat customer..."
                                         value={form.address}
                                         onChange={(event) => setForm((prev) => ({ ...prev, address: event.target.value }))}
@@ -335,7 +340,7 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
                                 <div>
                                     <label className="mb-1.5 block text-[0.85rem] text-text-muted">Jaminan</label>
                                     <select
-                                        className="w-full cursor-pointer rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                                        className={`${fieldClass} cursor-pointer`}
                                         value={form.guarantee}
                                         onChange={(event) => setForm((prev) => ({ ...prev, guarantee: event.target.value }))}
                                     >
@@ -348,7 +353,7 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
                                 <div>
                                     <label className="mb-1.5 block text-[0.85rem] text-text-muted">No Identitas</label>
                                     <input
-                                        className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                                        className={fieldClass}
                                         type="text"
                                         placeholder="Opsional"
                                         value={form.idNumber}
@@ -360,7 +365,7 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
                                     <div className="md:col-span-2">
                                         <label className="mb-1.5 block text-[0.85rem] text-text-muted">Sebutkan Jaminan Lainnya</label>
                                         <input
-                                            className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-text-main outline-none focus:border-accent"
+                                            className={fieldClass}
                                             type="text"
                                             placeholder="Contoh: STNK, Kartu Pelajar..."
                                             value={form.guaranteeOther}
@@ -374,13 +379,13 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
                                     <button
                                         type="submit"
                                         disabled={isSubmitting}
-                                        className="min-h-11 rounded-lg bg-accent px-5 py-2.5 font-semibold text-white hover:bg-accent-hover disabled:opacity-60"
+                                        className={primaryButtonClass}
                                     >
                                         {isSubmitting ? 'Menyimpan...' : modalMode === 'edit' ? 'Update Customer' : 'Simpan Customer'}
                                     </button>
                                     <button
                                         type="button"
-                                        className="min-h-11 rounded-lg border border-border bg-sidebar-bg px-5 py-2.5 font-semibold text-text-main hover:border-accent"
+                                        className="min-h-11 rounded-md border border-border bg-sidebar-bg px-5 py-2.5 font-semibold text-text-main transition hover:border-accent"
                                         onClick={closeModal}
                                     >
                                         Batal

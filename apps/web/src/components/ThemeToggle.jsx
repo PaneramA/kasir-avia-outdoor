@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { getTheme, saveTheme } from '../lib/storage'
 
-const ThemeToggle = () => {
+const ThemeToggle = ({ compactOnDesktop = false }) => {
     const [theme, setTheme] = useState(() => {
         try {
             return getTheme()
@@ -24,12 +24,12 @@ const ThemeToggle = () => {
     return (
         <button
             type="button"
-            className="flex items-center gap-2 rounded-full border border-border bg-bg-main px-3 py-2 text-[0.75rem] font-semibold text-text-muted transition hover:border-accent"
+            className={`flex items-center gap-2 rounded-md border border-border bg-bg-main px-3 py-2 text-[0.75rem] font-semibold text-text-muted transition hover:border-accent ${compactOnDesktop ? 'lg:h-9 lg:w-9 lg:justify-center lg:px-0' : ''}`}
             onClick={() => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'))}
             aria-label="Ganti mode tema"
         >
             <i className={`fas ${isLight ? 'fa-sun text-accent' : 'fa-moon text-accent'}`}></i>
-            {isLight ? 'Mode Terang' : 'Mode Gelap'}
+            <span className={compactOnDesktop ? 'lg:sr-only' : ''}>{isLight ? 'Mode Terang' : 'Mode Gelap'}</span>
         </button>
     )
 }

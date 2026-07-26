@@ -109,16 +109,16 @@ const AdminTenantOnboarding = ({ plans = [], onClose, onCreated }) => {
   if (createdResult) {
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#17202a]/55 p-4">
-        <section role="dialog" aria-modal="true" className="w-full max-w-[520px] rounded-lg bg-white p-6 shadow-[0_24px_70px_rgba(23,32,42,0.3)]">
-          <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#eaf7ef] text-lg text-[#267349]"><i className="fas fa-circle-check" /></span>
+        <section role="dialog" aria-modal="true" className="w-full max-w-[520px] rounded-md border border-[#dce3e6] bg-white p-6 shadow-none">
+          <span className="flex h-12 w-12 items-center justify-center rounded-md bg-[#eaf7ef] text-lg text-[#267349]"><i className="fas fa-circle-check" /></span>
           <h2 className="mt-4 text-xl font-bold">Toko berhasil dibuat</h2>
           <p className="mt-1 text-sm text-[#71808a]">Berikan kredensial berikut kepada owner {createdResult.tenant?.name}.</p>
-          <div className="mt-5 space-y-3 rounded-lg border border-[#dce3e6] bg-[#f7f9fa] p-4">
+          <div className="mt-5 space-y-3 rounded-md border border-[#dce3e6] bg-[#f7f9fa] p-4">
             <div><p className="text-xs text-[#71808a]">Username</p><p className="mt-1 font-mono text-sm font-bold">{createdResult.owner?.username}</p></div>
             <div><p className="text-xs text-[#71808a]">Password sementara</p><p className="mt-1 break-all font-mono text-sm font-bold">{createdResult.temporaryPassword}</p></div>
             <div><p className="text-xs text-[#71808a]">Halaman login</p><p className="mt-1 font-mono text-sm font-bold">{window.location.origin}/login</p></div>
           </div>
-          <button type="button" onClick={onClose} className="mt-5 min-h-11 w-full rounded-lg bg-[#173f3a] px-5 text-sm font-bold text-white hover:bg-[#0f302c]">Selesai</button>
+          <button type="button" onClick={onClose} className="mt-5 min-h-11 w-full rounded-md bg-[#173f3a] px-5 text-sm font-bold text-white hover:bg-[#0f302c]">Selesai</button>
         </section>
       </div>
     )
@@ -126,10 +126,10 @@ const AdminTenantOnboarding = ({ plans = [], onClose, onCreated }) => {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#17202a]/55 p-4" role="presentation">
-      <section role="dialog" aria-modal="true" aria-labelledby="onboarding-title" className="max-h-[92vh] w-full max-w-[760px] overflow-y-auto rounded-lg bg-white shadow-[0_24px_70px_rgba(23,32,42,0.3)]">
+      <section role="dialog" aria-modal="true" aria-labelledby="onboarding-title" className="max-h-[92vh] w-full max-w-[760px] overflow-y-auto rounded-md border border-[#dce3e6] bg-white shadow-none">
         <div className="flex items-start justify-between border-b border-[#e6ebed] p-5">
           <div><h2 id="onboarding-title" className="text-lg font-bold">Tambah toko</h2><p className="mt-1 text-sm text-[#71808a]">Tahap {step} dari 3</p></div>
-          <button type="button" aria-label="Tutup dialog" onClick={onClose} disabled={isSubmitting} className="flex h-9 w-9 items-center justify-center rounded-lg text-[#71808a] hover:bg-[#f1f3f4]"><i className="fas fa-xmark" /></button>
+          <button type="button" aria-label="Tutup dialog" onClick={onClose} disabled={isSubmitting} className="flex h-9 w-9 items-center justify-center rounded-md text-[#71808a] hover:bg-[#f1f3f4]"><i className="fas fa-xmark" /></button>
         </div>
 
         <div className="grid grid-cols-3 border-b border-[#e6ebed] bg-[#f7f9fa] px-5 py-3 text-center text-xs font-semibold text-[#71808a]">
@@ -137,40 +137,40 @@ const AdminTenantOnboarding = ({ plans = [], onClose, onCreated }) => {
         </div>
 
         <div className="p-5 sm:p-6">
-          {errorMessage && <div className="mb-4 rounded-lg border border-[#e9b7b7] bg-[#fff1f1] p-3 text-sm text-[#a82f2f]">{errorMessage}</div>}
+          {errorMessage && <div className="mb-4 rounded-md border border-[#e9b7b7] bg-[#fff1f1] p-3 text-sm text-[#a82f2f]">{errorMessage}</div>}
 
           {step === 1 && <div className="grid gap-4 sm:grid-cols-2">
-            <div><label className="mb-1.5 block text-sm font-semibold">Nama toko</label><input value={form.storeName} onChange={(event) => { const value = event.target.value; updateForm({ storeName: value, ...(!slugTouched ? { storeSlug: slugify(value) } : {}) }) }} className="min-h-11 w-full rounded-lg border border-[#cfd8dc] px-3 text-sm outline-none focus:border-[#2a7c6f]" autoFocus /></div>
-            <div><label className="mb-1.5 block text-sm font-semibold">Slug toko</label><input value={form.storeSlug} onChange={(event) => { setSlugTouched(true); updateForm({ storeSlug: slugify(event.target.value) }) }} className="min-h-11 w-full rounded-lg border border-[#cfd8dc] px-3 text-sm outline-none focus:border-[#2a7c6f]" /></div>
-            <div><label className="mb-1.5 block text-sm font-semibold">Username owner</label><input value={form.ownerUsername} onChange={(event) => updateForm({ ownerUsername: event.target.value.toLowerCase().replace(/\s+/g, '') })} autoComplete="off" className="min-h-11 w-full rounded-lg border border-[#cfd8dc] px-3 text-sm outline-none focus:border-[#2a7c6f]" /></div>
-            <div><label className="mb-1.5 block text-sm font-semibold">Status toko</label><select value={form.tenantStatus} onChange={(event) => updateForm({ tenantStatus: event.target.value, ...(event.target.value === 'active' && ['suspended', 'expired'].includes(form.subscriptionStatus) ? { subscriptionStatus: 'active' } : {}) })} className="min-h-11 w-full rounded-lg border border-[#cfd8dc] bg-white px-3 text-sm"><option value="active">Aktif</option><option value="suspended">Suspended</option></select></div>
-            <div className="sm:col-span-2"><label className="mb-1.5 block text-sm font-semibold">Password sementara</label><div className="flex gap-2"><input type={showPassword ? 'text' : 'password'} value={form.ownerPassword} onChange={(event) => updateForm({ ownerPassword: event.target.value })} autoComplete="new-password" className="min-h-11 min-w-0 flex-1 rounded-lg border border-[#cfd8dc] px-3 text-sm outline-none focus:border-[#2a7c6f]" /><button type="button" title={showPassword ? 'Sembunyikan password' : 'Tampilkan password'} aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'} onClick={() => setShowPassword((value) => !value)} className="h-11 w-11 rounded-lg border border-[#cfd8dc] text-[#52616b]"><i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`} /></button><button type="button" onClick={() => updateForm({ ownerPassword: generatePassword() })} className="min-h-11 rounded-lg border border-[#cfd8dc] px-3 text-sm font-semibold text-[#52616b]">Generate</button></div></div>
+            <div><label className="mb-1.5 block text-sm font-semibold">Nama toko</label><input value={form.storeName} onChange={(event) => { const value = event.target.value; updateForm({ storeName: value, ...(!slugTouched ? { storeSlug: slugify(value) } : {}) }) }} className="min-h-11 w-full rounded-md border border-[#cfd8dc] px-3 text-sm outline-none focus:border-[#2a7c6f]" autoFocus /></div>
+            <div><label className="mb-1.5 block text-sm font-semibold">Slug toko</label><input value={form.storeSlug} onChange={(event) => { setSlugTouched(true); updateForm({ storeSlug: slugify(event.target.value) }) }} className="min-h-11 w-full rounded-md border border-[#cfd8dc] px-3 text-sm outline-none focus:border-[#2a7c6f]" /></div>
+            <div><label className="mb-1.5 block text-sm font-semibold">Username owner</label><input value={form.ownerUsername} onChange={(event) => updateForm({ ownerUsername: event.target.value.toLowerCase().replace(/\s+/g, '') })} autoComplete="off" className="min-h-11 w-full rounded-md border border-[#cfd8dc] px-3 text-sm outline-none focus:border-[#2a7c6f]" /></div>
+            <div><label className="mb-1.5 block text-sm font-semibold">Status toko</label><select value={form.tenantStatus} onChange={(event) => updateForm({ tenantStatus: event.target.value, ...(event.target.value === 'active' && ['suspended', 'expired'].includes(form.subscriptionStatus) ? { subscriptionStatus: 'active' } : {}) })} className="min-h-11 w-full rounded-md border border-[#cfd8dc] bg-white px-3 text-sm"><option value="active">Aktif</option><option value="suspended">Suspended</option></select></div>
+            <div className="sm:col-span-2"><label className="mb-1.5 block text-sm font-semibold">Password sementara</label><div className="flex gap-2"><input type={showPassword ? 'text' : 'password'} value={form.ownerPassword} onChange={(event) => updateForm({ ownerPassword: event.target.value })} autoComplete="new-password" className="min-h-11 min-w-0 flex-1 rounded-md border border-[#cfd8dc] px-3 text-sm outline-none focus:border-[#2a7c6f]" /><button type="button" title={showPassword ? 'Sembunyikan password' : 'Tampilkan password'} aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'} onClick={() => setShowPassword((value) => !value)} className="h-11 w-11 rounded-md border border-[#cfd8dc] text-[#52616b]"><i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`} /></button><button type="button" onClick={() => updateForm({ ownerPassword: generatePassword() })} className="min-h-11 rounded-md border border-[#cfd8dc] px-3 text-sm font-semibold text-[#52616b]">Generate</button></div></div>
           </div>}
 
           {step === 2 && <div className="grid gap-4 sm:grid-cols-2">
-            <div><label className="mb-1.5 block text-sm font-semibold">Kode cabang</label><input value={form.initialBranchCode} onChange={(event) => updateForm({ initialBranchCode: slugify(event.target.value).slice(0, 40) })} className="min-h-11 w-full rounded-lg border border-[#cfd8dc] px-3 text-sm" /></div>
-            <div><label className="mb-1.5 block text-sm font-semibold">Nama cabang</label><input value={form.initialBranchName} onChange={(event) => updateForm({ initialBranchName: event.target.value })} className="min-h-11 w-full rounded-lg border border-[#cfd8dc] px-3 text-sm" /></div>
-            <div><label className="mb-1.5 block text-sm font-semibold">Paket</label><select value={form.planId} onChange={(event) => updateForm({ planId: event.target.value })} className="min-h-11 w-full rounded-lg border border-[#cfd8dc] bg-white px-3 text-sm">{plans.filter((plan) => plan.status === 'active').map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {formatCurrency(plan.priceAmount)}</option>)}</select></div>
-            <div><label className="mb-1.5 block text-sm font-semibold">Status subscription</label><select value={form.subscriptionStatus} onChange={(event) => updateForm({ subscriptionStatus: event.target.value })} className="min-h-11 w-full rounded-lg border border-[#cfd8dc] bg-white px-3 text-sm"><option value="active">Aktif</option><option value="trial">Trial</option>{form.tenantStatus === 'suspended' && <><option value="suspended">Suspended</option><option value="expired">Expired</option></>}</select></div>
-            <div><label className="mb-1.5 block text-sm font-semibold">Mulai</label><input type="date" value={form.startsAt} onChange={(event) => updateForm({ startsAt: event.target.value })} className="min-h-11 w-full rounded-lg border border-[#cfd8dc] px-3 text-sm" /></div>
-            <div><label className="mb-1.5 block text-sm font-semibold">Berakhir</label><input type="date" value={form.endsAt} onChange={(event) => updateForm({ endsAt: event.target.value })} className="min-h-11 w-full rounded-lg border border-[#cfd8dc] px-3 text-sm" /></div>
-            <div><label className="mb-1.5 block text-sm font-semibold">Grace period</label><input type="date" value={form.graceEndsAt} onChange={(event) => updateForm({ graceEndsAt: event.target.value })} className="min-h-11 w-full rounded-lg border border-[#cfd8dc] px-3 text-sm" /></div>
-            <div><label className="mb-1.5 block text-sm font-semibold">Catatan billing</label><input value={form.billingNotes} onChange={(event) => updateForm({ billingNotes: event.target.value })} maxLength="300" className="min-h-11 w-full rounded-lg border border-[#cfd8dc] px-3 text-sm" /></div>
+            <div><label className="mb-1.5 block text-sm font-semibold">Kode cabang</label><input value={form.initialBranchCode} onChange={(event) => updateForm({ initialBranchCode: slugify(event.target.value).slice(0, 40) })} className="min-h-11 w-full rounded-md border border-[#cfd8dc] px-3 text-sm" /></div>
+            <div><label className="mb-1.5 block text-sm font-semibold">Nama cabang</label><input value={form.initialBranchName} onChange={(event) => updateForm({ initialBranchName: event.target.value })} className="min-h-11 w-full rounded-md border border-[#cfd8dc] px-3 text-sm" /></div>
+            <div><label className="mb-1.5 block text-sm font-semibold">Paket</label><select value={form.planId} onChange={(event) => updateForm({ planId: event.target.value })} className="min-h-11 w-full rounded-md border border-[#cfd8dc] bg-white px-3 text-sm">{plans.filter((plan) => plan.status === 'active').map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {formatCurrency(plan.priceAmount)}</option>)}</select></div>
+            <div><label className="mb-1.5 block text-sm font-semibold">Status subscription</label><select value={form.subscriptionStatus} onChange={(event) => updateForm({ subscriptionStatus: event.target.value })} className="min-h-11 w-full rounded-md border border-[#cfd8dc] bg-white px-3 text-sm"><option value="active">Aktif</option><option value="trial">Trial</option>{form.tenantStatus === 'suspended' && <><option value="suspended">Suspended</option><option value="expired">Expired</option></>}</select></div>
+            <div><label className="mb-1.5 block text-sm font-semibold">Mulai</label><input type="date" value={form.startsAt} onChange={(event) => updateForm({ startsAt: event.target.value })} className="min-h-11 w-full rounded-md border border-[#cfd8dc] px-3 text-sm" /></div>
+            <div><label className="mb-1.5 block text-sm font-semibold">Berakhir</label><input type="date" value={form.endsAt} onChange={(event) => updateForm({ endsAt: event.target.value })} className="min-h-11 w-full rounded-md border border-[#cfd8dc] px-3 text-sm" /></div>
+            <div><label className="mb-1.5 block text-sm font-semibold">Grace period</label><input type="date" value={form.graceEndsAt} onChange={(event) => updateForm({ graceEndsAt: event.target.value })} className="min-h-11 w-full rounded-md border border-[#cfd8dc] px-3 text-sm" /></div>
+            <div><label className="mb-1.5 block text-sm font-semibold">Catatan billing</label><input value={form.billingNotes} onChange={(event) => updateForm({ billingNotes: event.target.value })} maxLength="300" className="min-h-11 w-full rounded-md border border-[#cfd8dc] px-3 text-sm" /></div>
           </div>}
 
           {step === 3 && <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-lg border border-[#dce3e6] p-4"><p className="text-xs font-semibold uppercase text-[#71808a]">Toko</p><p className="mt-2 font-bold">{form.storeName}</p><p className="mt-1 text-sm text-[#71808a]">{form.storeSlug} · {form.tenantStatus}</p></div>
-            <div className="rounded-lg border border-[#dce3e6] p-4"><p className="text-xs font-semibold uppercase text-[#71808a]">Owner</p><p className="mt-2 font-bold">{form.ownerUsername}</p><p className="mt-1 text-sm text-[#71808a]">Role owner · akses cabang admin</p></div>
-            <div className="rounded-lg border border-[#dce3e6] p-4"><p className="text-xs font-semibold uppercase text-[#71808a]">Cabang awal</p><p className="mt-2 font-bold">{form.initialBranchName}</p><p className="mt-1 text-sm text-[#71808a]">{form.initialBranchCode}</p></div>
-            <div className="rounded-lg border border-[#dce3e6] p-4"><p className="text-xs font-semibold uppercase text-[#71808a]">Subscription</p><p className="mt-2 font-bold">{selectedPlan?.name || '-'}</p><p className="mt-1 text-sm text-[#71808a]">{form.subscriptionStatus} · mulai {form.startsAt || '-'}</p></div>
+            <div className="rounded-md border border-[#dce3e6] p-4"><p className="text-xs font-semibold uppercase text-[#71808a]">Toko</p><p className="mt-2 font-bold">{form.storeName}</p><p className="mt-1 text-sm text-[#71808a]">{form.storeSlug} · {form.tenantStatus}</p></div>
+            <div className="rounded-md border border-[#dce3e6] p-4"><p className="text-xs font-semibold uppercase text-[#71808a]">Owner</p><p className="mt-2 font-bold">{form.ownerUsername}</p><p className="mt-1 text-sm text-[#71808a]">Role owner · akses cabang admin</p></div>
+            <div className="rounded-md border border-[#dce3e6] p-4"><p className="text-xs font-semibold uppercase text-[#71808a]">Cabang awal</p><p className="mt-2 font-bold">{form.initialBranchName}</p><p className="mt-1 text-sm text-[#71808a]">{form.initialBranchCode}</p></div>
+            <div className="rounded-md border border-[#dce3e6] p-4"><p className="text-xs font-semibold uppercase text-[#71808a]">Subscription</p><p className="mt-2 font-bold">{selectedPlan?.name || '-'}</p><p className="mt-1 text-sm text-[#71808a]">{form.subscriptionStatus} · mulai {form.startsAt || '-'}</p></div>
           </div>}
         </div>
 
         <div className="flex items-center justify-between border-t border-[#e6ebed] p-5">
-          <button type="button" onClick={step === 1 ? onClose : () => { setErrorMessage(''); setStep((current) => current - 1) }} disabled={isSubmitting} className="min-h-11 rounded-lg border border-[#cfd8dc] px-4 text-sm font-semibold text-[#52616b]">{step === 1 ? 'Batal' : 'Kembali'}</button>
+          <button type="button" onClick={step === 1 ? onClose : () => { setErrorMessage(''); setStep((current) => current - 1) }} disabled={isSubmitting} className="min-h-11 rounded-md border border-[#cfd8dc] px-4 text-sm font-semibold text-[#52616b]">{step === 1 ? 'Batal' : 'Kembali'}</button>
           {step < 3
-            ? <button type="button" onClick={handleNext} className="min-h-11 rounded-lg bg-[#173f3a] px-5 text-sm font-bold text-white">Lanjut</button>
-            : <button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting} className="min-h-11 rounded-lg bg-[#173f3a] px-5 text-sm font-bold text-white disabled:opacity-60"><i className="fas fa-store mr-2" />{isSubmitting ? 'Membuat...' : 'Buat toko & owner'}</button>}
+            ? <button type="button" onClick={handleNext} className="min-h-11 rounded-md bg-[#173f3a] px-5 text-sm font-bold text-white">Lanjut</button>
+            : <button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting} className="min-h-11 rounded-md bg-[#173f3a] px-5 text-sm font-bold text-white disabled:opacity-60"><i className="fas fa-store mr-2" />{isSubmitting ? 'Membuat...' : 'Buat toko & owner'}</button>}
         </div>
       </section>
     </div>
