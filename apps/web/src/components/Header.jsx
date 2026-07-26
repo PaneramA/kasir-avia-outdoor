@@ -318,7 +318,7 @@ const Header = ({
             <div className="flex items-start gap-3 sm:items-center">
                 <button
                     type="button"
-                    className="mt-1 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-sidebar-bg text-text-muted transition hover:border-accent hover:text-text-main lg:hidden"
+                    className="mt-1 flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card-bg text-text-muted transition hover:border-accent hover:text-text-main lg:hidden"
                     onClick={onOpenSidebar}
                     aria-label="Buka menu navigasi"
                 >
@@ -333,7 +333,7 @@ const Header = ({
             <div className="relative flex flex-1 flex-col gap-3 sm:gap-4 lg:flex-row lg:items-center lg:gap-5 lg:flex-none">
                 <div className="grid grid-cols-1 gap-2 lg:hidden">
                     <select
-                        className="h-10 w-full rounded-full border border-border bg-sidebar-bg px-4 text-[0.78rem] text-text-main outline-none focus:border-accent"
+                        className="h-10 w-full rounded-md border border-border bg-card-bg px-4 text-[0.78rem] text-text-main outline-none focus:border-accent"
                         value={activeTenantId}
                         onChange={(event) => {
                             if (typeof onTenantChange === 'function') {
@@ -348,7 +348,7 @@ const Header = ({
                         ))}
                     </select>
                     <select
-                        className="h-10 w-full rounded-full border border-border bg-sidebar-bg px-4 text-[0.78rem] text-text-main outline-none focus:border-accent"
+                        className="h-10 w-full rounded-md border border-border bg-card-bg px-4 text-[0.78rem] text-text-main outline-none focus:border-accent"
                         value={activeBranchId}
                         onChange={(event) => {
                             if (typeof onBranchChange === 'function') {
@@ -366,7 +366,7 @@ const Header = ({
 
                 <div className="hidden items-center gap-2 lg:flex">
                     <select
-                        className="h-10 min-w-[170px] rounded-full border border-border bg-sidebar-bg px-4 text-[0.78rem] text-text-main outline-none focus:border-accent"
+                        className="h-10 min-w-[170px] rounded-md border border-border bg-card-bg px-4 text-[0.78rem] text-text-main outline-none focus:border-accent"
                         value={activeTenantId}
                         onChange={(event) => {
                             if (typeof onTenantChange === 'function') {
@@ -381,7 +381,7 @@ const Header = ({
                         ))}
                     </select>
                     <select
-                        className="h-10 min-w-[150px] rounded-full border border-border bg-sidebar-bg px-4 text-[0.78rem] text-text-main outline-none focus:border-accent"
+                        className="h-10 min-w-[150px] rounded-md border border-border bg-card-bg px-4 text-[0.78rem] text-text-main outline-none focus:border-accent"
                         value={activeBranchId}
                         onChange={(event) => {
                             if (typeof onBranchChange === 'function') {
@@ -397,7 +397,7 @@ const Header = ({
                     </select>
                 </div>
 
-                <div className="relative flex min-w-0 flex-1 items-center gap-3 rounded-[30px] border border-border bg-sidebar-bg px-4 py-[10px] lg:w-[320px] xl:w-[350px]">
+                <div className="relative flex min-w-0 flex-1 items-center gap-3 rounded-md border border-border bg-card-bg px-4 py-[10px] lg:w-[320px] xl:w-[350px]">
                     <i className="fas fa-search text-text-muted"></i>
                     <input
                         className="w-full border-none bg-transparent text-[0.9rem] text-text-main outline-none"
@@ -414,7 +414,7 @@ const Header = ({
                     />
 
                     {showSearchResult && (
-                        <div className="absolute left-0 right-0 top-[calc(100%+10px)] z-30 max-h-[340px] overflow-y-auto rounded-xl border border-border bg-sidebar-bg p-2 shadow-2xl">
+                        <div className="absolute left-0 right-0 top-[calc(100%+10px)] z-30 max-h-[340px] overflow-y-auto rounded-md border border-border bg-card-bg p-2 shadow-none">
                             {searchResults.length === 0 ? (
                                 <p className="px-3 py-2 text-sm text-text-muted">Tidak ada hasil untuk "{searchQuery}".</p>
                             ) : (
@@ -422,7 +422,7 @@ const Header = ({
                                     <button
                                         key={result.id}
                                         type="button"
-                                        className="w-full rounded-lg px-3 py-2 text-left transition hover:bg-surface-hover"
+                                        className="w-full rounded-md border border-transparent px-3 py-2 text-left transition hover:border-accent hover:bg-surface-hover"
                                         onClick={() => handleOpenResult(result.route)}
                                     >
                                         <span className="mb-0.5 block text-[0.72rem] uppercase tracking-wide text-accent">{result.group}</span>
@@ -438,7 +438,7 @@ const Header = ({
                 {showInstallButton && (
                     <button
                         type="button"
-                        className="flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-sidebar-bg px-4 text-[0.78rem] font-semibold text-text-main transition hover:border-accent"
+                        className="flex h-10 shrink-0 items-center gap-2 rounded-md border border-border bg-card-bg px-4 text-[0.78rem] font-semibold text-text-main transition hover:border-accent"
                         onClick={handleInstallClick}
                     >
                         <i className="fas fa-download text-[0.75rem]"></i>
@@ -449,7 +449,7 @@ const Header = ({
                 {showIosInstallHint && (
                     <button
                         type="button"
-                        className="flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-sidebar-bg px-4 text-[0.74rem] text-text-muted"
+                        className="flex h-10 shrink-0 items-center gap-2 rounded-md border border-border bg-card-bg px-4 text-[0.74rem] text-text-muted"
                         onClick={() => {
                             window.alert('Di Safari iPhone/iPad: ketuk Share, lalu pilih "Add to Home Screen".')
                         }}
@@ -462,19 +462,19 @@ const Header = ({
                 <div className="relative">
                     <button
                         type="button"
-                        className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-sidebar-bg text-text-muted transition-all hover:bg-surface-hover"
+                        className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-card-bg text-text-muted transition hover:bg-surface-hover"
                         onClick={() => setIsNotificationsOpen((prev) => !prev)}
                     >
                         <i className="fas fa-bell"></i>
                         {unreadCount > 0 && (
-                            <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-sidebar-bg bg-[#e74c3c] text-[10px] text-white">
+                            <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded border-2 border-card-bg bg-[#e74c3c] text-[10px] text-white">
                                 {unreadCount > 9 ? '9+' : unreadCount}
                             </span>
                         )}
                     </button>
 
                     {isNotificationsOpen && (
-                        <div className="absolute right-0 top-[calc(100%+10px)] z-30 w-[320px] max-w-[85vw] rounded-xl border border-border bg-sidebar-bg p-2 shadow-2xl">
+                        <div className="absolute right-0 top-[calc(100%+10px)] z-30 w-[320px] max-w-[85vw] rounded-md border border-border bg-card-bg p-2 shadow-none">
                             <div className="mb-2 flex items-center justify-between px-2 py-1">
                                 <h4 className="text-sm font-semibold text-text-main">Notifikasi</h4>
                                 <span className="text-xs text-text-muted">{notifications.length} item</span>
@@ -485,7 +485,7 @@ const Header = ({
                                     <button
                                         key={notification.id}
                                         type="button"
-                                        className="w-full rounded-lg border border-border/50 bg-bg-main/30 p-3 text-left transition hover:border-accent"
+                                        className="w-full rounded-md border border-border bg-bg-main p-3 text-left transition hover:border-accent"
                                         onClick={() => {
                                             navigate(notification.route)
                                             setIsNotificationsOpen(false)
