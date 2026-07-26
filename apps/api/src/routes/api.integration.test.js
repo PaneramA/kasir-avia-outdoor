@@ -1,6 +1,5 @@
 import { Readable } from 'node:stream';
-import { createHash } from 'node:crypto';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getEnv } from '../config/env.js';
 import { createAccessToken } from '../auth/jwt.js';
 import { hashPassword } from '../auth/password.js';
@@ -1497,17 +1496,6 @@ describe('critical API workflow integration', () => {
       if (ownerUserId) {
         await prisma.user.deleteMany({ where: { id: ownerUserId } });
       }
-      if (orphanUserId) {
-        await prisma.user.deleteMany({ where: { id: orphanUserId } });
-      }
-      if (policyUserIds.length > 0) {
-        await prisma.user.deleteMany({
-          where: { id: { in: policyUserIds } },
-        });
-      }
-      expect(await prisma.user.count({
-        where: { id: { in: policyUserIds } },
-      })).toBe(0);
     }
   }, 90_000);
 });

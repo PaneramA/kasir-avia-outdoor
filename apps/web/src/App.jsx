@@ -54,6 +54,8 @@ const Users = lazy(() => import('./pages/Users'))
 const Account = lazy(() => import('./pages/Account'))
 const Branches = lazy(() => import('./pages/Branches'))
 const TeamSettings = lazy(() => import('./pages/TeamSettings'))
+const PLATFORM_ADMIN_USERNAME = 'admin@gmail.com'
+
 function NotFoundPage() {
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-text-muted text-center">
@@ -96,7 +98,22 @@ function PageLoader() {
 
 function isPlatformAdmin(user) {
   const role = String(user?.role || '').trim().toLowerCase()
-  return role === 'superuser'
+  const username = String(user?.username || '').trim().toLowerCase()
+  return role === 'superuser' && username === PLATFORM_ADMIN_USERNAME
+}
+
+function resolveCurrentUser(user) {
+  if (!user || typeof user !== 'object') {
+    return user
+  }
+
+  const role = String(user.role || '').trim().toLowerCase()
+  const username = String(user.username || '').trim().toLowerCase()
+  if (role === 'superuser' && username !== PLATFORM_ADMIN_USERNAME) {
+    return { ...user, role: 'kasir' }
+  }
+
+  return user
 }
 
 function resolveCurrentUser(user, { trustPlatformAdmin = false } = {}) {
@@ -147,6 +164,9 @@ function App() {
     () => hasVerifiedCurrentUser && isPlatformAdmin(currentUser),
     [currentUser, hasVerifiedCurrentUser],
   )
+  const rawCurrentUser = session.token ? (authQuery.data || session.user || null) : null
+  const currentUser = useMemo(() => resolveCurrentUser(rawCurrentUser), [rawCurrentUser])
+  const isPlatformAdminUser = useMemo(() => isPlatformAdmin(currentUser), [currentUser])
   const shouldLoadOperationalData = Boolean(currentUser) && !isAdminPath && !isPlatformAdminUser
   const isAuthInitializing = Boolean(session.token) && !currentUser && authQuery.isLoading
 
