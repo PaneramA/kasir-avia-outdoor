@@ -121,30 +121,12 @@ function normalizeUsername(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function normalizeUsername(value) {
-  return String(value || '').trim().toLowerCase();
+function isSafeNotFoundMessage(message) {
+  return /^(?:Plan|Tenant|Category|Branch|User|Membership|Customer|Rental|Branch access) not found$/
+    .test(message)
+    || /^Item(?: .+)? not found$/.test(message)
+    || message === 'Category does not exist';
 }
-
-function isConfiguredPlatformAdmin(user, env) {
-  return normalizeRole(user?.role) === 'superuser'
-    && normalizeUsername(user?.username) === normalizeUsername(env.adminUsername);
-}
-
-function getEffectiveUserRole(user, env) {
-  const role = normalizeRole(user?.role);
-  if (role === 'superuser' && !isConfiguredPlatformAdmin(user, env)) {
-    return 'kasir';
-  }
-
-  return role;
-}
-
-function cleanupLoginRateLimitEntry(key, entry, env, now) {
-  const maxIdleMs = Math.max(env.loginRateLimitWindowMs, env.loginRateLimitBlockMs);
-  if (now - entry.updatedAtMs > maxIdleMs) {
-    loginRateLimitBuckets.delete(key);
-    return true;
-  }
 
 export function isSafeClientErrorMessage(message) {
   const value = String(message || '');
@@ -476,18 +458,13 @@ export async function apiRoute(req, res, env) {
         return true;
       }
 
-      clearLoginFailures(loginUserKey);
-
-      const membershipSummary = await getUserTenantMembershipSummary(user.id);
-      if (
-        membershipSummary.total > 0
-        && membershipSummary.activeOnActiveTenant === 0
-        && getEffectiveUserRole(user, env) !== 'superuser'
-      ) {
-        sendError(
-          res,
-          403,
-          'Akun kamu masih menunggu approval admin. Silakan selesaikan pembayaran lalu tunggu aktivasi toko.',
+      try {
+        const user = await findUserByUsername(normalizedUsername);
+        const candidateHash = user?.passwordHash || DUMMY_LOGIN_PASSWORD_HASH;
+        const passwordVerified = await verifyPassword(
+          body.password,
+          candidateHash,
+          env.passwordPepper,
         );
         const passwordMatches = Boolean(user) && passwordVerified;
         if (!passwordMatches) {
@@ -520,24 +497,41 @@ export async function apiRoute(req, res, env) {
           return true;
         }
 
-      const token = createAccessToken(
-        {
-          sub: user.id,
-          username: user.username,
-          role: getEffectiveUserRole(user, env),
-        },
-        env,
-      );
+        if (needsPasswordRehash(user.passwordHash)) {
+          try {
+            await rehashUserPassword(
+              user.id,
+              body.password,
+              env.passwordPepper,
+              user.passwordHash,
+            );
+          } catch (rehashError) {
+            const message = rehashError instanceof Error ? rehashError.message : String(rehashError);
+            console.warn(`[api] failed to rehash password for user ${user.id}: ${message}`);
+          }
+        }
 
-      sendSuccess(res, 200, {
-        token,
-        user: {
-          id: user.id,
-          username: user.username,
-          role: getEffectiveUserRole(user, env),
-        },
-      });
-      return true;
+        const token = createAccessToken(
+          {
+            sub: user.id,
+            username: user.username,
+            role: getEffectiveUserRole(user, env),
+          },
+          env,
+        );
+
+        sendSuccess(res, 200, {
+          token,
+          user: {
+            id: user.id,
+            username: user.username,
+            role: getEffectiveUserRole(user, env),
+          },
+        });
+        return true;
+      } finally {
+        releaseLoginHash();
+      }
     }
 
     if (isWriteMethod(req.method) && !shouldSkipAuth(pathname)) {

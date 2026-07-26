@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+
 function validateOption(name, value, requireInteger = false) {
   if (
     !Number.isFinite(value) ||
@@ -10,6 +12,22 @@ function validateOption(name, value, requireInteger = false) {
 
 function secondsUntil(untilMs, nowMs) {
   return Math.max(0, Math.ceil((untilMs - nowMs) / 1_000));
+}
+
+export function resolveLoginClientIp(req, { trustProxy = false } = {}) {
+  const remoteAddress = req?.socket?.remoteAddress || 'unknown';
+  const forwardedFor = req?.headers?.['x-forwarded-for'];
+  const proxyIsLoopback = remoteAddress === '127.0.0.1'
+    || remoteAddress === '::1'
+    || remoteAddress.startsWith('::ffff:127.');
+  if (trustProxy && proxyIsLoopback && typeof forwardedFor === 'string' && forwardedFor.trim()) {
+    const clientAddress = forwardedFor.split(',')[0].trim();
+    if (isIP(clientAddress)) {
+      return clientAddress;
+    }
+  }
+
+  return remoteAddress;
 }
 
 export function createLoginRateLimiter({
@@ -37,11 +55,14 @@ export function createLoginRateLimiter({
     }
   }
 
-  function evictOldest() {
+  function evictOldestUnblocked(nowMs) {
     let oldestKey;
     let oldestUpdatedAtMs = Infinity;
 
     for (const [key, entry] of buckets) {
+      if (entry.blockedUntilMs > nowMs) {
+        continue;
+      }
       if (entry.updatedAtMs < oldestUpdatedAtMs) {
         oldestKey = key;
         oldestUpdatedAtMs = entry.updatedAtMs;
@@ -50,7 +71,10 @@ export function createLoginRateLimiter({
 
     if (oldestKey !== undefined) {
       buckets.delete(oldestKey);
+      return true;
     }
+
+    return false;
   }
 
   function getOrCreate(key, nowMs) {
@@ -59,8 +83,8 @@ export function createLoginRateLimiter({
       return entry;
     }
 
-    if (buckets.size >= maxBuckets) {
-      evictOldest();
+    if (buckets.size >= maxBuckets && !evictOldestUnblocked(nowMs)) {
+      return null;
     }
 
     entry = {
@@ -91,6 +115,16 @@ export function createLoginRateLimiter({
     const nowMs = now();
     removeExpired(nowMs);
     const entry = getOrCreate(key, nowMs);
+    if (!entry) {
+      let retryAfterSeconds = 0;
+      for (const candidate of buckets.values()) {
+        retryAfterSeconds = Math.max(
+          retryAfterSeconds,
+          secondsUntil(candidate.blockedUntilMs, nowMs),
+        );
+      }
+      return retryAfterSeconds;
+    }
 
     if (entry.blockedUntilMs > nowMs) {
       entry.updatedAtMs = nowMs;
