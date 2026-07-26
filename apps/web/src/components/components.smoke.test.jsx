@@ -5,7 +5,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminLayout from './AdminLayout.jsx';
 import CategoryModal from './CategoryModal.jsx';
 import Header from './Header.jsx';
@@ -27,6 +27,10 @@ function withRouter(node, initialEntries = ['/dashboard']) {
 }
 
 describe('shared component smoke and interaction tests', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it('switches view mode through an accessible segmented control', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
@@ -87,6 +91,24 @@ describe('shared component smoke and interaction tests', () => {
     expect(rentalLink.className).toContain('border-l-2');
     expect(rentalLink.className).not.toContain('bg-accent');
     expect(rentalLink.className).not.toContain('shadow-');
+  });
+
+  it('collapses the operational sidebar into an icon-only desktop rail', async () => {
+    const user = userEvent.setup();
+    withRouter(<Sidebar
+      currentUser={{ username: 'owner', role: 'kasir' }}
+      subscriptionSummary={{ features: { canUseFinancialRecap: true, canManageBranches: true, canManageStaff: true } }}
+      onLogout={vi.fn()}
+      isMobileOpen={false}
+      onCloseMobile={vi.fn()}
+    />, ['/rental']);
+
+    const sidebar = screen.getByRole('complementary', { name: /navigasi utama/i });
+    await user.click(screen.getByRole('button', { name: /tutup sidebar/i }));
+
+    expect(sidebar.className).toContain('lg:w-[72px]');
+    expect(localStorage.getItem('avia_sidebar_collapsed')).toBe('true');
+    expect(screen.getByRole('button', { name: /buka sidebar/i })).toBeInTheDocument();
   });
 
   it('renders the header and tenant selectors', () => {
