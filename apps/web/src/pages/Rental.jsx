@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr';
 import { fetchCustomers } from '../lib/api';
 import { APP_CACHE_KEYS } from '../lib/appCache';
-import ViewModeToggle from '../components/ViewModeToggle';
 import ReceiptModal from '../components/ReceiptModal';
 import { openReceiptWhatsApp, printReceipt } from '../lib/receipt';
 import {
@@ -51,7 +50,6 @@ const isEditableTarget = (target) => (
 );
 
 const STOCK_WARNING_MESSAGE = 'Stok item tidak mencukupi.';
-const RENTAL_VIEW_STORAGE_KEY = 'avia_rental_inventory_view_mode';
 const RENTAL_DRAFT_STORAGE_KEY = 'avia_rental_draft_v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -63,15 +61,6 @@ const getDefaultRentalTimeRange = () => {
         startInput: formatDateTimeLocalInput(startAt),
         endInput: formatDateTimeLocalInput(endAt),
     };
-};
-
-const getInitialRentalInventoryView = () => {
-    if (typeof window === 'undefined') {
-        return 'grid';
-    }
-
-    const saved = window.localStorage.getItem(RENTAL_VIEW_STORAGE_KEY);
-    return saved === 'list' ? 'list' : 'grid';
 };
 
 const Rental = ({
@@ -100,7 +89,6 @@ const Rental = ({
     const [durationError, setDurationError] = useState('');
     const [paymentError, setPaymentError] = useState('');
     const [mobileStepHint, setMobileStepHint] = useState('');
-    const [inventoryViewMode, setInventoryViewMode] = useState(getInitialRentalInventoryView);
     const [receiptRental, setReceiptRental] = useState(null);
     const [isFinalReviewOpen, setIsFinalReviewOpen] = useState(false);
     const [isFinalReviewChecked, setIsFinalReviewChecked] = useState(false);
@@ -149,14 +137,6 @@ const Rental = ({
             window.clearTimeout(focusTimeoutRef.current);
         }
     }, []);
-
-    useEffect(() => {
-        if (typeof window === 'undefined') {
-            return;
-        }
-
-        window.localStorage.setItem(RENTAL_VIEW_STORAGE_KEY, inventoryViewMode);
-    }, [inventoryViewMode]);
 
     useEffect(() => {
         if (categoryFilter !== 'all' && !safeCategories.includes(categoryFilter)) {
@@ -283,7 +263,6 @@ const Rental = ({
                 : 'all',
         );
         setMobileStep(Number.isFinite(draftPayload.mobileStep) ? Math.min(3, Math.max(1, draftPayload.mobileStep)) : 1);
-        setInventoryViewMode(draftPayload.inventoryViewMode === 'list' ? 'list' : 'grid');
         setItemsError('');
         setDurationError('');
         setPaymentError('');
@@ -371,72 +350,6 @@ const Rental = ({
         }
     }, [cart, setCart]);
 
-    const renderInventoryGridItem = (item) => {
-        const isOutOfStock = item.stock <= 0;
-        const qtyInCart = cartQtyByItemId.get(item.id) || 0;
-
-        return (
-            <button
-                key={item.id}
-                type="button"
-                className={`group relative w-full rounded-lg border p-4 text-left transition-all duration-150 ${isOutOfStock ? 'cursor-not-allowed border-border bg-card-bg opacity-50 grayscale' : qtyInCart > 0 ? 'border-accent/70 bg-accent/5 shadow-[0_8px_20px_rgba(230,126,34,0.14)] active:scale-[0.98] active:border-accent' : 'border-border bg-card-bg hover:-translate-y-1 hover:border-accent active:scale-[0.98] active:border-accent active:bg-accent/10'}`}
-                onClick={() => addToCart(item)}
-                disabled={isOutOfStock}
-            >
-            <div className="relative mb-3 h-[130px] overflow-hidden rounded-lg bg-[#1A2222] sm:mb-4 sm:h-[150px]">
-                <img className="w-full h-full object-cover transition-transform group-hover:scale-105" src={item.image || 'https://via.placeholder.com/150'} alt={item.name} />
-                {isOutOfStock && <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white text-[0.8rem] font-bold uppercase">Habis</div>}
-                {!isOutOfStock && qtyInCart > 0 && (
-                    <span className="absolute left-2 top-2 rounded-full bg-accent px-2 py-1 text-[0.62rem] font-semibold uppercase tracking-wide text-white">
-                        x{qtyInCart} di keranjang
-                    </span>
-                )}
-            </div>
-            <div className="rc-info">
-                <h5 className="text-text-main font-semibold mb-1 line-clamp-1">{item.name}</h5>
-                <span className="text-accent font-bold text-[0.95rem] block">Rp {parseInt(item.price, 10).toLocaleString()} <small className="text-[0.7em] font-normal text-text-muted">/hari</small></span>
-                <span className="text-text-muted text-[0.75rem] block mt-1">Tersedia: {item.stock}</span>
-            </div>
-            </button>
-        );
-    };
-
-    const renderInventoryListItem = (item) => {
-        const isOutOfStock = item.stock <= 0;
-        const qtyInCart = cartQtyByItemId.get(item.id) || 0;
-
-        return (
-            <button
-                key={item.id}
-                type="button"
-                className={`w-full rounded-lg border bg-card-bg p-3 text-left transition-all duration-150 ${isOutOfStock ? 'opacity-50 cursor-not-allowed border-border' : qtyInCart > 0 ? 'border-accent/70 bg-accent/5 shadow-[0_6px_16px_rgba(230,126,34,0.12)] active:scale-[0.99] active:border-accent' : 'border-border hover:border-accent active:scale-[0.99] active:border-accent active:bg-accent/10'}`}
-                onClick={() => addToCart(item)}
-                disabled={isOutOfStock}
-            >
-            <div className="flex items-center gap-3">
-                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md bg-[#1A2222] sm:h-16 sm:w-16">
-                    <img className="h-full w-full object-cover" src={item.image || 'https://via.placeholder.com/120'} alt={item.name} />
-                </div>
-                <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-text-main sm:text-[0.95rem]">{item.name}</p>
-                    <p className="mt-0.5 text-xs text-text-muted">Tersedia: {item.stock}</p>
-                    <p className="mt-1 text-xs font-bold text-accent sm:text-sm">Rp {parseInt(item.price, 10).toLocaleString()} /hari</p>
-                </div>
-                {isOutOfStock && (
-                    <span className="shrink-0 rounded-full bg-[#e74c3c]/20 px-2 py-1 text-[0.65rem] font-semibold uppercase text-[#e74c3c]">
-                        Habis
-                    </span>
-                )}
-                {!isOutOfStock && qtyInCart > 0 && (
-                    <span className="shrink-0 rounded-full bg-accent px-2.5 py-1 text-[0.64rem] font-semibold uppercase text-white">
-                        x{qtyInCart}
-                    </span>
-                )}
-            </div>
-        </button>
-        );
-    };
-
     useEffect(() => {
         if (typeof window === 'undefined') {
             return undefined;
@@ -501,6 +414,20 @@ const Rental = ({
         setCart(cart.filter((c) => c.id !== id));
     };
 
+    const handleDecreaseInventoryQty = (itemId) => {
+        const currentQty = cartQtyByItemId.get(itemId) || 0;
+        if (currentQty <= 0) {
+            return;
+        }
+
+        if (currentQty === 1) {
+            removeFromCart(itemId);
+            return;
+        }
+
+        updateCartQty(itemId, -1);
+    };
+
     const updateCartNote = (id, note) => {
         setCart(cart.map((c) => (c.id === id ? { ...c, notes: note } : c)));
     };
@@ -537,6 +464,78 @@ const Rental = ({
             hour: '2-digit',
             minute: '2-digit',
         });
+    };
+
+    const renderQuantityStepper = (item, qtyInCart, isOutOfStock) => {
+        const canDecrease = qtyInCart > 0;
+        const canIncrease = !isOutOfStock && qtyInCart < Number(item.stock || 0);
+
+        return (
+            <div className="flex h-9 shrink-0 items-center border border-[#cfd8d3] bg-white">
+                <button
+                    type="button"
+                    aria-label={`Kurangi ${item.name}`}
+                    disabled={!canDecrease}
+                    className="flex h-9 w-9 items-center justify-center border-r border-[#cfd8d3] text-sm font-bold text-[#0f3d2e] disabled:cursor-not-allowed disabled:text-[#9aa8a1]"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        handleDecreaseInventoryQty(item.id);
+                    }}
+                >
+                    -
+                </button>
+                <span className="flex h-9 min-w-10 items-center justify-center px-2 text-sm font-bold text-[#10231c]">
+                    {qtyInCart}
+                </span>
+                <button
+                    type="button"
+                    aria-label={`Tambah ${item.name}`}
+                    disabled={!canIncrease}
+                    className="flex h-9 w-9 items-center justify-center border-l border-[#cfd8d3] bg-[#146c43] text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-[#d8e0dc] disabled:text-[#7a8982]"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        addToCart(item);
+                    }}
+                >
+                    +
+                </button>
+            </div>
+        );
+    };
+
+    const renderInventoryTextRow = (item) => {
+        const stock = Number(item.stock || 0);
+        const price = Number(item.price || 0);
+        const isOutOfStock = stock <= 0;
+        const qtyInCart = cartQtyByItemId.get(item.id) || 0;
+        const isSelected = qtyInCart > 0;
+
+        return (
+            <div
+                key={item.id}
+                data-testid={`rental-inventory-row-${item.id}`}
+                className={`border bg-white p-3 ${isSelected ? 'border-[#146c43]' : 'border-[#d7ded9]'} ${isOutOfStock ? 'opacity-60' : ''}`}
+            >
+                <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <p className="truncate text-sm font-bold text-[#10231c]">{item.name}</p>
+                            {isOutOfStock && (
+                                <span className="border border-[#c0392b] bg-white px-2 py-0.5 text-[0.65rem] font-bold uppercase text-[#c0392b]">
+                                    Habis
+                                </span>
+                            )}
+                        </div>
+                        <p className="mt-1 text-xs text-[#5c6b64]">{item.category || 'Tanpa kategori'}</p>
+                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                            <span className="font-bold text-[#146c43]">{formatCurrency(price)} /hari</span>
+                            <span className="text-[#5c6b64]">Stok: {stock}</span>
+                        </div>
+                    </div>
+                    {renderQuantityStepper(item, qtyInCart, isOutOfStock)}
+                </div>
+            </div>
+        );
     };
 
     const validateCustomerStep = ({ focusOnError = false } = {}) => {
@@ -1205,12 +1204,6 @@ const Rental = ({
                                             ))}
                                         </select>
                                     </div>
-                                    <ViewModeToggle
-                                        value={inventoryViewMode}
-                                        onChange={setInventoryViewMode}
-                                        containerClassName="w-full lg:w-auto"
-                                        buttonClassName="px-3 py-1.5 text-[0.72rem]"
-                                    />
                                 </div>
                                 <p className="hidden text-[0.68rem] text-text-muted lg:block lg:text-right">
                                     Shortcut desktop: `/` fokus pencarian, `Enter` tambah hasil teratas.
@@ -1220,18 +1213,14 @@ const Rental = ({
                     </div>
                     <div className="custom-scrollbar lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-y-contain lg:pr-2">
                         {filteredItems.length === 0 ? (
-                            <div className="mt-4 rounded-lg border border-border bg-card-bg/40 p-4 text-center text-sm text-text-muted">
+                            <div className="mt-4 border border-[#d7ded9] bg-white p-4 text-center text-sm text-[#5c6b64]">
                                 {normalizedInventorySearch
                                     ? 'Barang tidak ditemukan. Coba kata kunci lain.'
                                     : 'Tidak ada barang pada kategori ini.'}
                             </div>
-                        ) : inventoryViewMode === 'grid' ? (
-                            <div className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 sm:mt-5 sm:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] sm:gap-5">
-                                {filteredItems.map((item) => renderInventoryGridItem(item))}
-                            </div>
                         ) : (
-                            <div className="mt-4 flex flex-col gap-3 sm:mt-5">
-                                {filteredItems.map((item) => renderInventoryListItem(item))}
+                            <div className="mt-4 flex flex-col gap-2 sm:mt-5">
+                                {filteredItems.map((item) => renderInventoryTextRow(item))}
                             </div>
                         )}
                     </div>
