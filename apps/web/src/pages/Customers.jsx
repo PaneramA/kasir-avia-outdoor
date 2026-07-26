@@ -22,7 +22,7 @@ const primaryButtonClass = 'min-h-11 rounded-md bg-accent px-5 py-2.5 font-semib
 const secondaryButtonClass = 'rounded-md border border-border bg-sidebar-bg px-3 py-1.5 text-xs text-text-main transition hover:border-accent'
 const destructiveButtonClass = 'rounded-md border border-border bg-sidebar-bg px-3 py-1.5 text-xs text-[#c0392b] transition hover:border-[#c0392b]'
 
-const Customers = () => {
+const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
     const [query, setQuery] = useState('')
     const [debouncedQuery, setDebouncedQuery] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)

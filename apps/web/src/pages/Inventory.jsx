@@ -465,16 +465,24 @@ const Inventory = ({
                                         src={item.image || 'https://via.placeholder.com/300x200?text=No+Image'}
                                         alt={item.name}
                                     />
-                                    <span className={`absolute right-[10px] top-[10px] rounded-md px-3 py-[5px] text-[0.72rem] font-bold uppercase ${item.stock > 0 ? 'bg-accent text-white' : 'bg-red-600 text-white'}`}>
-                                        {item.stock > 0 ? 'Available' : 'Out of Stock'}
+                                    <span className={`absolute right-[10px] top-[10px] rounded-md px-3 py-[5px] text-[0.72rem] font-bold uppercase ${inventoryStatus === 'archived' ? 'bg-[#6b7280] text-white' : item.stock > 0 ? 'bg-accent text-white' : 'bg-red-600 text-white'}`}>
+                                        {inventoryStatus === 'archived' ? 'Archived' : item.stock > 0 ? 'Available' : 'Out of Stock'}
                                     </span>
                                     <div className="absolute inset-0 flex items-center justify-center gap-3 bg-black/35 opacity-100 transition-opacity duration-300 sm:opacity-0 sm:group-hover:opacity-100">
-                                        <button type="button" className="flex h-11 w-11 items-center justify-center rounded-md bg-accent text-[1.1rem] text-white transition hover:bg-accent-hover" onClick={() => handleEditItem(item)}>
-                                            <i className="fas fa-edit"></i>
-                                        </button>
-                                        <button type="button" className="flex h-11 w-11 items-center justify-center rounded-md bg-red-600 text-[1.1rem] text-white transition hover:bg-red-700" onClick={() => handleDeleteItem(item.id)}>
-                                            <i className="fas fa-trash"></i>
-                                        </button>
+                                        {inventoryStatus === 'active' ? (
+                                            <>
+                                                <button type="button" aria-label={`Edit ${item.name}`} title="Edit barang" className="flex h-11 w-11 items-center justify-center rounded-md bg-accent text-[1.1rem] text-white transition hover:bg-accent-hover" onClick={() => handleEditItem(item)}>
+                                                    <i className="fas fa-edit"></i>
+                                                </button>
+                                                <button type="button" aria-label={`Arsipkan ${item.name}`} title="Arsipkan barang" className="flex h-11 w-11 items-center justify-center rounded-md bg-red-600 text-[1.1rem] text-white transition hover:bg-red-700" onClick={() => handleArchiveItem(item.id)}>
+                                                    <i className="fas fa-box-archive"></i>
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <button type="button" aria-label={`Pulihkan ${item.name}`} title="Pulihkan barang" className="flex h-11 w-11 items-center justify-center rounded-md bg-accent text-[1.1rem] text-white transition hover:bg-accent-hover" onClick={() => handleRestoreItem(item.id)}>
+                                                <i className="fas fa-rotate-left"></i>
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="p-4 sm:p-5">
@@ -509,19 +517,27 @@ const Inventory = ({
                                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs sm:text-sm">
                                             <span className="font-bold text-accent">Rp {parseInt(item.price, 10).toLocaleString()}/hari</span>
                                             <span className="text-text-muted">Stok: {item.stock}</span>
-                                            <span className={`rounded-md px-2 py-[2px] text-[0.65rem] font-semibold uppercase ${item.stock > 0 ? 'bg-accent text-white' : 'bg-red-600 text-white'}`}>
-                                                {item.stock > 0 ? 'Available' : 'Out of Stock'}
+                                            <span className={`rounded-md px-2 py-[2px] text-[0.65rem] font-semibold uppercase ${inventoryStatus === 'archived' ? 'bg-[#6b7280] text-white' : item.stock > 0 ? 'bg-accent text-white' : 'bg-red-600 text-white'}`}>
+                                                {inventoryStatus === 'archived' ? 'Archived' : item.stock > 0 ? 'Available' : 'Out of Stock'}
                                             </span>
                                         </div>
                                     </div>
 
                                     <div className="flex shrink-0 items-center gap-2">
-                                        <button type="button" className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card-bg text-accent transition hover:border-accent hover:bg-surface-hover" onClick={() => handleEditItem(item)}>
-                                            <i className="fas fa-edit"></i>
-                                        </button>
-                                        <button type="button" className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card-bg text-red-600 transition hover:border-red-600 hover:bg-surface-hover" onClick={() => handleDeleteItem(item.id)}>
-                                            <i className="fas fa-trash"></i>
-                                        </button>
+                                        {inventoryStatus === 'active' ? (
+                                            <>
+                                                <button type="button" aria-label={`Edit ${item.name}`} title="Edit barang" className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card-bg text-accent transition hover:border-accent hover:bg-surface-hover" onClick={() => handleEditItem(item)}>
+                                                    <i className="fas fa-edit"></i>
+                                                </button>
+                                                <button type="button" aria-label={`Arsipkan ${item.name}`} title="Arsipkan barang" className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card-bg text-red-600 transition hover:border-red-600 hover:bg-surface-hover" onClick={() => handleArchiveItem(item.id)}>
+                                                    <i className="fas fa-box-archive"></i>
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <button type="button" aria-label={`Pulihkan ${item.name}`} title="Pulihkan barang" className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card-bg text-accent transition hover:border-accent hover:bg-surface-hover" onClick={() => handleRestoreItem(item.id)}>
+                                                <i className="fas fa-rotate-left"></i>
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>
