@@ -267,8 +267,8 @@ describe('application state orchestration', () => {
     renderApp('/rental');
 
     expect(await screen.findByRole('heading', { name: 'Sewa Barang' })).toBeInTheDocument();
-    fireEvent.click(await screen.findByRole('button', { name: /Tenda Dome/i }));
-    expect(screen.getByText('x1 di keranjang')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /Tambah Tenda Dome/i }));
+    expect(screen.getByText(/x 1$/)).toBeInTheDocument();
 
     fireEvent.change(screen.getAllByDisplayValue('Pusat')[0], {
       target: { value: 'branch-2' },
@@ -277,7 +277,7 @@ describe('application state orchestration', () => {
     await waitFor(() => {
       expect(fetchItems).toHaveBeenCalledTimes(2);
     });
-    expect(screen.queryByText('x1 di keranjang')).not.toBeInTheDocument();
+    expect(screen.queryByText(/x 1$/)).not.toBeInTheDocument();
     expect(screen.getByText('Belum ada barang dipilih.')).toBeInTheDocument();
   });
 
@@ -352,7 +352,7 @@ describe('application state orchestration', () => {
     renderApp('/rental');
 
     expect(await screen.findByRole('heading', { name: 'Sewa Barang' })).toBeInTheDocument();
-    await screen.findByRole('button', { name: /Tenda Dome/i });
+    await screen.findByRole('button', { name: /Tambah Tenda Dome/i });
     window.localStorage.setItem('avia_rental_draft_v1', JSON.stringify({
       customer: { name: 'Pelanggan Lama', phone: '0811111111' },
       items: [{ id: 'item-1', qty: 1, notes: 'Draft cabang lama' }],
@@ -371,6 +371,6 @@ describe('application state orchestration', () => {
     expect(window.localStorage.getItem('avia_rental_draft_v1')).toBeNull();
     expect(window.localStorage.getItem('avia_rental_inventory_view_mode')).toBe('list');
     expect(screen.queryByDisplayValue('Pelanggan Lama')).not.toBeInTheDocument();
-    expect(screen.queryByText('x1 di keranjang')).not.toBeInTheDocument();
+    expect(screen.queryByText(/x 1$/)).not.toBeInTheDocument();
   });
 });

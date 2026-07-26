@@ -44,19 +44,30 @@ describe('planAccessBackfill', () => {
     });
   });
 
-  it('skips superusers', () => {
+  it('skips only the configured platform admin superuser', () => {
     expect(planAccessBackfill({
-      users: [{ id: 'user-1', role: ' SuperUser ', memberships: [], branchAccesses: [] }],
+      users: [{
+        id: 'user-1',
+        username: 'admin@example.test',
+        role: ' SuperUser ',
+        memberships: [],
+        branchAccesses: [],
+      }],
       tenants: [{ id: 'tenant-1', status: 'active' }],
       branches: [{ id: 'branch-1', tenantId: 'tenant-1', status: 'active' }],
+      platformAdminUsername: 'admin@example.test',
     })).toEqual({ assignments: [], unresolved: [] });
   });
 
-  it('skips users who already have memberships or branch accesses', () => {
+  it('skips users with complete active tenant access', () => {
     expect(planAccessBackfill({
       users: [
-        { id: 'user-1', role: 'kasir', memberships: [{ id: 'membership-1' }], branchAccesses: [] },
-        { id: 'user-2', role: 'kasir', memberships: [], branchAccesses: [{ id: 'access-1' }] },
+        {
+          id: 'user-1',
+          role: 'kasir',
+          memberships: [{ id: 'membership-1', tenantId: 'tenant-1', role: 'kasir', status: 'active' }],
+          branchAccesses: [{ id: 'access-1', branchId: 'branch-1' }],
+        },
       ],
       tenants: [{ id: 'tenant-1', status: 'active' }],
       branches: [{ id: 'branch-1', tenantId: 'tenant-1', status: 'active' }],
