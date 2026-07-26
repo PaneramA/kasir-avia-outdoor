@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useSWR from 'swr';
 import { fetchCustomers } from '../lib/api';
 import { APP_CACHE_KEYS } from '../lib/appCache';
+import RentalDateRangePicker from '../components/RentalDateRangePicker';
 import ReceiptModal from '../components/ReceiptModal';
 import { openReceiptWhatsApp, printReceipt } from '../lib/receipt';
 import {
@@ -592,7 +593,7 @@ const Rental = ({
         if (!rentalStartAt || !rentalEndAt) {
             setDurationError('Tanggal mulai dan selesai wajib diisi.');
             if (focusOnError) {
-                scheduleFocusField('rentalStartAt');
+                scheduleFocusField('rentalRange');
             }
             return false;
         }
@@ -600,7 +601,7 @@ const Rental = ({
         if (rentalEndAt.getTime() <= rentalStartAt.getTime()) {
             setDurationError('Tanggal selesai harus setelah tanggal mulai.');
             if (focusOnError) {
-                scheduleFocusField('rentalEndAt');
+                scheduleFocusField('rentalRange');
             }
             return false;
         }
@@ -608,7 +609,7 @@ const Rental = ({
         if (!Number.isFinite(calculatedDuration) || calculatedDuration < 1) {
             setDurationError('Durasi sewa minimal 1 hari.');
             if (focusOnError) {
-                scheduleFocusField('rentalStartAt');
+                scheduleFocusField('rentalRange');
             }
             return false;
         }
@@ -931,17 +932,11 @@ const Rental = ({
         setMobileStepHint('');
     };
 
-    const handleRentalStartAtChange = (value) => {
-        setRentalTimeRange((previous) => ({ ...previous, startInput: value }));
-        setMobileStepHint('');
-
-        if (durationError) {
-            setDurationError('');
-        }
-    };
-
-    const handleRentalEndAtChange = (value) => {
-        setRentalTimeRange((previous) => ({ ...previous, endInput: value }));
+    const handleRentalRangeChange = (startInput, endInput) => {
+        setRentalTimeRange({
+            startInput,
+            endInput,
+        });
         setMobileStepHint('');
 
         if (durationError) {
@@ -1143,6 +1138,32 @@ const Rental = ({
         </>
     );
 
+    const renderRentalDateRange = (layout) => {
+        const durationErrorId = `${layout}-duration-error`;
+
+        return (
+            <div className="mb-4 rounded-md border border-[#d7ded9] bg-white p-3">
+                <label className="block mb-1.5 text-[0.85rem] text-text-muted font-semibold">Rentang Waktu Sewa</label>
+                <RentalDateRangePicker
+                    startAt={rentalTimeRange.startInput}
+                    endAt={rentalTimeRange.endInput}
+                    onChange={handleRentalRangeChange}
+                    className={RENTAL_FIELD_CLASS}
+                    error={Boolean(durationError)}
+                    fieldKey={`${layout}-rentalRange`}
+                    describedBy={durationError ? durationErrorId : undefined}
+                />
+                <p className="mt-2 text-xs text-text-muted">
+                    Sistem: {rentalDayPolicy.mode === 'DAILY_CUTOFF'
+                        ? `Cut-off ${String(rentalDayPolicy.cutoffHour).padStart(2, '0')}:${String(rentalDayPolicy.cutoffMinute).padStart(2, '0')}`
+                        : 'Per 24 jam'}
+                </p>
+                <p className="mt-1 text-sm font-semibold text-text-main">Durasi terhitung: {effectiveDuration} hari</p>
+                {durationError && <p id={durationErrorId} className="mt-1 text-xs text-[#e74c3c]">{durationError}</p>}
+            </div>
+        );
+    };
+
     return (
         <div className="pt-0 pb-4 sm:pb-5 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:pb-0">
             <div className="mb-4 grid grid-cols-3 gap-2 lg:hidden">
@@ -1299,38 +1320,7 @@ const Rental = ({
                                         </div>
                                     </div>
 
-                                    <div className="mb-4 rounded-md border border-[#d7ded9] bg-white p-3">
-                                        <label className="block mb-1.5 text-[0.85rem] text-text-muted font-semibold">Rentang Waktu Sewa</label>
-                                        <div className="grid grid-cols-1 gap-3">
-                                            <div>
-                                                <label className="mb-1 block text-[0.78rem] text-text-muted">Mulai Sewa</label>
-                                                <input
-                                                    className={`${RENTAL_FIELD_CLASS} ${durationError ? 'border-[#c0392b]' : ''}`}
-                                                    type="datetime-local"
-                                                    data-rental-field="mobile-rentalStartAt"
-                                                    value={rentalTimeRange.startInput}
-                                                    onChange={(e) => handleRentalStartAtChange(e.target.value)}
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="mb-1 block text-[0.78rem] text-text-muted">Rencana Kembali</label>
-                                                <input
-                                                    className={`${RENTAL_FIELD_CLASS} ${durationError ? 'border-[#c0392b]' : ''}`}
-                                                    type="datetime-local"
-                                                    data-rental-field="mobile-rentalEndAt"
-                                                    value={rentalTimeRange.endInput}
-                                                    onChange={(e) => handleRentalEndAtChange(e.target.value)}
-                                                />
-                                            </div>
-                                        </div>
-                                        <p className="mt-2 text-xs text-text-muted">
-                                            Sistem: {rentalDayPolicy.mode === 'DAILY_CUTOFF'
-                                                ? `Cut-off ${String(rentalDayPolicy.cutoffHour).padStart(2, '0')}:${String(rentalDayPolicy.cutoffMinute).padStart(2, '0')}`
-                                                : 'Per 24 jam'}
-                                        </p>
-                                        <p className="mt-1 text-sm font-semibold text-text-main">Durasi terhitung: {effectiveDuration} hari</p>
-                                        {durationError && <p id="mobile-duration-error" className="mt-1 text-xs text-[#e74c3c]">{durationError}</p>}
-                                    </div>
+                                    {renderRentalDateRange('mobile')}
 
                                     <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                                         <div>
@@ -1413,38 +1403,7 @@ const Rental = ({
                                 <h4 className="mb-3 border-b border-[#d7ded9] pb-2 text-[1rem] font-bold uppercase tracking-wide text-[#146c43] sm:text-[1.1rem]">Keranjang Sewa</h4>
                                 {renderCartItems()}
 
-                                <div className="mb-4 rounded-md border border-[#d7ded9] bg-white p-3">
-                                    <label className="block mb-1.5 text-[0.85rem] text-text-muted font-semibold">Rentang Waktu Sewa</label>
-                                    <div className="grid grid-cols-1 gap-3">
-                                        <div>
-                                            <label className="mb-1 block text-[0.78rem] text-text-muted">Mulai Sewa</label>
-                                            <input
-                                                className={`${RENTAL_FIELD_CLASS} ${durationError ? 'border-[#c0392b]' : ''}`}
-                                                type="datetime-local"
-                                                data-rental-field="desktop-rentalStartAt"
-                                                value={rentalTimeRange.startInput}
-                                                onChange={(e) => handleRentalStartAtChange(e.target.value)}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="mb-1 block text-[0.78rem] text-text-muted">Rencana Kembali</label>
-                                            <input
-                                                className={`${RENTAL_FIELD_CLASS} ${durationError ? 'border-[#c0392b]' : ''}`}
-                                                type="datetime-local"
-                                                data-rental-field="desktop-rentalEndAt"
-                                                value={rentalTimeRange.endInput}
-                                                onChange={(e) => handleRentalEndAtChange(e.target.value)}
-                                            />
-                                        </div>
-                                    </div>
-                                    <p className="mt-2 text-xs text-text-muted">
-                                        Sistem: {rentalDayPolicy.mode === 'DAILY_CUTOFF'
-                                            ? `Cut-off ${String(rentalDayPolicy.cutoffHour).padStart(2, '0')}:${String(rentalDayPolicy.cutoffMinute).padStart(2, '0')}`
-                                            : 'Per 24 jam'}
-                                    </p>
-                                    <p className="mt-1 text-sm font-semibold text-text-main">Durasi terhitung: {effectiveDuration} hari</p>
-                                    {durationError && <p id="desktop-duration-error" className="mt-1 text-xs text-[#e74c3c]">{durationError}</p>}
-                                </div>
+                                {renderRentalDateRange('desktop')}
 
                                 <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                                     <div>

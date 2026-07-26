@@ -4,11 +4,30 @@ import '@testing-library/jest-dom/vitest';
 import React, { useState } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { SWRConfig } from 'swr';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Rental from './Rental.jsx';
 
 vi.mock('../lib/api', () => ({
   fetchCustomers: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock('../components/RentalDateRangePicker', () => ({
+  default: ({ startAt, endAt, onChange, className, error, fieldKey }) => (
+    <input
+      type="text"
+      data-testid={`mock-range-${fieldKey}`}
+      data-rental-field={fieldKey}
+      data-start-at={startAt}
+      data-end-at={endAt}
+      data-error={error ? 'true' : 'false'}
+      className={className}
+      placeholder="Pilih tanggal & jam mulai - selesai"
+      onChange={(event) => {
+        const [startValue = '', endValue = ''] = event.target.value.split('|');
+        onChange(startValue, endValue);
+      }}
+    />
+  ),
 }));
 
 const inventory = [
@@ -54,6 +73,11 @@ function renderRental() {
 
 beforeEach(() => {
   window.localStorage.clear();
+  vi.stubGlobal('alert', vi.fn());
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe('Rental page item picker', () => {
@@ -115,5 +139,36 @@ describe('Rental page item picker', () => {
       expect(button.className).toContain('bg-[#146c43]');
       expect(button.className).not.toContain('bg-accent');
     });
+  });
+
+  it('uses a single rental range picker instead of native datetime fields', () => {
+    renderRental();
+
+    expect(screen.getAllByPlaceholderText('Pilih tanggal & jam mulai - selesai').length).toBeGreaterThan(0);
+    expect(document.querySelector('input[type="datetime-local"]')).toBeNull();
+  });
+
+  it('updates rental duration from the combined range picker', () => {
+    renderRental();
+
+    const rangeInput = screen.getByTestId('mock-range-desktop-rentalRange');
+    fireEvent.change(rangeInput, {
+      target: { value: '2026-07-26T10:00|2026-07-28T10:00' },
+    });
+
+    expect(screen.getAllByText(/Durasi terhitung: 2 hari/i).length).toBeGreaterThan(0);
+  });
+
+  it('keeps duration invalid when the combined range is incomplete', () => {
+    renderRental();
+
+    const rangeInput = screen.getByTestId('mock-range-desktop-rentalRange');
+    fireEvent.change(rangeInput, {
+      target: { value: '2026-07-26T10:00|' },
+    });
+
+    fireEvent.click(screen.getAllByRole('button', { name: /lanjut ke review/i })[0]);
+
+    expect(screen.getAllByText('Tanggal mulai dan selesai wajib diisi.').length).toBeGreaterThan(0);
   });
 });
