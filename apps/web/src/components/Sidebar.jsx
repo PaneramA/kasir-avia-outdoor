@@ -124,7 +124,7 @@ const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onC
                             title={displayName}
                         >
                             <div className="flex min-w-0 items-center gap-3">
-                                <img className="h-9 w-9 rounded-full border border-accent object-cover" src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=E67E22&color=fff`} alt="User" />
+                                <img className="h-9 w-9 rounded-full border border-accent object-cover" src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=146c43&color=fff`} alt="User" />
                                 <div className={`flex min-w-0 flex-col ${labelVisibilityClass}`}>
                                     <span className="line-clamp-1 text-[0.9rem] font-semibold text-text-main">{displayName}</span>
                                     <span className="text-[0.75rem] capitalize text-text-muted">{displayRole}</span>
