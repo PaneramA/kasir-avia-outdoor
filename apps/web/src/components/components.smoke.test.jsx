@@ -74,6 +74,21 @@ describe('shared component smoke and interaction tests', () => {
     expect(screen.queryByText('Keuangan')).not.toBeInTheDocument();
   });
 
+  it('uses a compact active sidebar indicator instead of a filled block', () => {
+    withRouter(<Sidebar
+      currentUser={{ username: 'owner', role: 'kasir' }}
+      subscriptionSummary={{ features: { canUseFinancialRecap: true, canManageBranches: true, canManageStaff: true } }}
+      onLogout={vi.fn()}
+      isMobileOpen={false}
+      onCloseMobile={vi.fn()}
+    />, ['/rental']);
+
+    const rentalLink = screen.getByRole('link', { name: /sewa barang/i });
+    expect(rentalLink.className).toContain('border-l-2');
+    expect(rentalLink.className).not.toContain('bg-accent');
+    expect(rentalLink.className).not.toContain('shadow-');
+  });
+
   it('renders the header and tenant selectors', () => {
     withRouter(<Header
       title="Dashboard"

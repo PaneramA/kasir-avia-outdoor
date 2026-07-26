@@ -34,10 +34,10 @@ const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onC
                 aria-label="Tutup menu navigasi"
             />
 
-            <aside className={`fixed inset-y-0 left-0 z-[120] flex h-screen w-[280px] max-w-[85vw] -translate-x-full flex-col overflow-hidden border-r border-border bg-sidebar-bg transition-all duration-300 lg:static lg:z-[100] lg:w-[260px] lg:max-w-none lg:translate-x-0 ${isMobileOpen ? 'translate-x-0 shadow-2xl shadow-black/40' : ''}`}>
-                <div className="flex items-center justify-between p-5 lg:p-[30px]">
-                    <div className="flex items-center gap-3 text-[1.2rem] sm:text-[1.4rem] font-bold text-accent tracking-[-0.5px] font-display">
-                        <i className="fas fa-mountain-sun text-[1.4rem] sm:text-[1.6rem]"></i>
+            <aside className={`fixed inset-y-0 left-0 z-[120] flex h-screen w-[248px] max-w-[85vw] -translate-x-full flex-col overflow-hidden border-r border-border bg-sidebar-bg transition-all duration-300 lg:static lg:z-[100] lg:w-[232px] lg:max-w-none lg:translate-x-0 ${isMobileOpen ? 'translate-x-0 shadow-2xl shadow-black/40' : ''}`}>
+                <div className="flex items-center justify-between px-5 py-5 lg:px-5 lg:py-6">
+                    <div className="flex items-center gap-2.5 text-[1.1rem] font-bold text-accent tracking-[-0.3px] font-display sm:text-[1.25rem]">
+                        <i className="fas fa-mountain-sun text-[1.25rem] sm:text-[1.45rem]"></i>
                         <span>AviaOutdoor</span>
                     </div>
                     <button
@@ -50,19 +50,19 @@ const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onC
                     </button>
                 </div>
 
-                <nav className="custom-scrollbar flex-1 overflow-y-auto py-4 px-3 lg:py-5 lg:px-[15px]">
+                <nav className="custom-scrollbar flex-1 overflow-y-auto px-3 py-3 lg:px-3 lg:py-4">
                     <ul className="list-none">
                         {menuItems.map((item) => (
-                            <li key={item.path} className="mb-2">
+                            <li key={item.path} className="mb-1">
                                 <NavLink
                                     to={item.path}
                                     onClick={onCloseMobile}
-                                    className={({ isActive }) => `flex items-center gap-[15px] rounded-DEFAULT p-[14px_18px] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${isActive
-                                        ? 'bg-accent text-white shadow-[0_4px_15px_rgba(230,126,34,0.3)]'
-                                        : 'text-text-muted hover:bg-surface-hover hover:text-text-main'
+                                    className={({ isActive }) => `flex min-h-10 items-center gap-3 border-l-2 px-3 py-2.5 text-[0.92rem] transition-colors duration-150 ${isActive
+                                        ? 'border-accent bg-transparent text-accent'
+                                        : 'border-transparent text-text-muted hover:border-border hover:bg-surface-hover hover:text-text-main'
                                     }`}
                                 >
-                                    <i className={`${item.icon} w-6 text-center text-[1.1rem]`}></i>
+                                    <i className={`${item.icon} w-5 text-center text-[0.92rem]`}></i>
                                     <span className="font-medium">{item.label}</span>
                                 </NavLink>
                             </li>
@@ -70,7 +70,7 @@ const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onC
                     </ul>
                 </nav>
 
-                <div className="flex flex-col gap-4 border-t-2 border-accent/40 p-4 lg:p-5">
+                <div className="flex flex-col gap-3 border-t border-border p-3 lg:p-4">
                     <div className="flex items-center justify-center">
                         <ThemeToggle />
                     </div>
@@ -79,10 +79,10 @@ const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onC
                         <p className="mb-2 px-1 text-[0.68rem] uppercase tracking-[0.16em] text-text-muted">Profile</p>
                         <button
                             onClick={() => setIsProfileMenuOpen((prev) => !prev)}
-                            className="w-full flex items-center justify-between gap-3 rounded-xl border border-border bg-sidebar-bg p-3 text-left transition hover:border-accent hover:bg-surface-hover"
+                            className="w-full flex items-center justify-between gap-3 rounded-md border border-border bg-sidebar-bg p-2.5 text-left transition hover:border-accent hover:bg-surface-hover"
                         >
                             <div className="flex min-w-0 items-center gap-3">
-                                <img className="h-10 w-10 rounded-full border-2 border-accent object-cover" src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=E67E22&color=fff`} alt="User" />
+                                <img className="h-9 w-9 rounded-full border border-accent object-cover" src={`https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=E67E22&color=fff`} alt="User" />
                                 <div className="flex min-w-0 flex-col">
                                     <span className="line-clamp-1 text-[0.9rem] font-semibold text-text-main">{displayName}</span>
                                     <span className="text-[0.75rem] capitalize text-text-muted">{displayRole}</span>
@@ -95,13 +95,13 @@ const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onC
                         </button>
 
                         {isProfileMenuOpen && (
-                            <div className="mt-3 flex flex-col gap-1 rounded-DEFAULT border border-border bg-bg-main/80 p-2">
+                            <div className="mt-2 flex flex-col gap-1 rounded-md border border-border bg-bg-main p-1.5">
                                 <NavLink
                                     to={isPlatformAdmin ? APP_ROUTES.adminAccount : APP_ROUTES.settingsAccount}
                                     onClick={onCloseMobile}
-                                    className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
-                                        ? 'bg-accent text-white'
-                                        : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
+                                    className={({ isActive }) => `border-l-2 px-2.5 py-2 text-sm transition ${isActive
+                                        ? 'border-accent text-accent'
+                                        : 'border-transparent text-text-muted hover:border-border hover:bg-surface-hover hover:text-text-main'
                                     }`}
                                 >
                                     <i className="fas fa-user-cog mr-2"></i>
@@ -111,9 +111,9 @@ const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onC
                                     <NavLink
                                         to={APP_ROUTES.settingsBranches}
                                         onClick={onCloseMobile}
-                                        className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
-                                            ? 'bg-accent text-white'
-                                            : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
+                                        className={({ isActive }) => `border-l-2 px-2.5 py-2 text-sm transition ${isActive
+                                            ? 'border-accent text-accent'
+                                            : 'border-transparent text-text-muted hover:border-border hover:bg-surface-hover hover:text-text-main'
                                         }`}
                                     >
                                         <i className="fas fa-code-branch mr-2"></i>
@@ -124,9 +124,9 @@ const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onC
                                     <NavLink
                                         to={APP_ROUTES.settingsTeam}
                                         onClick={onCloseMobile}
-                                        className={({ isActive }) => `px-3 py-2 rounded-lg text-sm transition ${isActive
-                                            ? 'bg-accent text-white'
-                                            : 'text-text-muted hover:text-text-main hover:bg-surface-hover'
+                                        className={({ isActive }) => `border-l-2 px-2.5 py-2 text-sm transition ${isActive
+                                            ? 'border-accent text-accent'
+                                            : 'border-transparent text-text-muted hover:border-border hover:bg-surface-hover hover:text-text-main'
                                         }`}
                                     >
                                         <i className="fas fa-users-cog mr-2"></i>
@@ -135,7 +135,7 @@ const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onC
                                 )}
                                 <button
                                     onClick={onLogout}
-                                    className="rounded-lg px-3 py-2 text-left text-sm text-text-muted hover:bg-surface-hover hover:text-[#e74c3c]"
+                                    className="border-l-2 border-transparent px-2.5 py-2 text-left text-sm text-text-muted hover:bg-surface-hover hover:text-[#e74c3c]"
                                     title="Logout"
                                 >
                                     <i className="fas fa-sign-out-alt mr-2"></i>
