@@ -171,4 +171,10 @@ describe('Rental page item picker', () => {
 
     expect(screen.getAllByText('Tanggal mulai dan selesai wajib diisi.').length).toBeGreaterThan(0);
   });
+
+  it('keeps the item list close to filters without the desktop shortcut helper text', () => {
+    renderRental();
+
+    expect(screen.queryByText(/shortcut desktop/i)).not.toBeInTheDocument();
+  });
 });

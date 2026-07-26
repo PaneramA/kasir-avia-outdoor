@@ -2,13 +2,14 @@
 
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RentalDateRangePicker from './RentalDateRangePicker.jsx';
 
 let lastFlatpickrConfig;
 const destroyMock = vi.fn();
 const setDateMock = vi.fn();
+const openMock = vi.fn();
 
 vi.mock('flatpickr', () => ({
   default: vi.fn((element, config) => {
@@ -16,6 +17,7 @@ vi.mock('flatpickr', () => ({
     element._flatpickrConfig = config;
     return {
       destroy: destroyMock,
+      open: openMock,
       setDate: setDateMock,
     };
   }),
@@ -28,6 +30,7 @@ describe('RentalDateRangePicker', () => {
     lastFlatpickrConfig = undefined;
     destroyMock.mockClear();
     setDateMock.mockClear();
+    openMock.mockClear();
   });
 
   afterEach(() => {
@@ -54,8 +57,18 @@ describe('RentalDateRangePicker', () => {
       minuteIncrement: 15,
       allowInput: true,
     });
-    expect(setDateMock).toHaveBeenCalledWith(['2026-07-26T10:00', '2026-07-28T10:00'], false);
+    expect(lastFlatpickrConfig.altInput).not.toBe(true);
+    expect(lastFlatpickrConfig.locale).toMatchObject({ rangeSeparator: ' - ' });
+    expect(setDateMock).toHaveBeenCalledWith([new Date('2026-07-26T10:00'), new Date('2026-07-28T10:00')], false);
     expect(screen.getByPlaceholderText('Pilih tanggal & jam mulai - selesai')).toHaveAttribute('data-rental-field', 'desktop-rentalRange');
+  });
+
+  it('opens flatpickr from the calendar CTA button', () => {
+    render(<RentalDateRangePicker onChange={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /pilih tanggal sewa/i }));
+
+    expect(openMock).toHaveBeenCalledTimes(1);
   });
 
   it('emits formatted start and end values when range is complete', () => {

@@ -18,6 +18,15 @@ const formatDateTimeLocalValue = (date) => {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
+const parseDateTimeLocalValue = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const parsedDate = new Date(value);
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
+
 const RentalDateRangePicker = ({
   startAt = '',
   endAt = '',
@@ -45,11 +54,12 @@ const RentalDateRangePicker = ({
       enableTime: true,
       time_24hr: true,
       minuteIncrement: 15,
-      dateFormat: 'Y-m-d\\TH:i',
-      altInput: true,
-      altFormat: 'd M Y H:i',
+      dateFormat: 'd M Y H:i',
       allowInput: true,
       disableMobile: true,
+      locale: {
+        rangeSeparator: ' - ',
+      },
       onChange: (selectedDates) => {
         const [startDate, endDate] = selectedDates;
         onChangeRef.current?.(
@@ -66,19 +76,31 @@ const RentalDateRangePicker = ({
   }, []);
 
   useEffect(() => {
-    pickerRef.current?.setDate([startAt, endAt].filter(Boolean), false);
+    pickerRef.current?.setDate([parseDateTimeLocalValue(startAt), parseDateTimeLocalValue(endAt)].filter(Boolean), false);
   }, [startAt, endAt]);
 
   return (
-    <input
-      ref={inputRef}
-      className={`${className} rental-date-range-input ${error ? 'border-[#c0392b]' : ''}`.trim()}
-      type="text"
-      data-rental-field={fieldKey}
-      aria-invalid={error}
-      aria-describedby={describedBy}
-      placeholder="Pilih tanggal & jam mulai - selesai"
-    />
+    <div className="flex flex-col gap-2 sm:flex-row">
+      <input
+        ref={inputRef}
+        className={`${className} rental-date-range-input ${error ? 'border-[#c0392b]' : ''}`.trim()}
+        type="text"
+        data-rental-field={fieldKey}
+        aria-invalid={error}
+        aria-describedby={describedBy}
+        placeholder="Pilih tanggal & jam mulai - selesai"
+      />
+      <button
+        type="button"
+        aria-label="Pilih tanggal sewa"
+        title="Pilih tanggal sewa"
+        className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-[#146c43] bg-[#146c43] px-4 text-sm font-bold text-white transition hover:bg-[#0f5132]"
+        onClick={() => pickerRef.current?.open()}
+      >
+        <i className="fas fa-calendar-days" aria-hidden="true"></i>
+        <span>Pilih tanggal</span>
+      </button>
+    </div>
   );
 };
 

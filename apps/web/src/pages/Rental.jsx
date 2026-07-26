@@ -1200,7 +1200,7 @@ const Rental = ({
 
             <div className="flex flex-col gap-5 lg:h-full lg:min-h-0 lg:flex-row lg:gap-5 lg:overflow-hidden">
                 <div className={`${mobileStep === 2 ? 'flex' : 'hidden'} w-full flex-col lg:order-2 lg:flex lg:w-[38%] lg:min-h-0 lg:overflow-hidden`}>
-                    <div className="mb-5 sm:mb-[30px]">
+                    <div className="mb-3">
                         <h3 className="text-base font-bold text-[#10231c]">Barang Tersedia</h3>
                         <div className="sticky top-0 z-20 mt-3 rounded-md border border-[#d7ded9] bg-white p-3 lg:static lg:mt-0 lg:border-0 lg:p-0">
                             <div className="flex flex-col gap-2 lg:gap-3">
@@ -1229,9 +1229,6 @@ const Rental = ({
                                         </select>
                                     </div>
                                 </div>
-                                <p className="hidden text-[0.68rem] text-text-muted lg:block lg:text-right">
-                                    Shortcut desktop: `/` fokus pencarian, `Enter` tambah hasil teratas.
-                                </p>
                             </div>
                         </div>
                     </div>
@@ -1243,7 +1240,7 @@ const Rental = ({
                                     : 'Tidak ada barang pada kategori ini.'}
                             </div>
                         ) : (
-                            <div className="mt-4 flex flex-col gap-2 sm:mt-5">
+                            <div className="mt-2 flex flex-col gap-2">
                                 {filteredItems.map((item) => renderInventoryTextRow(item))}
                             </div>
                         )}
