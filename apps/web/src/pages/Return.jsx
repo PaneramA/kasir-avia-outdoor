@@ -190,7 +190,7 @@ const Return = ({ rentals, onProcessReturn }) => {
                         <i className="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-text-muted"></i>
                         <input
                             type="text"
-                            className="w-full rounded-lg border border-border bg-sidebar-bg py-3 pl-11 pr-4 text-text-main outline-none focus:border-accent"
+                            className="w-full rounded-md border border-border bg-sidebar-bg py-3 pl-11 pr-4 text-text-main outline-none focus:border-accent"
                             placeholder="Cari nama pelanggan atau ID Transaksi..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -201,13 +201,13 @@ const Return = ({ rentals, onProcessReturn }) => {
                 {(overdueCount > 0 || dueTodayCount > 0) && (
                     <div className="mb-4 space-y-2">
                         {overdueCount > 0 && (
-                            <div className="rounded-lg border border-[#dc2626]/30 bg-[#fee2e2] px-3 py-2 text-sm text-[#991b1b]">
+                            <div className="rounded-md border border-[#dc2626] bg-[#fee2e2] px-3 py-2 text-sm text-[#991b1b]">
                                 <i className="fas fa-triangle-exclamation mr-2"></i>
                                 Ada <strong>{overdueCount}</strong> transaksi terlambat yang harus diprioritaskan.
                             </div>
                         )}
                         {dueTodayCount > 0 && (
-                            <div className="rounded-lg border border-[#d97706]/30 bg-[#ffedd5] px-3 py-2 text-sm text-[#9a4a00]">
+                            <div className="rounded-md border border-accent bg-card-bg px-3 py-2 text-sm text-text-main">
                                 <i className="fas fa-clock mr-2"></i>
                                 Ada <strong>{dueTodayCount}</strong> transaksi jatuh tempo hari ini.
                             </div>
@@ -217,7 +217,7 @@ const Return = ({ rentals, onProcessReturn }) => {
 
                 <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto pr-1 sm:pr-2">
                     {filteredRentals.length === 0 ? (
-                        <div className="rounded-lg border border-dashed border-border bg-sidebar-bg/30 py-10 text-center text-text-muted">
+                        <div className="rounded-md border border-dashed border-border bg-card-bg py-10 text-center text-text-muted">
                             Tidak ada data penyewaan aktif yang ditemukan.
                         </div>
                     ) : (
@@ -228,7 +228,7 @@ const Return = ({ rentals, onProcessReturn }) => {
                             return (
                                 <div
                                     key={rental.id}
-                                    className={`cursor-pointer rounded-lg border bg-card-bg p-4 transition-all hover:border-accent ${selectedRental?.id === rental.id ? 'border-accent bg-accent/5' : 'border-border'}`}
+                                    className={`cursor-pointer rounded-md border bg-card-bg p-4 transition-colors hover:border-accent ${selectedRental?.id === rental.id ? 'border-accent bg-surface-hover' : 'border-border'}`}
                                     onClick={() => handleSelectRental(rental)}
                                 >
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -237,17 +237,17 @@ const Return = ({ rentals, onProcessReturn }) => {
                                                 <h4 className="font-bold text-text-main">{rental.customer.name}</h4>
                                                 <span className="rounded border border-border bg-sidebar-bg px-2 py-0.5 text-xs text-text-muted">{rental.id}</span>
                                                 {dueStatus === 'overdue' && (
-                                                    <span className="rounded border border-[#dc2626]/35 bg-[#fee2e2] px-2 py-0.5 text-xs font-semibold text-[#991b1b]">
+                                                    <span className="rounded border border-[#dc2626] bg-[#fee2e2] px-2 py-0.5 text-xs font-semibold text-[#991b1b]">
                                                         Terlambat
                                                     </span>
                                                 )}
                                                 {dueStatus === 'dueToday' && (
-                                                    <span className="rounded border border-[#d97706]/35 bg-[#ffedd5] px-2 py-0.5 text-xs font-semibold text-[#9a4a00]">
+                                                    <span className="rounded border border-accent bg-accent px-2 py-0.5 text-xs font-semibold text-white">
                                                         Kembali Hari Ini
                                                     </span>
                                                 )}
                                                 {payment.isUnpaid && (
-                                                    <span className="rounded border border-[#d97706]/35 bg-[#fff3e6] px-2 py-0.5 text-xs font-semibold text-[#9a4a00]">
+                                                    <span className="rounded border border-accent bg-card-bg px-2 py-0.5 text-xs font-semibold text-accent">
                                                         Belum Lunas
                                                     </span>
                                                 )}
@@ -277,7 +277,7 @@ const Return = ({ rentals, onProcessReturn }) => {
             </div>
 
             <div className="w-full lg:w-[450px]">
-                <div className="custom-scrollbar flex max-h-full flex-col overflow-y-auto rounded-lg border border-border bg-sidebar-bg p-4 sm:p-6 lg:sticky lg:top-5 lg:max-h-[calc(100vh-2.5rem)]">
+                <div className="custom-scrollbar flex max-h-full flex-col overflow-y-auto rounded-md border border-border bg-sidebar-bg p-4 sm:p-6 lg:sticky lg:top-5 lg:max-h-[calc(100vh-2.5rem)]">
                     <h4 className="mb-4 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.1rem]">
                         Proses Pengembalian
                     </h4>
@@ -290,12 +290,12 @@ const Return = ({ rentals, onProcessReturn }) => {
                     ) : (
                         <div className="flex flex-1 flex-col space-y-5">
                             {selectedPayment.isUnpaid && (
-                                <div className="rounded-lg border border-[#d97706]/35 bg-[#fff3e6] p-3 text-sm text-[#9a4a00]">
+                                <div className="rounded-md border border-accent bg-card-bg p-3 text-sm text-text-main">
                                     Customer ini belum lunas. Sisa pembayaran saat ini: <strong>{formatCurrency(selectedPayment.remainingAmount + additionalFeeValue)}</strong>
                                 </div>
                             )}
 
-                            <div className="rounded-lg border border-border bg-bg-main p-4">
+                            <div className="rounded-md border border-border bg-bg-main p-4">
                                 <div className="mb-2 flex justify-between gap-3">
                                     <span className="text-[0.85rem] text-text-muted">ID Transaksi</span>
                                     <span className="font-mono text-[0.85rem] text-text-main">{selectedRental.id}</span>
@@ -324,7 +324,7 @@ const Return = ({ rentals, onProcessReturn }) => {
                                 <h5 className="mb-3 text-[0.9rem] font-bold text-text-main">Barang yang Dikembalikan</h5>
                                 <div className="max-h-[200px] space-y-2 overflow-y-auto pr-1 sm:pr-2">
                                     {selectedRental.items.map((item, idx) => (
-                                        <div key={idx} className="flex items-start justify-between gap-2 rounded border border-border/60 bg-bg-main/50 p-3">
+                                        <div key={idx} className="flex items-start justify-between gap-2 rounded border border-border bg-bg-main p-3">
                                             <div className="flex min-w-0 flex-col">
                                                 <span className="text-[0.9rem] text-text-main">{item.name}</span>
                                                 {item.notes && <span className="mt-0.5 text-[0.75rem] italic text-text-muted"><i className="fas fa-info-circle mr-1"></i>{item.notes}</span>}
@@ -341,7 +341,7 @@ const Return = ({ rentals, onProcessReturn }) => {
 
                             <div className="space-y-4">
                                 {isLate && (
-                                    <div className="rounded-lg border border-[#c76410]/35 bg-[#fff1e5] p-3 text-sm text-[#8f4100]">
+                                    <div className="rounded-md border border-accent bg-card-bg p-3 text-sm text-text-main">
                                         Terlambat <strong>{lateDurationLabel}</strong>. Default denda 1 hari: <strong>{formatCurrency(selectedDailyRate)}</strong>
                                     </div>
                                 )}
@@ -350,7 +350,7 @@ const Return = ({ rentals, onProcessReturn }) => {
                                     <label className="mb-2 flex items-start gap-2 text-[0.85rem] text-text-muted">
                                         <input
                                             type="checkbox"
-                                            className="mt-0.5"
+                                            className="mt-0.5 accent-accent"
                                             checked={applyLateFee}
                                             onChange={(event) => handleToggleLateFee(event.target.checked)}
                                             disabled={!isLate}
@@ -361,7 +361,7 @@ const Return = ({ rentals, onProcessReturn }) => {
                                         <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[0.9rem] font-bold text-text-muted">Rp</span>
                                         <input
                                             type="number"
-                                            className="w-full rounded-lg border border-border bg-bg-main p-2.5 pl-10 text-text-main outline-none focus:border-accent"
+                                            className="w-full rounded-md border border-border bg-bg-main p-2.5 pl-10 text-text-main outline-none focus:border-accent"
                                             placeholder="0"
                                             value={additionalFeeInput}
                                             onChange={(e) => setAdditionalFeeInput(e.target.value)}
@@ -371,10 +371,10 @@ const Return = ({ rentals, onProcessReturn }) => {
                                 </div>
 
                                 {selectedPayment.isUnpaid && (
-                                    <label className="flex items-start gap-2 rounded-lg border border-[#d97706]/35 bg-[#fff3e6] p-3 text-[0.85rem] text-[#9a4a00]">
+                                    <label className="flex items-start gap-2 rounded-md border border-accent bg-card-bg p-3 text-[0.85rem] text-text-main">
                                         <input
                                             type="checkbox"
-                                            className="mt-0.5"
+                                            className="mt-0.5 accent-accent"
                                             checked={settleRemainingPayment}
                                             onChange={(event) => setSettleRemainingPayment(event.target.checked)}
                                         />
@@ -387,7 +387,7 @@ const Return = ({ rentals, onProcessReturn }) => {
                                 <div>
                                     <label className="mb-1.5 block text-[0.85rem] text-text-muted">Catatan Pengembalian (Opsional)</label>
                                     <textarea
-                                        className="min-h-[90px] w-full resize-none rounded-lg border border-border bg-bg-main p-2.5 text-[0.85rem] text-text-main outline-none focus:border-accent"
+                                        className="min-h-[90px] w-full resize-none rounded-md border border-border bg-bg-main p-2.5 text-[0.85rem] text-text-main outline-none focus:border-accent"
                                         placeholder="Catat kondisi barang kembali (kotor, rusak, dll)..."
                                         value={returnNotes}
                                         onChange={(e) => setReturnNotes(e.target.value)}
@@ -404,13 +404,13 @@ const Return = ({ rentals, onProcessReturn }) => {
                                 </div>
                                 <button
                                     disabled={isSubmitting}
-                                    className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#2ecc71] py-3.5 font-bold text-white transition-all shadow-[0_4px_15px_rgba(46,204,113,0.3)] hover:bg-[#27ae60] disabled:opacity-60"
+                                    className="flex w-full items-center justify-center gap-2 rounded-md bg-accent py-3.5 font-bold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
                                     onClick={processRentalReturn}
                                 >
                                     <i className="fas fa-check-circle"></i> {isSubmitting ? 'Memproses...' : 'Selesaikan Pengembalian'}
                                 </button>
                                 <button
-                                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-transparent py-2.5 font-semibold text-text-muted transition hover:bg-surface-hover hover:text-text-main"
+                                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-card-bg py-2.5 font-semibold text-text-muted transition-colors hover:bg-surface-hover hover:text-text-main"
                                     onClick={() => setSelectedRental(null)}
                                 >
                                     Batal
