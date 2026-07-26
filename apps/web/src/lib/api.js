@@ -67,8 +67,10 @@ function parseStoredUser() {
   }
 }
 
-function emitAuthExpired() {
-  window.dispatchEvent(new CustomEvent('avia-auth-expired'));
+function emitAuthExpired(token) {
+  window.dispatchEvent(new CustomEvent('avia-auth-expired', {
+    detail: { token },
+  }));
 }
 
 function setSession(token, user) {
@@ -98,17 +100,18 @@ function setTenantContext(context = {}) {
 }
 
 async function request(path, options = {}, config = { auth: false }) {
+  const requestToken = config.auth ? accessToken : '';
   const headers = {
     'Content-Type': 'application/json',
     ...(options.headers || {}),
   };
 
   if (config.auth) {
-    if (!accessToken) {
+    if (!requestToken) {
       throw new Error('Unauthorized');
     }
 
-    headers.Authorization = `Bearer ${accessToken}`;
+    headers.Authorization = `Bearer ${requestToken}`;
   }
 
   if (config.auth && activeTenantId) {
@@ -147,9 +150,9 @@ async function request(path, options = {}, config = { auth: false }) {
   }
 
   if (!response.ok) {
-    if (response.status === 401 && config.auth) {
+    if (response.status === 401 && config.auth && requestToken === accessToken) {
       setSession('', null);
-      emitAuthExpired();
+      emitAuthExpired(requestToken);
     }
 
     const message = payload?.message || `Request failed with status ${response.status}`;
@@ -247,11 +250,12 @@ export function fetchItems() {
   return request('/api/items', {}, { auth: true });
 }
 
-export function fetchItemsPage({ query = '', cursor = '', limit = 50 } = {}) {
+export function fetchItemsPage({ query = '', cursor = '', limit = 50, status = 'active' } = {}) {
   const params = new URLSearchParams();
   if (query) params.set('query', query);
   if (cursor) params.set('cursor', cursor);
   params.set('limit', String(limit));
+  params.set('status', status);
   return request(`/api/items/page?${params.toString()}`, {}, { auth: true });
 }
 
@@ -272,6 +276,12 @@ export function updateItem(id, item) {
 export function removeItem(id) {
   return request(`/api/items/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+  }, { auth: true });
+}
+
+export function restoreItem(id) {
+  return request(`/api/items/${encodeURIComponent(id)}/restore`, {
+    method: 'POST',
   }, { auth: true });
 }
 

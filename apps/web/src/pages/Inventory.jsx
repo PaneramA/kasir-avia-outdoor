@@ -102,12 +102,14 @@ const escapeCsvCell = (value) => {
 };
 
 const Inventory = ({
+    userId,
     tenantId,
     branchId,
     categories,
     onSaveItem,
     onImportItems,
     onDeleteItem,
+    onRestoreItem,
     onAddCategory,
     onDeleteCategory,
 }) => {
@@ -119,6 +121,7 @@ const Inventory = ({
     const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+    const [inventoryStatus, setInventoryStatus] = useState('active');
     const importFileInputRef = useRef(null);
 
     useEffect(() => {
@@ -134,7 +137,7 @@ const Inventory = ({
         setSize,
     } = useSWRInfinite(
         (pageIndex, previousPageData) => {
-            if (!tenantId || !branchId) {
+            if (!userId || !tenantId || !branchId) {
                 return null;
             }
 
@@ -143,19 +146,21 @@ const Inventory = ({
             }
 
             return APP_CACHE_KEYS.inventoryPage(
+                userId,
                 tenantId,
                 branchId,
                 debouncedSearchQuery,
                 pageIndex === 0 ? '' : previousPageData.nextCursor,
+                inventoryStatus,
             );
         },
-        ([, , , query, cursor]) => fetchItemsPage({ query, cursor }),
+        ([, , , , query, cursor, status]) => fetchItemsPage({ query, cursor, status }),
         { keepPreviousData: true },
     );
 
     useEffect(() => {
         void setSize(1);
-    }, [debouncedSearchQuery, setSize]);
+    }, [debouncedSearchQuery, inventoryStatus, setSize]);
 
     const inventory = useMemo(
         () => inventoryPages.flatMap((page) => (Array.isArray(page?.items) ? page.items : [])),
@@ -172,15 +177,28 @@ const Inventory = ({
         window.localStorage.setItem(INVENTORY_VIEW_STORAGE_KEY, inventoryViewMode);
     }, [inventoryViewMode]);
 
-    const handleDeleteItem = async (id) => {
-        if (!window.confirm('Apakah Anda yakin ingin menghapus barang ini?')) {
+    const handleArchiveItem = async (id) => {
+        if (!window.confirm('Arsipkan barang ini? Barang tidak akan muncul pada transaksi baru.')) {
             return;
         }
 
         try {
             await onDeleteItem(id);
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Gagal menghapus barang.';
+            const message = error instanceof Error ? error.message : 'Gagal mengarsipkan barang.';
+            alert(message);
+        }
+    };
+
+    const handleRestoreItem = async (id) => {
+        if (!window.confirm('Pulihkan barang ini ke inventaris aktif?')) {
+            return;
+        }
+
+        try {
+            await onRestoreItem(id);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Gagal memulihkan barang.';
             alert(message);
         }
     };
@@ -366,6 +384,24 @@ const Inventory = ({
                             accept=".csv,.xlsx,.xls"
                             onChange={(event) => { void handleImportFile(event); }}
                         />
+                        <div className="grid min-h-11 grid-cols-2 rounded-DEFAULT border border-border bg-sidebar-bg p-1" aria-label="Status inventaris">
+                            <button
+                                type="button"
+                                aria-pressed={inventoryStatus === 'active'}
+                                className={`rounded px-3 py-2 text-xs font-semibold transition ${inventoryStatus === 'active' ? 'bg-accent text-white' : 'text-text-muted hover:text-text-main'}`}
+                                onClick={() => setInventoryStatus('active')}
+                            >
+                                Aktif
+                            </button>
+                            <button
+                                type="button"
+                                aria-pressed={inventoryStatus === 'archived'}
+                                className={`rounded px-3 py-2 text-xs font-semibold transition ${inventoryStatus === 'archived' ? 'bg-accent text-white' : 'text-text-muted hover:text-text-main'}`}
+                                onClick={() => setInventoryStatus('archived')}
+                            >
+                                Diarsipkan
+                            </button>
+                        </div>
                         <ViewModeToggle
                             value={inventoryViewMode}
                             onChange={setInventoryViewMode}
@@ -413,7 +449,11 @@ const Inventory = ({
                     <div className="py-10 text-center text-text-muted">Memuat inventaris...</div>
                 ) : inventory.length === 0 ? (
                     <div className="text-center py-10 text-text-muted">
-                        {debouncedSearchQuery ? 'Barang tidak ditemukan.' : 'Belum ada barang di inventaris. Silakan tambah barang baru.'}
+                        {debouncedSearchQuery
+                            ? 'Barang tidak ditemukan.'
+                            : inventoryStatus === 'archived'
+                                ? 'Belum ada barang yang diarsipkan.'
+                                : 'Belum ada barang di inventaris. Silakan tambah barang baru.'}
                     </div>
                 ) : inventoryViewMode === 'grid' ? (
                     <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4 sm:gap-5 lg:grid-cols-[repeat(auto-fill,minmax(260px,1fr))] lg:gap-[25px]">

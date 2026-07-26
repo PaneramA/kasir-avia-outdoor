@@ -1,6 +1,7 @@
+import { Readable } from 'node:stream';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { prisma } from '../data/prisma.js';
-import { apiRoute } from './api.js';
+import { apiRoute, isSafeClientErrorMessage } from './api.js';
 import { healthRoute } from './health.js';
 
 function createResponse() {
@@ -12,6 +13,13 @@ afterAll(async () => {
 });
 
 describe('top-level API routes', () => {
+  it('exposes only recognized business errors to clients', () => {
+    expect(isSafeClientErrorMessage('Stock must be a number >= 0')).toBe(true);
+    expect(isSafeClientErrorMessage('Rental already returned')).toBe(true);
+    expect(isSafeClientErrorMessage('Prisma transaction failed at db.internal:5432')).toBe(false);
+    expect(isSafeClientErrorMessage('Unexpected invariant details')).toBe(false);
+  });
+
   it('keeps public registration removed', async () => {
     const req = { method: 'POST', url: '/api/auth/register', headers: {} };
     const res = createResponse();
@@ -28,5 +36,27 @@ describe('top-level API routes', () => {
     expect(healthRoute(req, res)).toBe(true);
     expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
     expect(JSON.parse(res.end.mock.calls[0][0])).toMatchObject({ ok: true, service: 'avia-api' });
+  });
+
+  it('returns 413 when a request body exceeds the configured limit', async () => {
+    const req = Readable.from([Buffer.from('123456')]);
+    req.method = 'POST';
+    req.url = '/api/auth/login';
+    req.headers = {};
+    req.socket = { remoteAddress: '127.0.0.1' };
+    const res = createResponse();
+
+    await apiRoute(req, res, {
+      requestBodyLimitBytes: 5,
+      requestBodyTimeoutMs: 100,
+      loginRateLimitWindowMs: 60_000,
+      loginRateLimitBlockMs: 60_000,
+      loginRateLimitMaxAttempts: 5,
+      loginRateLimitMaxBuckets: 100,
+      trustProxy: false,
+    });
+
+    expect(res.writeHead).toHaveBeenCalledWith(413, expect.any(Object));
+    expect(res.end.mock.calls[0][0]).toContain('Request body too large');
   });
 });

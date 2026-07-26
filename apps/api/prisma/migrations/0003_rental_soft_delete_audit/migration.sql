@@ -1,4 +1,4 @@
-"-- AlterTable
+-- AlterTable
 ALTER TABLE "public"."Rental"
 ADD COLUMN "deletedByUserId" TEXT,
 ADD COLUMN "deletedAt" TIMESTAMP(3),

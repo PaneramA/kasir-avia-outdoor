@@ -1,5 +1,10 @@
 import { createServer } from 'node:http';
-import { getEnv, getSecurityWarnings } from './config/env.js';
+import {
+  assertSecureProductionConfig,
+  getEnv,
+  getSecurityWarnings,
+} from './config/env.js';
+import { applyHttpServerLimits } from './config/httpServer.js';
 import { initDatabase } from './data/db.js';
 import { withCors } from './middleware/cors.js';
 import { attachRequestLogger } from './middleware/logger.js';
@@ -8,14 +13,14 @@ import { healthRoute } from './routes/health.js';
 import { sendJson } from './utils/http.js';
 
 const env = getEnv();
-const shouldLogRequests = env.nodeEnv !== 'production';
+assertSecureProductionConfig(env);
+const shouldLogRequests = env.nodeEnv !== 'test';
 const securityWarnings = getSecurityWarnings(env);
 
 await initDatabase(env);
 
 const server = createServer(async (req, res) => {
   attachRequestLogger(req, res, { enabled: shouldLogRequests });
-  res.__aviaAcceptEncoding = req.headers['accept-encoding'] || '';
 
   try {
     if (withCors(req, res, env.corsOrigin)) {
@@ -35,16 +40,18 @@ const server = createServer(async (req, res) => {
       message: 'Route not found',
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
+    const pathname = new URL(req.url || '/', 'http://localhost').pathname;
+    console.error(`[api] unhandled ${req.method} ${pathname}:`, error);
     sendJson(res, 500, {
       ok: false,
-      message,
+      message: 'Internal server error',
     });
   }
 });
+applyHttpServerLimits(server, env);
 
-server.listen(env.port, () => {
-  console.log(`[api] listening on http://localhost:${env.port}`);
+server.listen(env.port, env.host, () => {
+  console.log(`[api] listening on http://${env.host}:${env.port}`);
   if (securityWarnings.length > 0) {
     console.warn('[api] Security warnings:');
     for (const warning of securityWarnings) {

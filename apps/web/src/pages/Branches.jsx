@@ -4,7 +4,6 @@ import {
   createBranch,
   fetchBranches,
   fetchTenantMemberships,
-  getActiveTenantContext,
   getStoredSession,
   updateBranch,
 } from '../lib/api'
@@ -16,17 +15,19 @@ const initialBranchForm = {
   status: 'active',
 }
 
-const Branches = () => {
+const Branches = ({ userId = '', tenantId = '', branchId = '' }) => {
   const currentUser = getStoredSession().user
-  const tenantId = getActiveTenantContext().tenantId || 'current'
   const [branchForm, setBranchForm] = useState(initialBranchForm)
   const [isSubmittingBranch, setIsSubmittingBranch] = useState(false)
   const [message, setMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
-  const branchQuery = useSWR(APP_CACHE_KEYS.branches(tenantId), () => fetchBranches(tenantId))
+  const branchQuery = useSWR(
+    userId && tenantId ? APP_CACHE_KEYS.branches(userId, tenantId, branchId) : null,
+    () => fetchBranches(tenantId),
+  )
   const membershipQuery = useSWR(
-    APP_CACHE_KEYS.tenantMemberships(tenantId),
+    userId && tenantId && branchId ? APP_CACHE_KEYS.tenantMemberships(userId, tenantId, branchId) : null,
     () => fetchTenantMemberships(tenantId),
   )
   const branches = useMemo(() => (Array.isArray(branchQuery.data) ? branchQuery.data : []), [branchQuery.data])
