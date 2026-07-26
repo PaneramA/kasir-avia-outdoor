@@ -97,4 +97,23 @@ describe('Rental page item picker', () => {
     expect(screen.getByRole('heading', { name: /barang tersedia/i })).toBeInTheDocument();
     expect(screen.getByText('Tenda Dome 4p')).toBeInTheDocument();
   });
+
+  it('uses solid controls for the rental item picker', () => {
+    renderRental();
+
+    const row = screen.getByTestId('rental-inventory-row-item-1');
+    expect(row.className).toContain('bg-white');
+    expect(row.className).not.toContain('backdrop-blur');
+    expect(row.className).not.toContain('bg-accent/5');
+  });
+
+  it('uses green primary rental actions instead of the orange accent token', () => {
+    renderRental();
+
+    const reviewButtons = screen.getAllByRole('button', { name: /lanjut ke review/i });
+    reviewButtons.forEach((button) => {
+      expect(button.className).toContain('bg-[#146c43]');
+      expect(button.className).not.toContain('bg-accent');
+    });
+  });
 });

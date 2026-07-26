@@ -52,6 +52,9 @@ const isEditableTarget = (target) => (
 const STOCK_WARNING_MESSAGE = 'Stok item tidak mencukupi.';
 const RENTAL_DRAFT_STORAGE_KEY = 'avia_rental_draft_v1';
 const DAY_MS = 24 * 60 * 60 * 1000;
+const RENTAL_PRIMARY_BUTTON_CLASS = 'w-full rounded-md bg-[#146c43] py-3 text-sm font-bold text-white transition hover:bg-[#0f5132] disabled:cursor-not-allowed disabled:bg-[#aebbb5]';
+const RENTAL_SECONDARY_BUTTON_CLASS = 'w-full rounded-md border border-[#cfd8d3] bg-white px-3 py-3 text-sm font-semibold text-[#10231c] transition hover:border-[#146c43]';
+const RENTAL_FIELD_CLASS = 'w-full rounded-md border border-[#cfd8d3] bg-white p-2.5 text-[#10231c] outline-none transition-colors focus:border-[#146c43]';
 
 const getDefaultRentalTimeRange = () => {
     const startAt = new Date();
@@ -988,7 +991,7 @@ const Rental = ({
             <div className="form-group relative">
                 <label className="block mb-1.5 text-[0.85rem] text-text-muted">Cari Customer Lama</label>
                 <input
-                    className="w-full bg-bg-main border border-border p-2.5 rounded-lg text-text-main outline-none focus:border-accent transition-colors"
+                    className={RENTAL_FIELD_CLASS}
                     type="text"
                     placeholder="Ketik nama / nomor HP..."
                     value={customerSearch}
@@ -998,7 +1001,7 @@ const Rental = ({
                     <p className="text-xs text-text-muted mt-1">Mencari customer...</p>
                 )}
                 {customerSuggestions.length > 0 && (
-                    <div className="absolute left-0 right-0 mt-2 bg-sidebar-bg border border-border rounded-lg shadow-lg max-h-52 overflow-y-auto z-20">
+                    <div className="absolute left-0 right-0 z-20 mt-2 max-h-52 overflow-y-auto rounded-md border border-[#d7ded9] bg-white">
                         {customerSuggestions.map((suggestion) => (
                             <button
                                 key={suggestion.id}
@@ -1019,7 +1022,7 @@ const Rental = ({
             <div className="form-group">
                 <label className="block mb-1.5 text-[0.85rem] text-text-muted">Nama Pelanggan</label>
                 <input
-                    className={`w-full bg-bg-main border p-2.5 rounded-lg text-text-main outline-none transition-colors ${customerErrors.name ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                    className={`${RENTAL_FIELD_CLASS} ${customerErrors.name ? 'border-[#c0392b]' : ''}`}
                     type="text"
                     data-rental-field={`${layout}-name`}
                     aria-invalid={Boolean(customerErrors.name)}
@@ -1033,7 +1036,7 @@ const Rental = ({
             <div className="form-group">
                 <label className="block mb-1.5 text-[0.85rem] text-text-muted">Nomor HP</label>
                 <input
-                    className={`w-full bg-bg-main border p-2.5 rounded-lg text-text-main outline-none transition-colors ${customerErrors.phone ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                    className={`${RENTAL_FIELD_CLASS} ${customerErrors.phone ? 'border-[#c0392b]' : ''}`}
                     type="text"
                     data-rental-field={`${layout}-phone`}
                     aria-invalid={Boolean(customerErrors.phone)}
@@ -1049,7 +1052,7 @@ const Rental = ({
             <div className="form-group">
                 <label className="block mb-1.5 text-[0.85rem] text-text-muted">Alamat</label>
                 <textarea
-                    className="w-full min-h-[78px] resize-y bg-bg-main border border-border p-2.5 rounded-lg text-text-main outline-none focus:border-accent transition-colors"
+                    className={`${RENTAL_FIELD_CLASS} min-h-[78px] resize-y`}
                     placeholder="Alamat customer..."
                     value={customer.address}
                     onChange={(e) => setCustomer((previous) => ({ ...previous, address: e.target.value }))}
@@ -1059,7 +1062,7 @@ const Rental = ({
                 <div className="form-group">
                     <label className="block mb-1.5 text-[0.85rem] text-text-muted">Jaminan</label>
                     <select
-                        className="w-full bg-bg-main border border-border p-2.5 rounded-lg text-text-main outline-none focus:border-accent transition-colors cursor-pointer"
+                        className={`${RENTAL_FIELD_CLASS} cursor-pointer`}
                         value={customer.guarantee}
                         onChange={(e) => handleGuaranteeChange(e.target.value)}
                     >
@@ -1072,7 +1075,7 @@ const Rental = ({
                 <div className="form-group">
                     <label className="block mb-1.5 text-[0.85rem] text-text-muted">Nomor Identitas</label>
                     <input
-                        className="w-full bg-bg-main border border-border p-2.5 rounded-lg text-text-main outline-none focus:border-accent transition-colors"
+                        className={RENTAL_FIELD_CLASS}
                         type="text"
                         inputMode="numeric"
                         pattern="[0-9]*"
@@ -1086,7 +1089,7 @@ const Rental = ({
                 <div className="form-group">
                     <label className="block mb-1.5 text-[0.85rem] text-text-muted">Sebutkan Jaminan Lainnya</label>
                     <input
-                        className={`w-full bg-bg-main border p-2.5 rounded-lg text-text-main outline-none transition-colors ${customerErrors.guaranteeOther ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                        className={`${RENTAL_FIELD_CLASS} ${customerErrors.guaranteeOther ? 'border-[#c0392b]' : ''}`}
                         type="text"
                         data-rental-field={`${layout}-guaranteeOther`}
                         aria-invalid={Boolean(customerErrors.guaranteeOther)}
@@ -1109,21 +1112,21 @@ const Rental = ({
                     <div className="text-center py-6 text-text-muted italic text-sm">Belum ada barang dipilih.</div>
                 ) : (
                     cart.map((item) => (
-                        <div className="bg-bg-main/50 border border-border/60 p-4 rounded-lg" key={item.id}>
+                        <div className="rounded-md border border-[#d7ded9] bg-white p-4" key={item.id}>
                             <div className="mb-3 flex items-start justify-between gap-3">
                                 <div className="flex min-w-0 flex-col">
                                     <span className="text-text-main font-medium">{item.name}</span>
                                     <small className="text-text-muted">Rp {parseInt(item.price, 10).toLocaleString()} x {item.qty}</small>
                                 </div>
                                 <div className="flex shrink-0 items-center gap-2">
-                                    <button type="button" className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-sidebar-bg text-text-main transition hover:border-accent" onClick={() => updateCartQty(item.id, -1)}>-</button>
+                                    <button type="button" className="flex h-9 w-9 items-center justify-center rounded-md border border-[#cfd8d3] bg-white text-[#10231c] transition hover:border-[#146c43]" onClick={() => updateCartQty(item.id, -1)}>-</button>
                                     <span className="w-6 text-center text-sm font-bold">{item.qty}</span>
-                                    <button type="button" className="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-sidebar-bg text-text-main transition hover:border-accent" onClick={() => updateCartQty(item.id, 1)}>+</button>
+                                    <button type="button" className="flex h-9 w-9 items-center justify-center rounded-md border border-[#cfd8d3] bg-white text-[#10231c] transition hover:border-[#146c43]" onClick={() => updateCartQty(item.id, 1)}>+</button>
                                     <button type="button" className="rounded p-2 text-[#e74c3c] hover:bg-[#e74c3c]/10" onClick={() => removeFromCart(item.id)}>&times;</button>
                                 </div>
                             </div>
                             <textarea
-                                className="w-full bg-sidebar-bg border border-border p-2 rounded text-[0.85rem] text-text-muted min-h-[50px] resize-none outline-none focus:border-accent"
+                                className="min-h-[50px] w-full resize-none rounded-md border border-[#cfd8d3] bg-white p-2 text-[0.85rem] text-text-muted outline-none focus:border-[#146c43]"
                                 placeholder="Catatan (kondisi, kelengkapan...)"
                                 value={item.notes}
                                 onChange={(e) => updateCartNote(item.id, e.target.value)}
@@ -1154,7 +1157,7 @@ const Rental = ({
                             key={stepLabel}
                             type="button"
                             onClick={() => goToMobileStep(stepNumber)}
-                            className={`rounded-lg border px-2 py-2 text-center transition-all ${isActive ? 'border-accent bg-accent/10' : 'border-border'} ${isPassed ? 'border-emerald-500/40 bg-emerald-500/10' : ''} ${isClickable ? 'hover:border-accent' : 'opacity-70'}`}
+                            className={`rounded-md border px-2 py-2 text-center transition-all ${isActive ? 'border-[#146c43] bg-white text-[#146c43]' : 'border-[#d7ded9] bg-white'} ${isPassed ? 'border-[#146c43] bg-white text-[#146c43]' : ''} ${isClickable ? 'hover:border-[#146c43]' : 'opacity-70'}`}
                         >
                             <p className="text-[0.65rem] uppercase tracking-wide text-text-muted">Langkah {stepNumber}</p>
                             <p className="text-[0.75rem] font-semibold text-text-main">
@@ -1178,12 +1181,12 @@ const Rental = ({
                 <div className={`${mobileStep === 2 ? 'flex' : 'hidden'} w-full flex-col lg:order-2 lg:flex lg:w-[38%] lg:min-h-0 lg:overflow-hidden`}>
                     <div className="mb-5 sm:mb-[30px]">
                         <h3 className="text-base font-bold text-[#10231c]">Barang Tersedia</h3>
-                        <div className="sticky top-0 z-20 mt-3 rounded-xl border border-border/80 bg-bg-main/95 p-3 shadow-lg backdrop-blur lg:static lg:mt-0 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+                        <div className="sticky top-0 z-20 mt-3 rounded-md border border-[#d7ded9] bg-white p-3 lg:static lg:mt-0 lg:border-0 lg:p-0">
                             <div className="flex flex-col gap-2 lg:gap-3">
                                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-end">
-                                    <div className="w-full rounded-lg border border-border bg-sidebar-bg px-4 py-2 lg:min-w-[340px] lg:max-w-[500px]">
+                                    <div className="w-full rounded-md border border-[#cfd8d3] bg-white px-4 py-2 lg:min-w-[220px]">
                                         <input
-                                            className="w-full border-none bg-transparent text-sm text-text-main outline-none placeholder:text-text-muted"
+                                            className="w-full border-none bg-white text-sm text-[#10231c] outline-none placeholder:text-text-muted"
                                             type="text"
                                             data-rental-field="shared-inventorySearch"
                                             placeholder="Cari barang atau kategori..."
@@ -1191,9 +1194,9 @@ const Rental = ({
                                             onChange={(e) => setInventorySearch(e.target.value)}
                                         />
                                     </div>
-                                    <div className="w-full rounded-lg border border-border bg-sidebar-bg px-4 py-2 lg:w-[230px]">
+                                    <div className="w-full rounded-md border border-[#cfd8d3] bg-white px-4 py-2 lg:w-[180px]">
                                         <select
-                                            className="w-full cursor-pointer border-none bg-transparent text-sm text-text-main outline-none"
+                                            className="w-full cursor-pointer border-none bg-white text-sm text-[#10231c] outline-none"
                                             data-rental-field="shared-inventoryFilter"
                                             value={categoryFilter}
                                             onChange={(e) => setCategoryFilter(e.target.value)}
@@ -1227,15 +1230,15 @@ const Rental = ({
                 </div>
 
                 <div className="w-full lg:order-1 lg:flex lg:w-[62%] lg:min-h-0 lg:flex-col">
-                    <div className="rounded-xl border border-border bg-sidebar-bg p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] sm:p-6 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+                    <div className="rounded-md border border-[#d7ded9] bg-white p-4 shadow-none sm:p-6 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
                         <div className="lg:hidden">
                             {mobileStep === 1 && (
                                 <>
-                                    <h4 className="mb-4 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.1rem]">Langkah 1: Data Penyewa</h4>
+                                    <h4 className="mb-4 border-b border-[#d7ded9] pb-2 text-[1rem] font-bold uppercase tracking-wide text-[#146c43] sm:text-[1.1rem]">Langkah 1: Data Penyewa</h4>
                                     <div className="space-y-4">{renderCustomerFields('mobile')}</div>
                                     <button
                                         type="button"
-                                        className="mt-5 w-full bg-accent text-white py-3.5 rounded-lg font-bold transition-all hover:bg-accent-hover"
+                                        className={`mt-5 ${RENTAL_PRIMARY_BUTTON_CLASS}`}
                                         onClick={goToNextMobileStep}
                                     >
                                         Lanjut ke Pilih Barang
@@ -1245,7 +1248,7 @@ const Rental = ({
 
                             {mobileStep === 2 && (
                                 <>
-                                    <h4 className="mb-4 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.1rem]">Langkah 2: Pilih Barang</h4>
+                                    <h4 className="mb-4 border-b border-[#d7ded9] pb-2 text-[1rem] font-bold uppercase tracking-wide text-[#146c43] sm:text-[1.1rem]">Langkah 2: Pilih Barang</h4>
                                     <p className="mb-2 text-xs text-text-muted">Tap barang di daftar inventaris untuk menambah ke keranjang.</p>
                                     <p className="mb-4 text-xs text-text-muted">
                                         {cart.length === 0 ? 'Belum ada item dipilih.' : `${cart.length} item aktif (${cartQuantity} total unit)`}
@@ -1254,7 +1257,7 @@ const Rental = ({
                                     <div className="grid grid-cols-2 gap-3">
                                         <button
                                             type="button"
-                                            className="w-full border border-border text-text-main py-3.5 rounded-lg font-semibold transition-all hover:border-accent"
+                                            className={RENTAL_SECONDARY_BUTTON_CLASS}
                                             onClick={goToPreviousMobileStep}
                                         >
                                             Kembali
@@ -1262,7 +1265,7 @@ const Rental = ({
                                         <button
                                             type="button"
                                             disabled={!isItemsStepComplete}
-                                            className="w-full bg-accent text-white py-3.5 rounded-lg font-bold transition-all hover:bg-accent-hover disabled:opacity-60 disabled:cursor-not-allowed"
+                                            className={RENTAL_PRIMARY_BUTTON_CLASS}
                                             onClick={goToNextMobileStep}
                                         >
                                             Lanjut ke Konfirmasi
@@ -1273,22 +1276,22 @@ const Rental = ({
 
                             {mobileStep === 3 && (
                                 <>
-                                    <h4 className="mb-4 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.1rem]">Langkah 3: Konfirmasi Sewa</h4>
-                                    <div className="mb-5 rounded-lg border border-border bg-bg-main/40 p-3 text-sm text-text-muted">
+                                    <h4 className="mb-4 border-b border-[#d7ded9] pb-2 text-[1rem] font-bold uppercase tracking-wide text-[#146c43] sm:text-[1.1rem]">Langkah 3: Konfirmasi Sewa</h4>
+                                    <div className="mb-5 rounded-md border border-[#d7ded9] bg-white p-3 text-sm text-text-muted">
                                         <p className="text-text-main font-semibold">{customer.name || '-'}</p>
                                         <p>{customer.phone || '-'}</p>
                                         <p>{cart.length} item dipilih ({cartQuantity} unit)</p>
                                         <div className="mt-3 flex gap-2">
                                             <button
                                                 type="button"
-                                                className="rounded-md border border-border px-2 py-1 text-[0.72rem] text-text-main transition hover:border-accent"
+                                                className="rounded-md border border-[#cfd8d3] bg-white px-2 py-1 text-[0.72rem] text-[#10231c] transition hover:border-[#146c43]"
                                                 onClick={() => goToMobileStep(1)}
                                             >
                                                 Ubah Data
                                             </button>
                                             <button
                                                 type="button"
-                                                className="rounded-md border border-border px-2 py-1 text-[0.72rem] text-text-main transition hover:border-accent"
+                                                className="rounded-md border border-[#cfd8d3] bg-white px-2 py-1 text-[0.72rem] text-[#10231c] transition hover:border-[#146c43]"
                                                 onClick={() => goToMobileStep(2)}
                                             >
                                                 Ubah Barang
@@ -1296,13 +1299,13 @@ const Rental = ({
                                         </div>
                                     </div>
 
-                                    <div className="mb-4 rounded-lg border border-border bg-bg-main/40 p-3">
+                                    <div className="mb-4 rounded-md border border-[#d7ded9] bg-white p-3">
                                         <label className="block mb-1.5 text-[0.85rem] text-text-muted font-semibold">Rentang Waktu Sewa</label>
                                         <div className="grid grid-cols-1 gap-3">
                                             <div>
                                                 <label className="mb-1 block text-[0.78rem] text-text-muted">Mulai Sewa</label>
                                                 <input
-                                                    className={`w-full rounded-lg border bg-bg-main p-2.5 text-text-main outline-none ${durationError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                                                    className={`${RENTAL_FIELD_CLASS} ${durationError ? 'border-[#c0392b]' : ''}`}
                                                     type="datetime-local"
                                                     data-rental-field="mobile-rentalStartAt"
                                                     value={rentalTimeRange.startInput}
@@ -1312,7 +1315,7 @@ const Rental = ({
                                             <div>
                                                 <label className="mb-1 block text-[0.78rem] text-text-muted">Rencana Kembali</label>
                                                 <input
-                                                    className={`w-full rounded-lg border bg-bg-main p-2.5 text-text-main outline-none ${durationError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                                                    className={`${RENTAL_FIELD_CLASS} ${durationError ? 'border-[#c0392b]' : ''}`}
                                                     type="datetime-local"
                                                     data-rental-field="mobile-rentalEndAt"
                                                     value={rentalTimeRange.endInput}
@@ -1333,7 +1336,7 @@ const Rental = ({
                                         <div>
                                             <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Status Pembayaran</label>
                                             <select
-                                                className="w-full rounded-lg border border-border bg-bg-main p-3 text-sm text-text-main outline-none focus:border-accent"
+                                                className={`${RENTAL_FIELD_CLASS} p-3 text-sm`}
                                                 value={payment.status}
                                                 onChange={(e) => handlePaymentStatusChange(e.target.value)}
                                             >
@@ -1344,7 +1347,7 @@ const Rental = ({
                                         <div>
                                             <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Metode</label>
                                             <select
-                                                className="w-full rounded-lg border border-border bg-bg-main p-3 text-sm text-text-main outline-none focus:border-accent"
+                                                className={`${RENTAL_FIELD_CLASS} p-3 text-sm`}
                                                 value={payment.method}
                                                 onChange={(e) => handlePaymentMethodChange(e.target.value)}
                                             >
@@ -1359,7 +1362,7 @@ const Rental = ({
                                         <div className="mb-4">
                                             <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Nominal DP</label>
                                             <input
-                                                className={`w-full rounded-lg border bg-bg-main p-3 text-text-main outline-none ${paymentError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                                                className={`${RENTAL_FIELD_CLASS} p-3 ${paymentError ? 'border-[#c0392b]' : ''}`}
                                                 type="text"
                                                 inputMode="numeric"
                                                 data-rental-field="mobile-paymentAmount"
@@ -1371,17 +1374,17 @@ const Rental = ({
                                         </div>
                                     )}
 
-                                    <div className="rounded-lg border border-accent/20 bg-accent/10 p-4 sm:p-5">
+                                    <div className="rounded-md border border-[#146c43] bg-white p-4 sm:p-5">
                                         <div className="mb-1 flex items-center justify-between gap-3">
                                             <span className="text-text-muted text-[0.9rem]">Total Bayar</span>
                                             <span className="text-text-muted text-[0.7rem] uppercase tracking-tighter">({effectiveDuration} Hari)</span>
                                         </div>
-                                        <h3 className="text-[1.5rem] font-bold text-accent sm:text-[1.8rem]">Rp {totalAmount.toLocaleString()}</h3>
+                                        <h3 className="text-[1.5rem] font-bold text-[#146c43] sm:text-[1.8rem]">Rp {totalAmount.toLocaleString()}</h3>
                                         <p className="mt-1 text-xs text-text-muted">Terbayar: Rp {computedPaidAmount.toLocaleString()} • Sisa: Rp {remainingAmount.toLocaleString()}</p>
                                         <div className="mt-4 grid grid-cols-2 gap-3">
                                             <button
                                                 type="button"
-                                                className="w-full border border-border text-text-main py-3.5 rounded-lg font-semibold transition-all hover:border-accent"
+                                                className={RENTAL_SECONDARY_BUTTON_CLASS}
                                                 onClick={goToPreviousMobileStep}
                                             >
                                                 Kembali
@@ -1389,7 +1392,7 @@ const Rental = ({
                                             <button
                                                 type="button"
                                                 disabled={isSubmitting}
-                                                className="w-full bg-accent text-white py-3.5 rounded-lg font-bold flex items-center justify-center gap-2 transition-all hover:bg-accent-hover disabled:opacity-60"
+                                                className={`${RENTAL_PRIMARY_BUTTON_CLASS} flex items-center justify-center gap-2`}
                                                 onClick={handleOpenFinalReview}
                                             >
                                                 {isSubmitting ? 'Menyimpan...' : 'Lanjut ke Review'}
@@ -1401,22 +1404,22 @@ const Rental = ({
                         </div>
 
                         <div className="hidden lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:overflow-hidden">
-                            <h4 className="mb-4 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.1rem]">Detail Penyewa</h4>
+                            <h4 className="mb-4 border-b border-[#d7ded9] pb-2 text-[1rem] font-bold uppercase tracking-wide text-[#146c43] sm:text-[1.1rem]">Detail Penyewa</h4>
                             <div className="custom-scrollbar space-y-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-y-contain lg:pr-1">
                                 {renderCustomerFields('desktop')}
 
                                 <div className="h-[1px] bg-border my-6"></div>
 
-                                <h4 className="mb-3 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.1rem]">Keranjang Sewa</h4>
+                                <h4 className="mb-3 border-b border-[#d7ded9] pb-2 text-[1rem] font-bold uppercase tracking-wide text-[#146c43] sm:text-[1.1rem]">Keranjang Sewa</h4>
                                 {renderCartItems()}
 
-                                <div className="mb-4 rounded-lg border border-border bg-bg-main/40 p-3">
+                                <div className="mb-4 rounded-md border border-[#d7ded9] bg-white p-3">
                                     <label className="block mb-1.5 text-[0.85rem] text-text-muted font-semibold">Rentang Waktu Sewa</label>
                                     <div className="grid grid-cols-1 gap-3">
                                         <div>
                                             <label className="mb-1 block text-[0.78rem] text-text-muted">Mulai Sewa</label>
                                             <input
-                                                className={`w-full rounded-lg border bg-bg-main p-2.5 text-text-main outline-none ${durationError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                                                className={`${RENTAL_FIELD_CLASS} ${durationError ? 'border-[#c0392b]' : ''}`}
                                                 type="datetime-local"
                                                 data-rental-field="desktop-rentalStartAt"
                                                 value={rentalTimeRange.startInput}
@@ -1426,7 +1429,7 @@ const Rental = ({
                                         <div>
                                             <label className="mb-1 block text-[0.78rem] text-text-muted">Rencana Kembali</label>
                                             <input
-                                                className={`w-full rounded-lg border bg-bg-main p-2.5 text-text-main outline-none ${durationError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                                                className={`${RENTAL_FIELD_CLASS} ${durationError ? 'border-[#c0392b]' : ''}`}
                                                 type="datetime-local"
                                                 data-rental-field="desktop-rentalEndAt"
                                                 value={rentalTimeRange.endInput}
@@ -1447,7 +1450,7 @@ const Rental = ({
                                     <div>
                                         <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Status Pembayaran</label>
                                         <select
-                                            className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-sm text-text-main outline-none focus:border-accent"
+                                            className={`${RENTAL_FIELD_CLASS} text-sm`}
                                             value={payment.status}
                                             onChange={(e) => handlePaymentStatusChange(e.target.value)}
                                         >
@@ -1458,7 +1461,7 @@ const Rental = ({
                                     <div>
                                         <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Metode</label>
                                         <select
-                                            className="w-full rounded-lg border border-border bg-bg-main p-2.5 text-sm text-text-main outline-none focus:border-accent"
+                                            className={`${RENTAL_FIELD_CLASS} text-sm`}
                                             value={payment.method}
                                             onChange={(e) => handlePaymentMethodChange(e.target.value)}
                                         >
@@ -1473,7 +1476,7 @@ const Rental = ({
                                     <div className="mb-4">
                                         <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Nominal DP</label>
                                         <input
-                                            className={`w-full rounded-lg border bg-bg-main p-2.5 text-text-main outline-none ${paymentError ? 'border-[#e74c3c]' : 'border-border focus:border-accent'}`}
+                                            className={`${RENTAL_FIELD_CLASS} ${paymentError ? 'border-[#c0392b]' : ''}`}
                                             type="text"
                                             inputMode="numeric"
                                             data-rental-field="desktop-paymentAmount"
@@ -1486,17 +1489,17 @@ const Rental = ({
                                 )}
                             </div>
 
-                            <div className="mt-4 rounded-lg border border-accent/20 bg-accent/10 p-4 sm:p-5">
+                            <div className="mt-4 rounded-md border border-[#146c43] bg-white p-4 sm:p-5">
                                 <div className="mb-1 flex items-center justify-between gap-3">
                                     <span className="text-text-muted text-[0.9rem]">Total Bayar</span>
                                     <span className="text-text-muted text-[0.7rem] uppercase tracking-tighter">({effectiveDuration} Hari)</span>
                                 </div>
-                                <h3 className="text-[1.5rem] font-bold text-accent sm:text-[1.8rem]">Rp {totalAmount.toLocaleString()}</h3>
+                                <h3 className="text-[1.5rem] font-bold text-[#146c43] sm:text-[1.8rem]">Rp {totalAmount.toLocaleString()}</h3>
                                 <p className="mt-1 text-xs text-text-muted">Terbayar: Rp {computedPaidAmount.toLocaleString()} • Sisa: Rp {remainingAmount.toLocaleString()}</p>
                                 <button
                                     type="button"
                                     disabled={isSubmitting}
-                                    className="w-full bg-accent text-white py-4 rounded-lg font-bold flex items-center justify-center gap-3 transition-all hover:bg-accent-hover shadow-[0_4px_15px_rgba(230,126,34,0.4)] mt-4 group disabled:opacity-60"
+                                    className={`mt-4 flex items-center justify-center gap-3 py-4 ${RENTAL_PRIMARY_BUTTON_CLASS}`}
                                     onClick={handleOpenFinalReview}
                                 >
                                     <i className="fas fa-shopping-cart group-hover:animate-bounce"></i> {isSubmitting ? 'Menyimpan...' : 'Lanjut ke Review'}
@@ -1509,15 +1512,15 @@ const Rental = ({
 
             {isFinalReviewOpen && (
                 <div className="fixed inset-0 z-[95] flex items-end justify-center bg-black/60 p-3 sm:items-center sm:p-5">
-                    <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-sidebar-bg shadow-2xl">
-                        <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
+                    <div className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-md border border-[#d7ded9] bg-white shadow-none">
+                        <div className="flex items-start justify-between gap-3 border-b border-[#d7ded9] px-4 py-3 sm:px-5">
                             <div>
                                 <p className="text-xs uppercase tracking-wide text-text-muted">Tahap Akhir</p>
                                 <h4 className="text-lg font-bold text-text-main">Konfirmasi & Review Sewa</h4>
                             </div>
                             <button
                                 type="button"
-                                className="rounded-md border border-border px-2 py-1 text-xs text-text-main transition hover:border-accent disabled:opacity-60"
+                                className="rounded-md border border-[#cfd8d3] bg-white px-2 py-1 text-xs text-[#10231c] transition hover:border-[#146c43] disabled:opacity-60"
                                 onClick={handleCloseFinalReview}
                                 disabled={isSubmitting}
                             >
@@ -1526,19 +1529,19 @@ const Rental = ({
                         </div>
 
                         <div className="custom-scrollbar max-h-[62vh] space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
-                            <div className="rounded-lg border border-border bg-bg-main/40 p-3">
+                            <div className="rounded-md border border-[#d7ded9] bg-white p-3">
                                 <p className="text-xs uppercase tracking-wide text-text-muted">Penyewa</p>
                                 <p className="mt-1 font-semibold text-text-main">{customer.name || '-'}</p>
                                 <p className="text-sm text-text-muted">{customer.phone || '-'}</p>
                             </div>
 
-                            <div className="rounded-lg border border-border bg-bg-main/40 p-3">
+                            <div className="rounded-md border border-[#d7ded9] bg-white p-3">
                                 <p className="text-xs uppercase tracking-wide text-text-muted">Waktu Sewa</p>
                                 <p className="mt-1 text-sm text-text-main">{formatDateTimeForSummary(rentalStartAt)} - {formatDateTimeForSummary(rentalEndAt)}</p>
                                 <p className="mt-1 text-sm text-text-muted">Durasi: <span className="font-semibold text-text-main">{effectiveDuration} hari</span></p>
                             </div>
 
-                            <div className="rounded-lg border border-border bg-bg-main/40 p-3">
+                            <div className="rounded-md border border-[#d7ded9] bg-white p-3">
                                 <p className="mb-2 text-xs uppercase tracking-wide text-text-muted">Review Barang</p>
                                 <div className="space-y-2">
                                     {cart.map((item) => {
@@ -1546,10 +1549,10 @@ const Rental = ({
                                         const itemQty = Number(item.qty || 0);
                                         const lineTotal = perDay * itemQty * effectiveDuration;
                                         return (
-                                            <div key={`review-${item.id}`} className="rounded-md border border-border/70 bg-sidebar-bg/70 p-2.5">
+                                            <div key={`review-${item.id}`} className="rounded-md border border-[#d7ded9] bg-white p-2.5">
                                                 <div className="flex items-start justify-between gap-3">
                                                     <p className="text-sm font-semibold text-text-main">{item.name}</p>
-                                                    <p className="text-sm font-bold text-accent">{formatCurrency(lineTotal)}</p>
+                                                    <p className="text-sm font-bold text-[#146c43]">{formatCurrency(lineTotal)}</p>
                                                 </div>
                                                 <p className="mt-1 text-xs text-text-muted">
                                                     {itemQty} x {formatCurrency(perDay)} x {effectiveDuration} hari
@@ -1560,7 +1563,7 @@ const Rental = ({
                                 </div>
                             </div>
 
-                            <div className="rounded-lg border border-accent/30 bg-accent/10 p-3">
+                            <div className="rounded-md border border-[#146c43] bg-white p-3">
                                 <div className="flex items-center justify-between text-sm text-text-muted">
                                     <span>Status Pembayaran</span>
                                     <span className="font-semibold text-text-main">{payment.status}</span>
@@ -1577,18 +1580,18 @@ const Rental = ({
                                     <span>Sisa</span>
                                     <span className="font-semibold text-text-main">{formatCurrency(remainingAmount)}</span>
                                 </div>
-                                <div className="mt-3 border-t border-accent/20 pt-3">
+                                <div className="mt-3 border-t border-[#d7ded9] pt-3">
                                     <div className="flex items-center justify-between">
                                         <span className="text-sm text-text-muted">Total Sewa</span>
-                                        <span className="text-lg font-bold text-accent">{formatCurrency(totalAmount)}</span>
+                                        <span className="text-lg font-bold text-[#146c43]">{formatCurrency(totalAmount)}</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-bg-main/40 p-3">
+                            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-[#d7ded9] bg-white p-3">
                                 <input
                                     type="checkbox"
-                                    className="mt-0.5 h-4 w-4 accent-accent"
+                                    className="mt-0.5 h-4 w-4 accent-[#146c43]"
                                     checked={isFinalReviewChecked}
                                     onChange={(event) => setIsFinalReviewChecked(event.target.checked)}
                                     disabled={isSubmitting}
@@ -1599,7 +1602,7 @@ const Rental = ({
                             </label>
                         </div>
 
-                        <div className="border-t border-border px-4 py-3 sm:px-5">
+                        <div className="border-t border-[#d7ded9] px-4 py-3 sm:px-5">
                             {!isFinalReviewChecked && !isSubmitting && (
                                 <p className="mb-2 text-xs text-text-muted">
                                     Centang konfirmasi review terlebih dahulu untuk melanjutkan.
@@ -1608,7 +1611,7 @@ const Rental = ({
                             <div className="grid grid-cols-2 gap-3">
                             <button
                                 type="button"
-                                className="rounded-lg border border-border py-3 text-sm font-semibold text-text-main transition hover:border-accent disabled:opacity-60"
+                                className={`${RENTAL_SECONDARY_BUTTON_CLASS} disabled:opacity-60`}
                                 onClick={handleCloseFinalReview}
                                 disabled={isSubmitting}
                             >
@@ -1616,7 +1619,7 @@ const Rental = ({
                             </button>
                             <button
                                 type="button"
-                                className="rounded-lg bg-accent py-3 text-sm font-bold text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                                className={`${RENTAL_PRIMARY_BUTTON_CLASS} disabled:opacity-60`}
                                 onClick={handleConfirmCheckout}
                                 disabled={isSubmitting || !isFinalReviewChecked}
                             >
