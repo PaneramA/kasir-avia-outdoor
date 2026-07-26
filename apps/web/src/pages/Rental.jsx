@@ -84,8 +84,8 @@ const Rental = ({
     const [customer, setCustomer] = useState(INITIAL_CUSTOMER);
     const [duration, setDuration] = useState(1);
     const [rentalTimeRange, setRentalTimeRange] = useState(() => getDefaultRentalTimeRange());
-    const [customerSearch, setCustomerSearch] = useState('');
     const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState('');
+    const [selectedCustomerId, setSelectedCustomerId] = useState(null);
     const [payment, setPayment] = useState(INITIAL_PAYMENT);
     const [mobileStep, setMobileStep] = useState(1);
     const [customerErrors, setCustomerErrors] = useState(INITIAL_CUSTOMER_ERRORS);
@@ -149,11 +149,16 @@ const Rental = ({
     }, [categoryFilter, safeCategories]);
 
     useEffect(() => {
-        const keyword = customerSearch.trim();
+        if (selectedCustomerId) {
+            setDebouncedCustomerSearch('');
+            return undefined;
+        }
+
+        const keyword = customer.name.trim();
         const timeoutId = setTimeout(() => setDebouncedCustomerSearch(keyword), 250);
 
         return () => clearTimeout(timeoutId);
-    }, [customerSearch]);
+    }, [customer.name, selectedCustomerId]);
 
     const customerSuggestionQuery = useSWR(
         debouncedCustomerSearch.length >= 2 ? APP_CACHE_KEYS.customers(debouncedCustomerSearch) : null,
@@ -236,6 +241,7 @@ const Rental = ({
 
         setCustomer(normalizedCustomer);
         setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
+        setSelectedCustomerId(null);
         const draftStartAt = toDate(draftPayload.rentalStartAt || draftPayload.date);
         const draftEndAt = toDate(draftPayload.rentalEndAt);
         if (draftStartAt && draftEndAt) {
@@ -805,7 +811,7 @@ const Rental = ({
             clearSavedDraft();
             setCustomer(INITIAL_CUSTOMER);
             setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
-            setCustomerSearch('');
+            setSelectedCustomerId(null);
             setDebouncedCustomerSearch('');
             setDuration(1);
             setRentalTimeRange(getDefaultRentalTimeRange());
@@ -885,13 +891,14 @@ const Rental = ({
             idNumber: sanitizeDigits(pickedCustomer.idNumber || ''),
         });
         setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
-        setCustomerSearch('');
+        setSelectedCustomerId(pickedCustomer.id || null);
         setDebouncedCustomerSearch('');
         setMobileStepHint('');
     };
 
     const handleNameChange = (value) => {
         setCustomer((previous) => ({ ...previous, name: value }));
+        setSelectedCustomerId(null);
         setMobileStepHint('');
         if (customerErrors.name) {
             setCustomerErrors((previous) => ({ ...previous, name: '' }));
@@ -984,13 +991,17 @@ const Rental = ({
         return (
             <>
             <div className="form-group relative">
-                <label className="block mb-1.5 text-[0.85rem] text-text-muted">Cari Customer Lama</label>
+                <label htmlFor={`${layout}-customer-name`} className="block mb-1.5 text-[0.85rem] text-text-muted">Nama Customer</label>
                 <input
-                    className={RENTAL_FIELD_CLASS}
+                    id={`${layout}-customer-name`}
+                    className={`${RENTAL_FIELD_CLASS} ${customerErrors.name ? 'border-[#c0392b]' : ''}`}
                     type="text"
-                    placeholder="Ketik nama / nomor HP..."
-                    value={customerSearch}
-                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    data-rental-field={`${layout}-name`}
+                    aria-invalid={Boolean(customerErrors.name)}
+                    aria-describedby={customerErrors.name ? nameErrorId : undefined}
+                    placeholder="Ketik nama customer..."
+                    value={customer.name}
+                    onChange={(e) => handleNameChange(e.target.value)}
                 />
                 {isSearchingCustomer && (
                     <p className="text-xs text-text-muted mt-1">Mencari customer...</p>
@@ -1012,20 +1023,6 @@ const Rental = ({
                         ))}
                     </div>
                 )}
-            </div>
-
-            <div className="form-group">
-                <label className="block mb-1.5 text-[0.85rem] text-text-muted">Nama Pelanggan</label>
-                <input
-                    className={`${RENTAL_FIELD_CLASS} ${customerErrors.name ? 'border-[#c0392b]' : ''}`}
-                    type="text"
-                    data-rental-field={`${layout}-name`}
-                    aria-invalid={Boolean(customerErrors.name)}
-                    aria-describedby={customerErrors.name ? nameErrorId : undefined}
-                    placeholder="Nama lengkap..."
-                    value={customer.name}
-                    onChange={(e) => handleNameChange(e.target.value)}
-                />
                 {customerErrors.name && <p id={nameErrorId} className="mt-1 text-xs text-[#e74c3c]">{customerErrors.name}</p>}
             </div>
             <div className="form-group">

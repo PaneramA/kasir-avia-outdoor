@@ -2,9 +2,10 @@
 
 import '@testing-library/jest-dom/vitest';
 import React, { useState } from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchCustomers } from '../lib/api';
 import Rental from './Rental.jsx';
 
 vi.mock('../lib/api', () => ({
@@ -74,6 +75,8 @@ function renderRental() {
 beforeEach(() => {
   window.localStorage.clear();
   vi.stubGlobal('alert', vi.fn());
+  fetchCustomers.mockReset();
+  fetchCustomers.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -176,5 +179,34 @@ describe('Rental page item picker', () => {
     renderRental();
 
     expect(screen.queryByText(/shortcut desktop/i)).not.toBeInTheDocument();
+  });
+
+  it('uses Nama Customer as the only customer lookup field and autofills an existing customer', async () => {
+    fetchCustomers.mockResolvedValue([
+      {
+        id: 'customer-1',
+        name: 'Ayu Pratiwi',
+        phone: '08123456789',
+        address: 'Jl. Merapi No. 7',
+        guarantee: 'SIM',
+        idNumber: '123456789',
+      },
+    ]);
+
+    renderRental();
+
+    expect(screen.queryByLabelText(/cari customer lama/i)).not.toBeInTheDocument();
+
+    const nameInputs = screen.getAllByLabelText(/nama customer/i);
+    fireEvent.change(nameInputs[0], { target: { value: 'Ayu' } });
+
+    await waitFor(() => expect(fetchCustomers).toHaveBeenCalledWith('Ayu'));
+    const matchingCustomers = await screen.findAllByRole('button', { name: /ayu pratiwi/i });
+    fireEvent.click(matchingCustomers[0]);
+
+    expect(nameInputs[0]).toHaveValue('Ayu Pratiwi');
+    expect(screen.getAllByDisplayValue('08123456789').length).toBeGreaterThan(0);
+    expect(screen.getAllByDisplayValue('Jl. Merapi No. 7').length).toBeGreaterThan(0);
+    expect(screen.getAllByDisplayValue('123456789').length).toBeGreaterThan(0);
   });
 });
