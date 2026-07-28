@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "busboy": "^1.6.0",
     "jsonwebtoken": "^9.0.3",
     "sharp": "^0.35.3",
     "zod": "^4.4.3"

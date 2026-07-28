@@ -3,7 +3,7 @@ import useSWRInfinite from 'swr/infinite';
 import ItemModal from '../components/ItemModal';
 import CategoryModal from '../components/CategoryModal';
 import ViewModeToggle from '../components/ViewModeToggle';
-import { fetchItemsPage } from '../lib/api';
+import { fetchItemsPage, resolveApiAssetUrl, uploadItemImage } from '../lib/api';
 import { APP_CACHE_KEYS } from '../lib/appCache';
 
 const INVENTORY_VIEW_STORAGE_KEY = 'avia_inventory_view_mode';
@@ -462,7 +462,7 @@ const Inventory = ({
                                 <div className="relative h-[160px] overflow-hidden bg-bg-main sm:h-[180px]">
                                     <img
                                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                                        src={item.image || 'https://via.placeholder.com/300x200?text=No+Image'}
+                                        src={resolveApiAssetUrl(item.image) || 'https://via.placeholder.com/300x200?text=No+Image'}
                                         alt={item.name}
                                     />
                                     <span className={`absolute right-[10px] top-[10px] rounded-md px-3 py-[5px] text-[0.72rem] font-bold uppercase ${inventoryStatus === 'archived' ? 'bg-[#6b7280] text-white' : item.stock > 0 ? 'bg-accent text-white' : 'bg-red-600 text-white'}`}>
@@ -506,7 +506,7 @@ const Inventory = ({
                                     <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md bg-bg-main sm:h-20 sm:w-20">
                                         <img
                                             className="h-full w-full object-cover"
-                                            src={item.image || 'https://via.placeholder.com/160?text=No+Image'}
+                                            src={resolveApiAssetUrl(item.image) || 'https://via.placeholder.com/160?text=No+Image'}
                                             alt={item.name}
                                         />
                                     </div>
@@ -566,6 +566,8 @@ const Inventory = ({
                     editingItem={editingItem}
                     categories={categories}
                     onSaveItem={onSaveItem}
+                    onUploadItemImage={uploadItemImage}
+                    resolveImageUrl={resolveApiAssetUrl}
                 />
             )}
 

@@ -31,6 +31,7 @@ describe('environment configuration', () => {
     expect(env.loginRateLimitMaxBuckets).toBe(10_000);
     expect(env.trustProxy).toBe(false);
     expect(env.host).toBe('0.0.0.0');
+    expect(env.itemImageUploadLimitBytes).toBe(8_388_608);
     expect(env.itemImageStorageDir).toBe('uploads/item-images');
     expect(env.publicUploadsBaseUrl).toBe('/uploads/item-images');
   });
@@ -59,6 +60,7 @@ describe('environment configuration', () => {
     process.env.SERVER_MAX_REQUESTS_PER_SOCKET = '500';
     process.env.TRUST_PROXY = 'true';
     process.env.ALLOW_INSECURE_LOOPBACK_CORS = 'true';
+    process.env.ITEM_IMAGE_UPLOAD_LIMIT_BYTES = '4194304';
     process.env.ITEM_IMAGE_STORAGE_DIR = '/var/lib/avia/uploads/items';
     process.env.PUBLIC_UPLOADS_BASE_URL = 'https://cdn.example.test/items';
 
@@ -76,6 +78,7 @@ describe('environment configuration', () => {
     expect(env.serverMaxRequestsPerSocket).toBe(500);
     expect(env.trustProxy).toBe(true);
     expect(env.allowInsecureLoopbackCors).toBe(true);
+    expect(env.itemImageUploadLimitBytes).toBe(4_194_304);
     expect(env.itemImageStorageDir).toBe('/var/lib/avia/uploads/items');
     expect(env.publicUploadsBaseUrl).toBe('https://cdn.example.test/items');
   });
