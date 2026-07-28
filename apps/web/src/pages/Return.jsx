@@ -4,6 +4,14 @@ import { formatLateDuration, getDailyRate, getLateDurationMs, getPlannedReturnDa
 
 const formatCurrency = (value) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 
+const RETURN_STATUS_FILTERS = [
+    { value: 'all', label: 'Semua' },
+    { value: 'overdue', label: 'Terlambat' },
+    { value: 'dueToday', label: 'Hari Ini' },
+    { value: 'upcoming', label: 'Akan Datang' },
+    { value: 'unpaid', label: 'Belum Lunas' },
+];
+
 const getPaymentInfo = (rental) => {
     const status = String(rental?.payment?.status || 'LUNAS').toUpperCase();
     const paidAmount = Number(rental?.payment?.paidAmount ?? rental?.total ?? 0) || 0;
@@ -21,6 +29,7 @@ const getPaymentInfo = (rental) => {
 
 const Return = ({ rentals, onProcessReturn }) => {
     const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
     const [selectedRental, setSelectedRental] = useState(null);
     const [returnNotes, setReturnNotes] = useState('');
     const [additionalFeeInput, setAdditionalFeeInput] = useState('0');
@@ -60,12 +69,31 @@ const Return = ({ rentals, onProcessReturn }) => {
         return map;
     }, [activeRentals, todayDateKey]);
 
-    const filteredRentals = useMemo(() => activeRentals
-        .filter((r) => (
-            (r.customer?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
-            || String(r.id || '').toLowerCase().includes(searchQuery.toLowerCase())
-        ))
-        .sort((a, b) => {
+    const filteredRentals = useMemo(() => {
+        const keyword = searchQuery.trim().toLowerCase();
+
+        return activeRentals
+            .filter((rental) => {
+                const payment = getPaymentInfo(rental);
+                const dueStatus = rentalDueMetaById.get(rental.id)?.dueStatus || 'unknown';
+                const itemNames = rental.items
+                    .map((item) => String(item?.name || '').toLowerCase())
+                    .join(' ');
+                const searchableText = [
+                    rental.customer?.name,
+                    rental.customer?.phone,
+                    rental.id,
+                    itemNames,
+                ].map((value) => String(value || '').toLowerCase()).join(' ');
+
+                const matchesKeyword = !keyword || searchableText.includes(keyword);
+                const matchesFilter = statusFilter === 'all'
+                    || (statusFilter === 'unpaid' && payment.isUnpaid)
+                    || (statusFilter !== 'unpaid' && dueStatus === statusFilter);
+
+                return matchesKeyword && matchesFilter;
+            })
+            .sort((a, b) => {
             const aMeta = rentalDueMetaById.get(a.id);
             const bMeta = rentalDueMetaById.get(b.id);
             const priorityRank = {
@@ -88,7 +116,8 @@ const Return = ({ rentals, onProcessReturn }) => {
             }
 
             return new Date(a.date).getTime() - new Date(b.date).getTime();
-        }), [activeRentals, rentalDueMetaById, searchQuery]);
+        });
+    }, [activeRentals, rentalDueMetaById, searchQuery, statusFilter]);
 
     const overdueCount = useMemo(
         () => filteredRentals.filter((rental) => rentalDueMetaById.get(rental.id)?.dueStatus === 'overdue').length,
@@ -186,15 +215,29 @@ const Return = ({ rentals, onProcessReturn }) => {
                     <h3 className="mb-2 text-[1.1rem] font-bold text-text-main sm:text-[1.2rem]">Daftar Penyewaan Aktif</h3>
                     <p className="mb-4 text-[0.9rem] text-text-muted">Pilih transaksi yang akan diproses pengembaliannya.</p>
 
-                    <div className="relative">
-                        <i className="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-text-muted"></i>
-                        <input
-                            type="text"
-                            className="w-full rounded-md border border-border bg-sidebar-bg py-3 pl-11 pr-4 text-text-main outline-none focus:border-accent"
-                            placeholder="Cari nama pelanggan atau ID Transaksi..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_190px]">
+                        <div className="relative">
+                            <i className="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-text-muted"></i>
+                            <input
+                                type="text"
+                                className="w-full rounded-md border border-border bg-sidebar-bg py-3 pl-11 pr-4 text-text-main outline-none focus:border-accent"
+                                placeholder="Cari customer, nomor HP, ID, atau barang..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+                        <label className="sr-only" htmlFor="return-status-filter">Filter status pengembalian</label>
+                        <select
+                            id="return-status-filter"
+                            aria-label="Filter status pengembalian"
+                            className="w-full rounded-md border border-border bg-sidebar-bg px-3 py-3 text-text-main outline-none focus:border-accent"
+                            value={statusFilter}
+                            onChange={(event) => setStatusFilter(event.target.value)}
+                        >
+                            {RETURN_STATUS_FILTERS.map((filter) => (
+                                <option key={filter.value} value={filter.value}>{filter.label}</option>
+                            ))}
+                        </select>
                     </div>
                 </div>
 
