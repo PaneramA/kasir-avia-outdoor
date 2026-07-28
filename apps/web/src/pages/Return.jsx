@@ -342,7 +342,7 @@ const Return = ({ rentals, onProcessReturn }) => {
                         {!selectedRental ? (
                             <div className="flex min-h-[260px] flex-col items-center justify-center text-text-muted">
                                 <i className="fas fa-hand-holding-box mb-3 text-[2.4rem]"></i>
-                                <p className="text-center text-sm">Pilih transaksi untuk memproses pengembalian.</p>
+                                <p className="text-center text-sm">Pilih transaksi di sebelah kiri untuk memproses pengembalian.</p>
                             </div>
                         ) : (
                             <div className="space-y-5">
