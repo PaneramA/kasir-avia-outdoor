@@ -101,6 +101,8 @@ export function getEnv() {
       process.env.ALLOW_INSECURE_LOOPBACK_CORS,
       false,
     ),
+    itemImageStorageDir: process.env.ITEM_IMAGE_STORAGE_DIR || 'uploads/item-images',
+    publicUploadsBaseUrl: process.env.PUBLIC_UPLOADS_BASE_URL || '/uploads/item-images',
   };
 }
 
