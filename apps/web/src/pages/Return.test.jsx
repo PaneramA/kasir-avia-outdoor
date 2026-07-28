@@ -87,6 +87,25 @@ const upcomingRental = {
   },
 };
 
+const missingItemsRental = {
+  id: 'RTR-004',
+  status: 'Active',
+  date: '2026-07-25T05:00:00.000Z',
+  plannedReturnDate: '2026-07-30T03:00:00.000Z',
+  duration: 1,
+  total: 20000,
+  customer: {
+    name: 'Dewi Anggraini',
+    phone: '081100002222',
+  },
+  payment: {
+    status: 'LUNAS',
+    paidAmount: 20000,
+    totalDue: 20000,
+    remainingAmount: 0,
+  },
+};
+
 function getClassNames(container) {
   return Array.from(container.querySelectorAll('[class]'))
     .map((element) => element.className)
@@ -167,5 +186,80 @@ describe('Return page theme', () => {
 
     expect(screen.getByText('Ayu Pratiwi')).toBeInTheDocument();
     expect(screen.queryByText('Bima Santoso')).not.toBeInTheDocument();
+  });
+
+  it('uses independent desktop scroll regions for the return list and detail panel', () => {
+    render(
+      <Return
+        rentals={[activeOverdueRental, dueTodayRental, upcomingRental]}
+        onProcessReturn={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('return-page-shell').className).toContain('lg:h-[calc(100vh-8rem)]');
+    expect(screen.getByTestId('return-list-panel').className).toContain('min-h-0');
+    expect(screen.getByTestId('return-list-scroll').className).toContain('overflow-y-auto');
+    expect(screen.getByTestId('return-detail-panel').className).toContain('min-h-0');
+    expect(screen.getByTestId('return-detail-scroll').className).toContain('overflow-y-auto');
+  });
+
+  it('keeps the return action area anchored inside the detail panel', () => {
+    render(<Return rentals={[activeOverdueRental]} onProcessReturn={vi.fn()} />);
+
+    fireEvent.click(screen.getByText('Ayu Pratiwi'));
+
+    const actionArea = screen.getByTestId('return-detail-actions');
+    expect(actionArea.className).toContain('border-t');
+    expect(actionArea.className).toContain('bg-white');
+    expect(screen.getByRole('button', { name: /selesaikan pengembalian/i })).toBeInTheDocument();
+  });
+
+  it('orders active rentals by overdue, due today, then upcoming', () => {
+    render(
+      <Return
+        rentals={[upcomingRental, dueTodayRental, activeOverdueRental]}
+        onProcessReturn={vi.fn()}
+      />,
+    );
+
+    const rows = screen.getAllByRole('button').filter((button) => (
+      button.textContent.includes('RTR-')
+    ));
+
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining('Ayu Pratiwi'),
+      expect.stringContaining('Bima Santoso'),
+      expect.stringContaining('Citra Lestari'),
+    ]);
+  });
+
+  it('does not crash when an active rental has no item list', () => {
+    render(
+      <Return
+        rentals={[missingItemsRental]}
+        onProcessReturn={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Dewi Anggraini')).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('Cari customer, nomor HP, ID, atau barang...'), {
+      target: { value: 'Dewi' },
+    });
+    expect(screen.getByText('Dewi Anggraini')).toBeInTheDocument();
+  });
+
+  it('blocks unpaid return processing until settlement is confirmed', () => {
+    const onProcessReturn = vi.fn();
+    vi.stubGlobal('alert', vi.fn());
+    vi.stubGlobal('confirm', vi.fn(() => true));
+
+    render(<Return rentals={[activeOverdueRental]} onProcessReturn={onProcessReturn} />);
+
+    fireEvent.click(screen.getByText('Ayu Pratiwi'));
+    fireEvent.click(screen.getByRole('button', { name: /selesaikan pengembalian/i }));
+
+    expect(onProcessReturn).not.toHaveBeenCalled();
+    expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('masih punya sisa pembayaran'));
+    expect(window.confirm).not.toHaveBeenCalled();
   });
 });
