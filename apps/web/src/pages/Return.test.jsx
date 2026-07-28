@@ -133,6 +133,11 @@ describe('Return page theme', () => {
     expect(classNames).not.toMatch(/#d97706|#ffedd5|#fff3e6|#fff1e5|#c76410|#8f4100|#2ecc71|#27ae60/);
     expect(classNames).not.toContain('shadow-[0_4px_15px');
     expect(classNames).not.toContain('rounded-lg');
+    expect(classNames).not.toContain('backdrop-blur');
+    expect(classNames).not.toContain('bg-accent/5');
+    expect(document.querySelector('img')).toBeNull();
+    expect(screen.getByLabelText(/filter status pengembalian/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Cari customer, nomor HP, ID, atau barang...')).toBeInTheDocument();
 
     const submitButton = screen.getByRole('button', { name: /selesaikan pengembalian/i });
     expect(submitButton.className).toContain('rounded-md');
