@@ -12,6 +12,7 @@
     "db:backfill:access": "node --env-file=.env scripts/backfill-user-access.mjs",
     "db:preflight:production": "node --env-file=.env scripts/production-preflight.mjs",
     "images:audit": "node --env-file=.env scripts/audit-item-images.mjs",
+    "images:backfill": "node --env-file=.env scripts/backfill-item-images.mjs",
     "admin:rotate-credentials": "node --env-file=.env scripts/rotate-admin-credentials.mjs",
     "db:backfill:tenant": "node --env-file=.env scripts/backfill-tenant-scope.mjs",
     "test:tenant-access": "node --env-file=.env scripts/tenant-access-smoke.mjs",
