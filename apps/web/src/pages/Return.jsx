@@ -4,6 +4,14 @@ import { formatLateDuration, getDailyRate, getLateDurationMs, getPlannedReturnDa
 
 const formatCurrency = (value) => `Rp ${Number(value || 0).toLocaleString('id-ID')}`;
 
+const RETURN_STATUS_FILTERS = [
+    { value: 'all', label: 'Semua' },
+    { value: 'overdue', label: 'Terlambat' },
+    { value: 'dueToday', label: 'Hari Ini' },
+    { value: 'upcoming', label: 'Akan Datang' },
+    { value: 'unpaid', label: 'Belum Lunas' },
+];
+
 const getPaymentInfo = (rental) => {
     const status = String(rental?.payment?.status || 'LUNAS').toUpperCase();
     const paidAmount = Number(rental?.payment?.paidAmount ?? rental?.total ?? 0) || 0;
@@ -21,6 +29,7 @@ const getPaymentInfo = (rental) => {
 
 const Return = ({ rentals, onProcessReturn }) => {
     const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
     const [selectedRental, setSelectedRental] = useState(null);
     const [returnNotes, setReturnNotes] = useState('');
     const [additionalFeeInput, setAdditionalFeeInput] = useState('0');
@@ -60,12 +69,32 @@ const Return = ({ rentals, onProcessReturn }) => {
         return map;
     }, [activeRentals, todayDateKey]);
 
-    const filteredRentals = useMemo(() => activeRentals
-        .filter((r) => (
-            (r.customer?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
-            || String(r.id || '').toLowerCase().includes(searchQuery.toLowerCase())
-        ))
-        .sort((a, b) => {
+    const filteredRentals = useMemo(() => {
+        const keyword = searchQuery.trim().toLowerCase();
+
+        return activeRentals
+            .filter((rental) => {
+                const payment = getPaymentInfo(rental);
+                const dueStatus = rentalDueMetaById.get(rental.id)?.dueStatus || 'unknown';
+                const rentalItems = Array.isArray(rental.items) ? rental.items : [];
+                const itemNames = rentalItems
+                    .map((item) => String(item?.name || '').toLowerCase())
+                    .join(' ');
+                const searchableText = [
+                    rental.customer?.name,
+                    rental.customer?.phone,
+                    rental.id,
+                    itemNames,
+                ].map((value) => String(value || '').toLowerCase()).join(' ');
+
+                const matchesKeyword = !keyword || searchableText.includes(keyword);
+                const matchesFilter = statusFilter === 'all'
+                    || (statusFilter === 'unpaid' && payment.isUnpaid)
+                    || (statusFilter !== 'unpaid' && dueStatus === statusFilter);
+
+                return matchesKeyword && matchesFilter;
+            })
+            .sort((a, b) => {
             const aMeta = rentalDueMetaById.get(a.id);
             const bMeta = rentalDueMetaById.get(b.id);
             const priorityRank = {
@@ -75,8 +104,8 @@ const Return = ({ rentals, onProcessReturn }) => {
                 unknown: 3,
             };
 
-            const priorityDiff = (priorityRank[aMeta?.dueStatus || 'unknown'] || 99)
-                - (priorityRank[bMeta?.dueStatus || 'unknown'] || 99);
+            const priorityDiff = (priorityRank[aMeta?.dueStatus || 'unknown'] ?? 99)
+                - (priorityRank[bMeta?.dueStatus || 'unknown'] ?? 99);
             if (priorityDiff !== 0) {
                 return priorityDiff;
             }
@@ -88,7 +117,8 @@ const Return = ({ rentals, onProcessReturn }) => {
             }
 
             return new Date(a.date).getTime() - new Date(b.date).getTime();
-        }), [activeRentals, rentalDueMetaById, searchQuery]);
+        });
+    }, [activeRentals, rentalDueMetaById, searchQuery, statusFilter]);
 
     const overdueCount = useMemo(
         () => filteredRentals.filter((rental) => rentalDueMetaById.get(rental.id)?.dueStatus === 'overdue').length,
@@ -101,6 +131,10 @@ const Return = ({ rentals, onProcessReturn }) => {
 
     const selectedPayment = useMemo(
         () => getPaymentInfo(selectedRental),
+        [selectedRental],
+    );
+    const selectedRentalItems = useMemo(
+        () => (Array.isArray(selectedRental?.items) ? selectedRental.items : []),
         [selectedRental],
     );
     const selectedLateMs = useMemo(
@@ -180,245 +214,274 @@ const Return = ({ rentals, onProcessReturn }) => {
     };
 
     return (
-        <div className="flex flex-col gap-6 pt-0 pb-4 lg:flex-row lg:gap-[30px] lg:pb-5">
-            <div className="flex flex-1 flex-col">
-                <div className="mb-5">
-                    <h3 className="mb-2 text-[1.1rem] font-bold text-text-main sm:text-[1.2rem]">Daftar Penyewaan Aktif</h3>
-                    <p className="mb-4 text-[0.9rem] text-text-muted">Pilih transaksi yang akan diproses pengembaliannya.</p>
-
-                    <div className="relative">
-                        <i className="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-text-muted"></i>
-                        <input
-                            type="text"
-                            className="w-full rounded-md border border-border bg-sidebar-bg py-3 pl-11 pr-4 text-text-main outline-none focus:border-accent"
-                            placeholder="Cari nama pelanggan atau ID Transaksi..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                    </div>
-                </div>
-
-                {(overdueCount > 0 || dueTodayCount > 0) && (
-                    <div className="mb-4 space-y-2">
-                        {overdueCount > 0 && (
-                            <div className="rounded-md border border-[#dc2626] bg-[#fee2e2] px-3 py-2 text-sm text-[#991b1b]">
-                                <i className="fas fa-triangle-exclamation mr-2"></i>
-                                Ada <strong>{overdueCount}</strong> transaksi terlambat yang harus diprioritaskan.
-                            </div>
-                        )}
-                        {dueTodayCount > 0 && (
-                            <div className="rounded-md border border-accent bg-card-bg px-3 py-2 text-sm text-text-main">
-                                <i className="fas fa-clock mr-2"></i>
-                                Ada <strong>{dueTodayCount}</strong> transaksi jatuh tempo hari ini.
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto pr-1 sm:pr-2">
-                    {filteredRentals.length === 0 ? (
-                        <div className="rounded-md border border-dashed border-border bg-card-bg py-10 text-center text-text-muted">
-                            Tidak ada data penyewaan aktif yang ditemukan.
-                        </div>
-                    ) : (
-                        filteredRentals.map((rental) => {
-                            const payment = getPaymentInfo(rental);
-                            const dueMeta = rentalDueMetaById.get(rental.id);
-                            const dueStatus = dueMeta?.dueStatus || 'unknown';
-                            return (
-                                <div
-                                    key={rental.id}
-                                    className={`cursor-pointer rounded-md border bg-card-bg p-4 transition-colors hover:border-accent ${selectedRental?.id === rental.id ? 'border-accent bg-surface-hover' : 'border-border'}`}
-                                    onClick={() => handleSelectRental(rental)}
-                                >
-                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                        <div className="min-w-0">
-                                            <div className="mb-1 flex flex-wrap items-center gap-2 sm:gap-3">
-                                                <h4 className="font-bold text-text-main">{rental.customer.name}</h4>
-                                                <span className="rounded border border-border bg-sidebar-bg px-2 py-0.5 text-xs text-text-muted">{rental.id}</span>
-                                                {dueStatus === 'overdue' && (
-                                                    <span className="rounded border border-[#dc2626] bg-[#fee2e2] px-2 py-0.5 text-xs font-semibold text-[#991b1b]">
-                                                        Terlambat
-                                                    </span>
-                                                )}
-                                                {dueStatus === 'dueToday' && (
-                                                    <span className="rounded border border-accent bg-accent px-2 py-0.5 text-xs font-semibold text-white">
-                                                        Kembali Hari Ini
-                                                    </span>
-                                                )}
-                                                {payment.isUnpaid && (
-                                                    <span className="rounded border border-accent bg-card-bg px-2 py-0.5 text-xs font-semibold text-accent">
-                                                        Belum Lunas
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="text-[0.85rem] text-text-muted">
-                                                {rental.items.length} Barang &bull; {rental.duration} Hari
-                                            </div>
-                                            <div className="mt-1 text-[0.8rem] text-text-muted sm:max-w-[400px]">
-                                                {rental.items.map((i) => `${i.name} (${i.qty})`).join(', ')}
-                                            </div>
-                                            <div className="mt-1 text-[0.78rem] text-text-muted">
-                                                Rencana Kembali: {dueMeta?.dueDate ? formatJakartaDateLabel(dueMeta.dueDate, true) : '-'}
-                                            </div>
-                                        </div>
-                                        <div className="text-left sm:text-right">
-                                            <div className="mb-1 font-bold text-accent">{formatCurrency(rental.total)}</div>
-                                            <div className="text-[0.75rem] text-text-muted">
-                                                {new Date(rental.date).toLocaleDateString('id-ID')}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })
-                    )}
-                </div>
-            </div>
-
-            <div className="w-full lg:w-[450px]">
-                <div className="custom-scrollbar flex max-h-full flex-col overflow-y-auto rounded-md border border-border bg-sidebar-bg p-4 sm:p-6 lg:sticky lg:top-5 lg:max-h-[calc(100vh-2.5rem)]">
-                    <h4 className="mb-4 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.1rem]">
-                        Proses Pengembalian
-                    </h4>
-
-                    {!selectedRental ? (
-                        <div className="flex flex-1 flex-col items-center justify-center py-10 text-text-muted opacity-50">
-                            <i className="fas fa-hand-holding-box mb-4 text-[3rem]"></i>
-                            <p className="text-center text-sm">Pilih transaksi di sebelah kiri<br />untuk memproses pengembalian.</p>
-                        </div>
-                    ) : (
-                        <div className="flex flex-1 flex-col space-y-5">
-                            {selectedPayment.isUnpaid && (
-                                <div className="rounded-md border border-accent bg-card-bg p-3 text-sm text-text-main">
-                                    Customer ini belum lunas. Sisa pembayaran saat ini: <strong>{formatCurrency(selectedPayment.remainingAmount + additionalFeeValue)}</strong>
-                                </div>
-                            )}
-
-                            <div className="rounded-md border border-border bg-bg-main p-4">
-                                <div className="mb-2 flex justify-between gap-3">
-                                    <span className="text-[0.85rem] text-text-muted">ID Transaksi</span>
-                                    <span className="font-mono text-[0.85rem] text-text-main">{selectedRental.id}</span>
-                                </div>
-                                <div className="mb-2 flex justify-between gap-3">
-                                    <span className="text-[0.85rem] text-text-muted">Pelanggan</span>
-                                    <span className="text-right font-semibold text-text-main">{selectedRental.customer.name}</span>
-                                </div>
-                                <div className="mb-2 flex justify-between gap-3">
-                                    <span className="text-[0.85rem] text-text-muted">No. HP</span>
-                                    <span className="text-right text-[0.85rem] text-text-main">{selectedRental.customer.phone}</span>
-                                </div>
-                                <div className="mb-2 flex justify-between gap-3">
-                                    <span className="text-[0.85rem] text-text-muted">Rencana Kembali</span>
-                                    <span className="text-right text-[0.85rem] text-text-main">
-                                        {getPlannedReturnDate(selectedRental)?.toLocaleString('id-ID') || '-'}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between gap-3">
-                                    <span className="text-[0.85rem] text-text-muted">Durasi Sewa</span>
-                                    <span className="text-right text-[0.85rem] text-text-main">{selectedRental.duration} Hari</span>
-                                </div>
-                            </div>
-
+        <div data-testid="return-page-shell" className="flex min-h-0 flex-col gap-4 pb-4 lg:h-[calc(100vh-8rem)] lg:overflow-hidden">
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
+                <section data-testid="return-list-panel" className="flex min-h-0 flex-col rounded-md border border-border bg-white">
+                    <div className="border-b border-border bg-white p-3 sm:p-4">
+                        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                             <div>
-                                <h5 className="mb-3 text-[0.9rem] font-bold text-text-main">Barang yang Dikembalikan</h5>
-                                <div className="max-h-[200px] space-y-2 overflow-y-auto pr-1 sm:pr-2">
-                                    {selectedRental.items.map((item, idx) => (
-                                        <div key={idx} className="flex items-start justify-between gap-2 rounded border border-border bg-bg-main p-3">
-                                            <div className="flex min-w-0 flex-col">
-                                                <span className="text-[0.9rem] text-text-main">{item.name}</span>
-                                                {item.notes && <span className="mt-0.5 text-[0.75rem] italic text-text-muted"><i className="fas fa-info-circle mr-1"></i>{item.notes}</span>}
-                                            </div>
-                                            <span className="shrink-0 rounded border border-border bg-sidebar-bg px-2 py-1 text-[0.85rem] font-bold">
-                                                Qty: {item.qty}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
+                                <h3 className="text-[1rem] font-bold text-text-main sm:text-[1.1rem]">Daftar Penyewaan Aktif</h3>
+                                <p className="mt-1 text-[0.85rem] text-text-muted">Urut dari jatuh tempo paling mendesak.</p>
                             </div>
-
-                            <div className="my-2 h-[1px] bg-border"></div>
-
-                            <div className="space-y-4">
-                                {isLate && (
-                                    <div className="rounded-md border border-accent bg-card-bg p-3 text-sm text-text-main">
-                                        Terlambat <strong>{lateDurationLabel}</strong>. Default denda 1 hari: <strong>{formatCurrency(selectedDailyRate)}</strong>
-                                    </div>
-                                )}
-
-                                <div>
-                                    <label className="mb-2 flex items-start gap-2 text-[0.85rem] text-text-muted">
-                                        <input
-                                            type="checkbox"
-                                            className="mt-0.5 accent-accent"
-                                            checked={applyLateFee}
-                                            onChange={(event) => handleToggleLateFee(event.target.checked)}
-                                            disabled={!isLate}
-                                        />
-                                        Terapkan denda keterlambatan 1 hari (bisa diubah manual di kolom nominal)
-                                    </label>
-                                    <div className="relative">
-                                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[0.9rem] font-bold text-text-muted">Rp</span>
-                                        <input
-                                            type="number"
-                                            className="w-full rounded-md border border-border bg-bg-main p-2.5 pl-10 text-text-main outline-none focus:border-accent"
-                                            placeholder="0"
-                                            value={additionalFeeInput}
-                                            onChange={(e) => setAdditionalFeeInput(e.target.value)}
-                                            min="0"
-                                        />
-                                    </div>
-                                </div>
-
-                                {selectedPayment.isUnpaid && (
-                                    <label className="flex items-start gap-2 rounded-md border border-accent bg-card-bg p-3 text-[0.85rem] text-text-main">
-                                        <input
-                                            type="checkbox"
-                                            className="mt-0.5 accent-accent"
-                                            checked={settleRemainingPayment}
-                                            onChange={(event) => setSettleRemainingPayment(event.target.checked)}
-                                        />
-                                        <span>
-                                            Saya konfirmasi customer sudah melunasi sisa pembayaran sebesar <strong>{formatCurrency(selectedPayment.remainingAmount + additionalFeeValue)}</strong>.
-                                        </span>
-                                    </label>
-                                )}
-
-                                <div>
-                                    <label className="mb-1.5 block text-[0.85rem] text-text-muted">Catatan Pengembalian (Opsional)</label>
-                                    <textarea
-                                        className="min-h-[90px] w-full resize-none rounded-md border border-border bg-bg-main p-2.5 text-[0.85rem] text-text-main outline-none focus:border-accent"
-                                        placeholder="Catat kondisi barang kembali (kotor, rusak, dll)..."
-                                        value={returnNotes}
-                                        onChange={(e) => setReturnNotes(e.target.value)}
-                                    ></textarea>
-                                </div>
-                            </div>
-
-                            <div className="mt-auto border-t border-border pt-4">
-                                <div className="mb-4 flex items-center justify-between gap-3">
-                                    <span className="text-[0.9rem] text-text-muted sm:text-[0.95rem]">Total Pembayaran Akhir</span>
-                                    <span className="text-[1.2rem] font-bold text-accent sm:text-[1.4rem]">
-                                        {formatCurrency(selectedRental.total + additionalFeeValue)}
+                            <div className="flex flex-wrap gap-2 text-xs text-text-muted">
+                                {overdueCount > 0 && (
+                                    <span className="border border-[#dc2626] bg-white px-2 py-1 font-semibold text-[#991b1b]">
+                                        Terlambat {overdueCount}
                                     </span>
-                                </div>
-                                <button
-                                    disabled={isSubmitting}
-                                    className="flex w-full items-center justify-center gap-2 rounded-md bg-accent py-3.5 font-bold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
-                                    onClick={processRentalReturn}
-                                >
-                                    <i className="fas fa-check-circle"></i> {isSubmitting ? 'Memproses...' : 'Selesaikan Pengembalian'}
-                                </button>
-                                <button
-                                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-card-bg py-2.5 font-semibold text-text-muted transition-colors hover:bg-surface-hover hover:text-text-main"
-                                    onClick={() => setSelectedRental(null)}
-                                >
-                                    Batal
-                                </button>
+                                )}
+                                {dueTodayCount > 0 && (
+                                    <span className="border border-accent bg-white px-2 py-1 font-semibold text-accent">
+                                        Hari ini {dueTodayCount}
+                                    </span>
+                                )}
                             </div>
                         </div>
+
+                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_190px]">
+                            <div className="relative">
+                                <i className="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-text-muted"></i>
+                                <input
+                                    type="text"
+                                    className="w-full rounded-md border border-border bg-white py-3 pl-11 pr-4 text-text-main outline-none focus:border-accent"
+                                    placeholder="Cari customer, nomor HP, ID, atau barang..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                            </div>
+                            <label className="sr-only" htmlFor="return-status-filter">Filter status pengembalian</label>
+                            <select
+                                id="return-status-filter"
+                                aria-label="Filter status pengembalian"
+                                className="w-full rounded-md border border-border bg-white px-3 py-3 text-text-main outline-none focus:border-accent"
+                                value={statusFilter}
+                                onChange={(event) => setStatusFilter(event.target.value)}
+                            >
+                                {RETURN_STATUS_FILTERS.map((filter) => (
+                                    <option key={filter.value} value={filter.value}>{filter.label}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div data-testid="return-list-scroll" className="custom-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto p-3 sm:p-4">
+                        {filteredRentals.length === 0 ? (
+                            <div className="rounded-md border border-dashed border-border bg-white py-10 text-center text-text-muted">
+                                Tidak ada data penyewaan aktif yang ditemukan.
+                            </div>
+                        ) : (
+                            filteredRentals.map((rental) => {
+                                const payment = getPaymentInfo(rental);
+                                const dueMeta = rentalDueMetaById.get(rental.id);
+                                const dueStatus = dueMeta?.dueStatus || 'unknown';
+                                const rentalItems = Array.isArray(rental.items) ? rental.items : [];
+                                return (
+                                    <button
+                                        key={rental.id}
+                                        type="button"
+                                        className={`block w-full rounded-md border bg-white p-3 text-left transition-colors hover:border-accent ${selectedRental?.id === rental.id ? 'border-accent bg-surface-hover' : 'border-border'}`}
+                                        onClick={() => handleSelectRental(rental)}
+                                    >
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div className="min-w-0">
+                                                <div className="mb-1 flex flex-wrap items-center gap-2">
+                                                    <h4 className="font-bold text-text-main">{rental.customer.name}</h4>
+                                                    <span className="border border-border bg-white px-2 py-0.5 text-xs text-text-muted">{rental.id}</span>
+                                                    {dueStatus === 'overdue' && (
+                                                        <span className="border border-[#dc2626] bg-[#fee2e2] px-2 py-0.5 text-xs font-semibold text-[#991b1b]">
+                                                            Terlambat
+                                                        </span>
+                                                    )}
+                                                    {dueStatus === 'dueToday' && (
+                                                        <span className="border border-accent bg-accent px-2 py-0.5 text-xs font-semibold text-white">
+                                                            Hari Ini
+                                                        </span>
+                                                    )}
+                                                    {dueStatus === 'upcoming' && (
+                                                        <span className="border border-border bg-white px-2 py-0.5 text-xs font-semibold text-text-muted">
+                                                            Akan Datang
+                                                        </span>
+                                                    )}
+                                                    {payment.isUnpaid && (
+                                                        <span className="border border-accent bg-white px-2 py-0.5 text-xs font-semibold text-accent">
+                                                            Belum Lunas
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-[0.8rem] text-text-muted">
+                                                    {rental.customer.phone || '-'} &bull; {rentalItems.length} Barang &bull; {rental.duration} Hari
+                                                </div>
+                                                <div className="mt-1 truncate text-[0.8rem] text-text-muted">
+                                                    {rentalItems.map((i) => `${i.name} (${i.qty})`).join(', ') || 'Tidak ada rincian barang'}
+                                                </div>
+                                                <div className="mt-1 text-[0.78rem] text-text-muted">
+                                                    Jatuh tempo: {dueMeta?.dueDate ? formatJakartaDateLabel(dueMeta.dueDate, true) : '-'}
+                                                </div>
+                                            </div>
+                                            <div className="shrink-0 text-left sm:text-right">
+                                                <div className="font-bold text-accent">{formatCurrency(rental.total)}</div>
+                                                {payment.isUnpaid && (
+                                                    <div className="mt-1 text-[0.75rem] text-text-muted">
+                                                        Sisa {formatCurrency(payment.remainingAmount)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+                </section>
+
+                <aside data-testid="return-detail-panel" className="flex min-h-0 flex-col rounded-md border border-border bg-white">
+                    <div data-testid="return-detail-scroll" className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+                        <h4 className="mb-4 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.05rem]">
+                            Detail Pengembalian
+                        </h4>
+
+                        {!selectedRental ? (
+                            <div className="flex min-h-[260px] flex-col items-center justify-center text-text-muted">
+                                <i className="fas fa-hand-holding-box mb-3 text-[2.4rem]"></i>
+                                <p className="text-center text-sm">Pilih transaksi di sebelah kiri untuk memproses pengembalian.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-5">
+                                {selectedPayment.isUnpaid && (
+                                    <div className="rounded-md border border-accent bg-white p-3 text-sm text-text-main">
+                                        Customer ini belum lunas. Sisa pembayaran saat ini: <strong>{formatCurrency(selectedPayment.remainingAmount + additionalFeeValue)}</strong>
+                                    </div>
+                                )}
+
+                                <div className="rounded-md border border-border bg-bg-main p-4">
+                                    <div className="mb-2 flex justify-between gap-3">
+                                        <span className="text-[0.85rem] text-text-muted">ID Transaksi</span>
+                                        <span className="font-mono text-[0.85rem] text-text-main">{selectedRental.id}</span>
+                                    </div>
+                                    <div className="mb-2 flex justify-between gap-3">
+                                        <span className="text-[0.85rem] text-text-muted">Pelanggan</span>
+                                        <span className="text-right font-semibold text-text-main">{selectedRental.customer.name}</span>
+                                    </div>
+                                    <div className="mb-2 flex justify-between gap-3">
+                                        <span className="text-[0.85rem] text-text-muted">No. HP</span>
+                                        <span className="text-right text-[0.85rem] text-text-main">{selectedRental.customer.phone}</span>
+                                    </div>
+                                    <div className="mb-2 flex justify-between gap-3">
+                                        <span className="text-[0.85rem] text-text-muted">Rencana Kembali</span>
+                                        <span className="text-right text-[0.85rem] text-text-main">
+                                            {getPlannedReturnDate(selectedRental)?.toLocaleString('id-ID') || '-'}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between gap-3">
+                                        <span className="text-[0.85rem] text-text-muted">Durasi Sewa</span>
+                                        <span className="text-right text-[0.85rem] text-text-main">{selectedRental.duration} Hari</span>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <h5 className="mb-3 text-[0.9rem] font-bold text-text-main">Barang yang Dikembalikan</h5>
+                                    <div className="max-h-[200px] space-y-2 overflow-y-auto pr-1 sm:pr-2">
+                                        {selectedRentalItems.map((item, idx) => (
+                                            <div key={idx} className="flex items-start justify-between gap-2 rounded-md border border-border bg-bg-main p-3">
+                                                <div className="flex min-w-0 flex-col">
+                                                    <span className="text-[0.9rem] text-text-main">{item.name}</span>
+                                                    {item.notes && <span className="mt-0.5 text-[0.75rem] italic text-text-muted"><i className="fas fa-info-circle mr-1"></i>{item.notes}</span>}
+                                                </div>
+                                                <span className="shrink-0 border border-border bg-white px-2 py-1 text-[0.85rem] font-bold">
+                                                    Qty: {item.qty}
+                                                </span>
+                                            </div>
+                                        ))}
+                                        {selectedRentalItems.length === 0 && (
+                                            <div className="rounded-md border border-dashed border-border bg-bg-main p-3 text-sm text-text-muted">
+                                                Tidak ada rincian barang.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4 border-t border-border pt-4">
+                                    {isLate && (
+                                        <div className="rounded-md border border-accent bg-white p-3 text-sm text-text-main">
+                                            Terlambat <strong>{lateDurationLabel}</strong>. Default denda 1 hari: <strong>{formatCurrency(selectedDailyRate)}</strong>
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <label className="mb-2 flex items-start gap-2 text-[0.85rem] text-text-muted">
+                                            <input
+                                                type="checkbox"
+                                                className="mt-0.5 accent-accent"
+                                                checked={applyLateFee}
+                                                onChange={(event) => handleToggleLateFee(event.target.checked)}
+                                                disabled={!isLate}
+                                            />
+                                            Terapkan denda keterlambatan 1 hari (bisa diubah manual di kolom nominal)
+                                        </label>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[0.9rem] font-bold text-text-muted">Rp</span>
+                                            <input
+                                                type="number"
+                                                className="w-full rounded-md border border-border bg-white p-2.5 pl-10 text-text-main outline-none focus:border-accent"
+                                                placeholder="0"
+                                                value={additionalFeeInput}
+                                                onChange={(e) => setAdditionalFeeInput(e.target.value)}
+                                                min="0"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {selectedPayment.isUnpaid && (
+                                        <label className="flex items-start gap-2 rounded-md border border-accent bg-white p-3 text-[0.85rem] text-text-main">
+                                            <input
+                                                type="checkbox"
+                                                className="mt-0.5 accent-accent"
+                                                checked={settleRemainingPayment}
+                                                onChange={(event) => setSettleRemainingPayment(event.target.checked)}
+                                            />
+                                            <span>
+                                                Saya konfirmasi customer sudah melunasi sisa pembayaran sebesar <strong>{formatCurrency(selectedPayment.remainingAmount + additionalFeeValue)}</strong>.
+                                            </span>
+                                        </label>
+                                    )}
+
+                                    <div>
+                                        <label className="mb-1.5 block text-[0.85rem] text-text-muted">Catatan Pengembalian (Opsional)</label>
+                                        <textarea
+                                            className="min-h-[90px] w-full resize-none rounded-md border border-border bg-white p-2.5 text-[0.85rem] text-text-main outline-none focus:border-accent"
+                                            placeholder="Catat kondisi barang kembali (kotor, rusak, dll)..."
+                                            value={returnNotes}
+                                            onChange={(e) => setReturnNotes(e.target.value)}
+                                        ></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {selectedRental && (
+                        <div data-testid="return-detail-actions" className="border-t border-border bg-white p-4">
+                            <div className="mb-4 flex items-center justify-between gap-3">
+                                <span className="text-[0.9rem] text-text-muted sm:text-[0.95rem]">Total Pembayaran Akhir</span>
+                                <span className="text-[1.2rem] font-bold text-accent sm:text-[1.4rem]">
+                                    {formatCurrency(selectedRental.total + additionalFeeValue)}
+                                </span>
+                            </div>
+                            <button
+                                disabled={isSubmitting}
+                                className="flex w-full items-center justify-center gap-2 rounded-md bg-accent py-3.5 font-bold text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
+                                onClick={processRentalReturn}
+                            >
+                                <i className="fas fa-check-circle"></i> {isSubmitting ? 'Memproses...' : 'Selesaikan Pengembalian'}
+                            </button>
+                            <button
+                                className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-white py-2.5 font-semibold text-text-muted transition-colors hover:bg-surface-hover hover:text-text-main"
+                                onClick={() => setSelectedRental(null)}
+                            >
+                                Batal
+                            </button>
+                        </div>
                     )}
-                </div>
+                </aside>
             </div>
         </div>
     );
