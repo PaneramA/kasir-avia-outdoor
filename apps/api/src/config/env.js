@@ -6,6 +6,7 @@ const INSECURE_JWT_SECRETS = new Set([DEFAULT_JWT_SECRET, 'change-this-in-produc
 const INSECURE_PASSWORD_PEPPERS = new Set([DEFAULT_PASSWORD_PEPPER, 'change-this-too']);
 const PRODUCTION_MAXIMUMS = {
   requestBodyLimitBytes: ['REQUEST_BODY_LIMIT_BYTES', 10 * 1024 * 1024],
+  itemImageUploadLimitBytes: ['ITEM_IMAGE_UPLOAD_LIMIT_BYTES', 20 * 1024 * 1024],
   requestBodyTimeoutMs: ['REQUEST_BODY_TIMEOUT_MS', 60_000],
   serverRequestTimeoutMs: ['SERVER_REQUEST_TIMEOUT_MS', 120_000],
   serverHeadersTimeoutMs: ['SERVER_HEADERS_TIMEOUT_MS', 60_000],
@@ -88,6 +89,7 @@ export function getEnv() {
     loginRateLimitBlockMs: toPositiveInteger(process.env.LOGIN_RATE_LIMIT_BLOCK_MS, 15 * 60 * 1000),
     loginRateLimitMaxBuckets: toPositiveInteger(process.env.LOGIN_RATE_LIMIT_MAX_BUCKETS, 10_000),
     requestBodyLimitBytes: toPositiveInteger(process.env.REQUEST_BODY_LIMIT_BYTES, 1_048_576),
+    itemImageUploadLimitBytes: toPositiveInteger(process.env.ITEM_IMAGE_UPLOAD_LIMIT_BYTES, 8_388_608),
     requestBodyTimeoutMs: toPositiveInteger(process.env.REQUEST_BODY_TIMEOUT_MS, 10_000),
     serverRequestTimeoutMs: toPositiveInteger(process.env.SERVER_REQUEST_TIMEOUT_MS, 15_000),
     serverHeadersTimeoutMs: toPositiveInteger(process.env.SERVER_HEADERS_TIMEOUT_MS, 10_000),
@@ -101,6 +103,8 @@ export function getEnv() {
       process.env.ALLOW_INSECURE_LOOPBACK_CORS,
       false,
     ),
+    itemImageStorageDir: process.env.ITEM_IMAGE_STORAGE_DIR || 'uploads/item-images',
+    publicUploadsBaseUrl: process.env.PUBLIC_UPLOADS_BASE_URL || '/uploads/item-images',
   };
 }
 

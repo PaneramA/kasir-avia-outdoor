@@ -89,6 +89,46 @@ describe('shared component smoke and interaction tests', () => {
     );
   });
 
+  it('uploads inventory images through the API instead of storing base64 payloads', async () => {
+    const user = userEvent.setup();
+    const onSaveItem = vi.fn().mockResolvedValue(undefined);
+    const onUploadItemImage = vi.fn().mockResolvedValue({
+      image: '/uploads/item-images/tenant-1/upload-1/thumb.webp',
+      detailUrl: '/uploads/item-images/tenant-1/upload-1/detail.webp',
+    });
+
+    render(
+      <ItemModal
+        isOpen
+        setIsOpen={vi.fn()}
+        editingItem={null}
+        categories={['Tenda']}
+        onSaveItem={onSaveItem}
+        onUploadItemImage={onUploadItemImage}
+      />,
+    );
+
+    await user.type(screen.getByLabelText('Nama Barang'), 'Tenda Upload');
+    await user.clear(screen.getByLabelText('Stok Awal'));
+    await user.type(screen.getByLabelText('Stok Awal'), '3');
+    await user.type(screen.getByLabelText('Harga Sewa / Hari (Rp)'), '50000');
+    await user.upload(screen.getByLabelText('Upload gambar barang'), new File(
+      ['raw-image'],
+      'tenda.png',
+      { type: 'image/png' },
+    ));
+    await user.click(screen.getByRole('button', { name: 'Simpan Barang' }));
+
+    expect(onUploadItemImage).toHaveBeenCalledWith(expect.any(File));
+    expect(onSaveItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        image: '/uploads/item-images/tenant-1/upload-1/thumb.webp',
+      }),
+      null,
+    );
+    expect(onSaveItem.mock.calls[0][0].image.startsWith('data:image/')).toBe(false);
+  });
+
   it('renders a receipt with print and WhatsApp commands', () => {
     render(<ReceiptModal isOpen rental={rental} onClose={vi.fn()} onPrint={vi.fn()} onShareWhatsApp={vi.fn()} />);
     expect(screen.getByText('Customer Test')).toBeInTheDocument();

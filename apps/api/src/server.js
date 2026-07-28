@@ -10,6 +10,7 @@ import { withCors } from './middleware/cors.js';
 import { attachRequestLogger } from './middleware/logger.js';
 import { apiRoute } from './routes/api.js';
 import { healthRoute } from './routes/health.js';
+import { uploadRoute } from './routes/uploads.js';
 import { sendJson } from './utils/http.js';
 
 const env = getEnv();
@@ -28,6 +29,10 @@ const server = createServer(async (req, res) => {
     }
 
     if (healthRoute(req, res)) {
+      return;
+    }
+
+    if (await uploadRoute(req, res, env)) {
       return;
     }
 

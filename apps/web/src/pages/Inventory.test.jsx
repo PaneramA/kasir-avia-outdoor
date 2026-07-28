@@ -22,6 +22,8 @@ vi.mock('swr/infinite', () => ({
 
 vi.mock('../lib/api', () => ({
   fetchItemsPage: vi.fn(),
+  resolveApiAssetUrl: (value) => value,
+  uploadItemImage: vi.fn(),
 }));
 
 describe('Inventory archive controls', () => {

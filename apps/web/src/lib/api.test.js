@@ -150,4 +150,45 @@ describe('web API client state and requests', () => {
     expect(localStorage.getItem('avia_api_user')).toBeNull();
     expect(localStorage.getItem('avia_tenant_context_v1')).toBeNull();
   });
+
+  it('uploads item images as multipart with auth and tenant context headers', async () => {
+    localStorage.setItem('avia_api_token', 'token-1');
+    fetch.mockResolvedValue(jsonResponse({
+      image: '/uploads/item-images/tenant-1/upload-1/thumb.webp',
+    }));
+    const api = await loadApi();
+    api.setActiveTenantContext({ tenantId: 'tenant-1', branchId: 'branch-1' });
+    const file = new File(['raw-image'], 'tenda.png', { type: 'image/png' });
+
+    await expect(api.uploadItemImage(file)).resolves.toEqual({
+      image: '/uploads/item-images/tenant-1/upload-1/thumb.webp',
+    });
+    expect(fetch).toHaveBeenCalledWith('http://localhost:4000/api/items/images', expect.objectContaining({
+      method: 'POST',
+      body: expect.any(FormData),
+      headers: expect.objectContaining({
+        Authorization: 'Bearer token-1',
+        'x-tenant-id': 'tenant-1',
+        'x-branch-id': 'branch-1',
+      }),
+    }));
+    expect(fetch.mock.calls[0][1].headers).not.toHaveProperty('Content-Type');
+  });
+
+  it('resolves app upload paths against the API base URL', async () => {
+    const api = await loadApi();
+
+    expect(api.resolveApiAssetUrl('/uploads/item-images/tenant-1/item-1/thumb.webp'))
+      .toBe('http://localhost:4000/uploads/item-images/tenant-1/item-1/thumb.webp');
+  });
+
+  it('keeps already absolute and inline image URLs unchanged', async () => {
+    const api = await loadApi();
+
+    expect(api.resolveApiAssetUrl('https://cdn.example.test/item.webp'))
+      .toBe('https://cdn.example.test/item.webp');
+    expect(api.resolveApiAssetUrl('data:image/png;base64,abc'))
+      .toBe('data:image/png;base64,abc');
+    expect(api.resolveApiAssetUrl('')).toBe('');
+  });
 });

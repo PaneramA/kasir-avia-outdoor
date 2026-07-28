@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { ZodError } from 'zod';
 import {
   changeOwnPassword,
@@ -67,6 +68,9 @@ import { assertFeatureEnabled, assertTenantManager } from '../auth/authorization
 import { createLoginRateLimiter, resolveLoginClientIp } from '../auth/loginRateLimiter.js';
 import { needsPasswordRehash, verifyPassword } from '../auth/password.js';
 import { createExpiringVerificationStore } from '../auth/verificationStore.js';
+import { processItemImage } from '../images/itemImageProcessor.js';
+import { saveItemImageSet } from '../images/itemImageStorage.js';
+import { readItemImageUpload } from '../images/itemImageUpload.js';
 import {
   adminChangePasswordSchema,
   createCategorySchema,
@@ -1069,6 +1073,36 @@ export async function apiRoute(req, res, env) {
       await ensureAuth();
       const context = await ensureRequestContext();
       sendSuccess(res, 200, await listItems(context));
+      return true;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/items/images') {
+      await ensureAuth();
+      const context = await ensureRequestContext();
+      const upload = await readItemImageUpload(req, {
+        limitBytes: env.itemImageUploadLimitBytes,
+      });
+      const processed = await processItemImage(upload.buffer, {});
+      const savedImage = await saveItemImageSet({
+        storageDir: env.itemImageStorageDir,
+        publicBaseUrl: env.publicUploadsBaseUrl,
+        tenantId: context.tenantId,
+        itemId: `upload-${randomUUID()}`,
+        detailBuffer: processed.detailBuffer,
+        thumbnailBuffer: processed.thumbnailBuffer,
+      });
+
+      sendSuccess(res, 201, {
+        image: savedImage.thumbnail.url,
+        detailUrl: savedImage.detail.url,
+        thumbnailUrl: savedImage.thumbnail.url,
+        storageKey: savedImage.detail.storageKey,
+        thumbnailStorageKey: savedImage.thumbnail.storageKey,
+        mimeType: processed.metadata.mimeType,
+        originalBytes: processed.metadata.originalBytes,
+        detail: processed.metadata.detail,
+        thumbnail: processed.metadata.thumbnail,
+      });
       return true;
     }
 

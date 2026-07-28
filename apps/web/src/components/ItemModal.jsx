@@ -1,7 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) => {
+const ItemModal = ({
+    isOpen,
+    setIsOpen,
+    editingItem,
+    categories,
+    onSaveItem,
+    onUploadItemImage,
+    resolveImageUrl,
+}) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isUploadingImage, setIsUploadingImage] = useState(false);
     const [modalCategories, setModalCategories] = useState([]);
     const categoriesRef = useRef(Array.isArray(categories) ? categories : []);
     const fileInputRef = useRef(null);
@@ -63,23 +72,43 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
         setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
-    const handleImageUpload = (e) => {
+    const handleImageUpload = async (e) => {
         const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const imageData = typeof event.target?.result === 'string' ? event.target.result : '';
-                if (!imageData) {
-                    return;
-                }
-
-                setFormData((prev) => ({ ...prev, image: imageData }));
-            };
-            reader.readAsDataURL(file);
-        }
-
         // Allow selecting the same file again without requiring a different file first.
         e.target.value = '';
+
+        if (!file) {
+            return;
+        }
+
+        if (typeof onUploadItemImage === 'function') {
+            try {
+                setIsUploadingImage(true);
+                const uploaded = await onUploadItemImage(file);
+                const imageUrl = String(uploaded?.image || uploaded?.url || '').trim();
+                if (!imageUrl) {
+                    throw new Error('Upload gambar tidak mengembalikan URL.');
+                }
+                setFormData((prev) => ({ ...prev, image: imageUrl }));
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Gagal upload gambar.';
+                alert(message);
+            } finally {
+                setIsUploadingImage(false);
+            }
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const imageData = typeof event.target?.result === 'string' ? event.target.result : '';
+            if (!imageData) {
+                return;
+            }
+
+            setFormData((prev) => ({ ...prev, image: imageData }));
+        };
+        reader.readAsDataURL(file);
     };
 
     const handleSubmit = async (e) => {
@@ -124,6 +153,9 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
     if (!isOpen) return null;
 
     const safeCategories = modalCategories;
+    const previewImageUrl = formData.image && typeof resolveImageUrl === 'function'
+        ? resolveImageUrl(formData.image)
+        : formData.image;
 
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3 sm:p-4">
@@ -135,7 +167,7 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
                 <div className="max-h-[calc(92vh-72px)] overflow-y-auto p-4 sm:max-h-[calc(92vh-86px)] sm:p-[25px]">
                     <form onSubmit={handleSubmit}>
                         <div className="mb-5">
-                            <label className="block mb-2 text-[0.9rem] text-text-muted">Nama Barang</label>
+                            <label htmlFor="item-name" className="block mb-2 text-[0.9rem] text-text-muted">Nama Barang</label>
                             <input
                                 className="w-full rounded-md border border-border bg-bg-main p-3 text-text-main outline-none transition-colors focus:border-accent"
                                 type="text"
@@ -148,7 +180,7 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
                         </div>
                         <div className="mb-5 grid grid-cols-1 gap-[15px] sm:grid-cols-2">
                             <div>
-                                <label className="block mb-2 text-[0.9rem] text-text-muted">Kategori</label>
+                                <label htmlFor="item-category" className="block mb-2 text-[0.9rem] text-text-muted">Kategori</label>
                                 <select
                                     className="w-full cursor-pointer rounded-md border border-border bg-bg-main p-3 text-text-main outline-none transition-colors focus:border-accent"
                                     id="item-category"
@@ -163,7 +195,7 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
                                 </select>
                             </div>
                             <div>
-                                <label className="block mb-2 text-[0.9rem] text-text-muted">Stok Awal</label>
+                                <label htmlFor="item-stock" className="block mb-2 text-[0.9rem] text-text-muted">Stok Awal</label>
                                 <input
                                     className="w-full rounded-md border border-border bg-bg-main p-3 text-text-main outline-none transition-colors focus:border-accent"
                                     type="number"
@@ -176,7 +208,7 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
                             </div>
                         </div>
                         <div className="mb-5">
-                            <label className="block mb-2 text-[0.9rem] text-text-muted">Harga Sewa / Hari (Rp)</label>
+                            <label htmlFor="item-price" className="block mb-2 text-[0.9rem] text-text-muted">Harga Sewa / Hari (Rp)</label>
                             <input
                                 className="w-full rounded-md border border-border bg-bg-main p-3 text-text-main outline-none transition-colors focus:border-accent"
                                 type="number"
@@ -189,11 +221,16 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
                             />
                         </div>
                         <div className="mb-5">
-                            <label className="block mb-2 text-[0.9rem] text-text-muted">Gambar Barang</label>
+                            <label htmlFor="item-image" className="block mb-2 text-[0.9rem] text-text-muted">Gambar Barang</label>
                             <div className="cursor-pointer rounded-md border-2 border-dashed border-border bg-bg-main p-5 text-center transition hover:border-accent hover:bg-surface-hover sm:p-[30px]" onClick={() => fileInputRef.current?.click()}>
-                                {formData.image ? (
+                                {isUploadingImage ? (
                                     <>
-                                        <img src={formData.image} alt="Preview" className="mt-[10px] block max-h-[150px] w-full rounded-md object-cover" />
+                                        <i className="fas fa-spinner fa-spin mb-2.5 text-[2rem] text-text-muted"></i>
+                                        <p className="text-text-muted">Mengupload gambar...</p>
+                                    </>
+                                ) : formData.image ? (
+                                    <>
+                                        <img src={previewImageUrl} alt="Preview" className="mt-[10px] block max-h-[150px] w-full rounded-md object-cover" />
                                         <div className="mt-2 text-accent text-sm flex items-center justify-center gap-2">
                                             <i className="fas fa-camera"></i> Ganti Gambar
                                         </div>
@@ -205,16 +242,18 @@ const ItemModal = ({ isOpen, setIsOpen, editingItem, categories, onSaveItem }) =
                                     </>
                                 )}
                                 <input
+                                    id="item-image"
+                                    aria-label="Upload gambar barang"
                                     type="file"
                                     className="hidden"
                                     accept="image/*"
                                     ref={fileInputRef}
-                                    onChange={handleImageUpload}
+                                    onChange={(event) => { void handleImageUpload(event); }}
                                 />
                             </div>
                         </div>
-                        <button disabled={isSubmitting} type="submit" className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-md bg-accent px-5 py-3 font-semibold text-white transition hover:bg-accent-hover disabled:opacity-60">
-                            <span>{isSubmitting ? 'Menyimpan...' : editingItem ? 'Update Barang' : 'Simpan Barang'}</span>
+                        <button disabled={isSubmitting || isUploadingImage} type="submit" className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-md bg-accent px-5 py-3 font-semibold text-white transition hover:bg-accent-hover disabled:opacity-60">
+                            <span>{isSubmitting ? 'Menyimpan...' : isUploadingImage ? 'Upload gambar...' : editingItem ? 'Update Barang' : 'Simpan Barang'}</span>
                         </button>
                     </form>
                 </div>

@@ -162,6 +162,76 @@ async function request(path, options = {}, config = { auth: false }) {
   return payload?.data;
 }
 
+async function requestMultipart(path, formData, config = { auth: true }) {
+  const requestToken = config.auth ? accessToken : '';
+  const headers = {
+    ...(config.auth && requestToken ? { Authorization: `Bearer ${requestToken}` } : {}),
+    ...(config.auth && activeTenantId ? { 'x-tenant-id': activeTenantId } : {}),
+    ...(config.auth && activeBranchId ? { 'x-branch-id': activeBranchId } : {}),
+  };
+
+  if (config.auth && !requestToken) {
+    throw new Error('Unauthorized');
+  }
+
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => {
+    controller.abort();
+  }, API_REQUEST_TIMEOUT_MS);
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    body: formData,
+    cache: 'no-store',
+    headers,
+    signal: controller.signal,
+  }).catch((error) => {
+    if (error?.name === 'AbortError') {
+      throw new Error('Koneksi ke server timeout. Coba ulang beberapa saat lagi.');
+    }
+
+    throw error;
+  }).finally(() => {
+    window.clearTimeout(timeoutId);
+  });
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    if (response.status === 401 && config.auth && requestToken === accessToken) {
+      setSession('', null);
+      emitAuthExpired(requestToken);
+    }
+
+    const message = payload?.message || `Request failed with status ${response.status}`;
+    throw new Error(message);
+  }
+
+  return payload?.data;
+}
+
+export function resolveApiAssetUrl(value) {
+  const url = String(value || '').trim();
+  if (!url) {
+    return '';
+  }
+
+  if (/^(?:https?:|data:|blob:)/i.test(url)) {
+    return url;
+  }
+
+  if (url.startsWith('/uploads/')) {
+    return `${API_BASE_URL.replace(/\/+$/g, '')}${url}`;
+  }
+
+  return url;
+}
+
 export function getStoredSession() {
   return {
     token: accessToken,
@@ -283,6 +353,12 @@ export function restoreItem(id) {
   return request(`/api/items/${encodeURIComponent(id)}/restore`, {
     method: 'POST',
   }, { auth: true });
+}
+
+export function uploadItemImage(file) {
+  const formData = new FormData();
+  formData.append('image', file);
+  return requestMultipart('/api/items/images', formData, { auth: true });
 }
 
 export function fetchRentals() {
