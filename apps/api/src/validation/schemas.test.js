@@ -4,6 +4,7 @@ import {
   createRentalSchema,
   onboardTenantSchema,
   updateItemSchema,
+  updateTenantSettingsSchema,
   updatePlanSchema,
   updateTenantSubscriptionSchema,
 } from './schemas.js';
@@ -77,6 +78,22 @@ describe('API validation schemas', () => {
       ...item,
       expectedUpdatedAt: '2026-07-22T04:30:00.000Z',
     }).expectedUpdatedAt).toBe('2026-07-22T04:30:00.000Z');
+  });
+
+  it('accepts a short custom dashboard name for tenant settings', () => {
+    const parsed = updateTenantSettingsSchema.parse({
+      dashboardName: 'AVO-2026!',
+    });
+
+    expect(parsed.dashboardName).toBe('AVO-2026!');
+  });
+
+  it('rejects dashboard names longer than 11 characters', () => {
+    const result = updateTenantSettingsSchema.safeParse({
+      dashboardName: 'AVIAOUTDOOR12',
+    });
+
+    expect(result.success).toBe(false);
   });
 
   it('accepts feature values without losing their JSON type', () => {

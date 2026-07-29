@@ -139,13 +139,28 @@ describe('shared component smoke and interaction tests', () => {
   it('renders the operational sidebar with entitlement-aware navigation', () => {
     withRouter(<Sidebar
       currentUser={{ username: 'owner', role: 'kasir' }}
+      tenantSettings={{ dashboardName: 'AVO-2026!' }}
       subscriptionSummary={{ features: { canUseFinancialRecap: false, canManageBranches: false, canManageStaff: false } }}
       onLogout={vi.fn()}
       isMobileOpen={false}
       onCloseMobile={vi.fn()}
     />);
+    expect(screen.getByText('AVO-2026!')).toBeInTheDocument();
     expect(screen.getByText('Inventaris')).toBeInTheDocument();
     expect(screen.queryByText('Keuangan')).not.toBeInTheDocument();
+  });
+
+  it('falls back to the default sidebar brand when tenant settings are empty', () => {
+    withRouter(<Sidebar
+      currentUser={{ username: 'owner', role: 'kasir' }}
+      tenantSettings={{ dashboardName: '' }}
+      subscriptionSummary={{ features: { canUseFinancialRecap: true, canManageBranches: true, canManageStaff: true } }}
+      onLogout={vi.fn()}
+      isMobileOpen={false}
+      onCloseMobile={vi.fn()}
+    />);
+
+    expect(screen.getByText('AviaOutdoor')).toBeInTheDocument();
   });
 
   it('uses a compact active sidebar indicator instead of a filled block', () => {

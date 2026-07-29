@@ -19,6 +19,7 @@ const FIELD_CLASS = 'w-full rounded-md border border-border bg-bg-main p-2.5 tex
 const ACTION_BUTTON_CLASS = 'rounded-md bg-accent px-5 py-2.5 font-semibold text-white hover:bg-accent-hover disabled:opacity-60'
 const SUCCESS_NOTICE_CLASS = 'mb-4 rounded-md border border-accent bg-card-bg p-3 text-sm font-medium text-accent'
 const ERROR_NOTICE_CLASS = 'mb-4 rounded-md border border-border bg-card-bg p-3 text-sm font-medium text-text-main'
+const DASHBOARD_NAME_MAX_LENGTH = 11
 
 const Account = ({
     currentUser,
@@ -37,6 +38,7 @@ const Account = ({
     })
     const [storeForm, setStoreForm] = useState({
         storeName: '',
+        dashboardName: '',
         address: '',
         phone: '',
         rentalDayCountMode: 'ROLLING_24H',
@@ -62,6 +64,7 @@ const Account = ({
     useEffect(() => {
         setStoreForm({
             storeName: tenantSettings?.storeName || '',
+            dashboardName: tenantSettings?.dashboardName || '',
             address: Array.isArray(tenantSettings?.addressLines)
                 ? tenantSettings.addressLines.join('\n')
                 : '',
@@ -133,8 +136,14 @@ const Account = ({
         }
 
         const trimmedStoreName = storeForm.storeName.trim()
+        const trimmedDashboardName = storeForm.dashboardName.trim()
         if (!trimmedStoreName) {
             setStoreErrorMessage('Nama toko wajib diisi.')
+            return
+        }
+
+        if (Array.from(trimmedDashboardName).length > DASHBOARD_NAME_MAX_LENGTH) {
+            setStoreErrorMessage('Nama dashboard maksimal 11 karakter.')
             return
         }
 
@@ -147,6 +156,7 @@ const Account = ({
             setIsSubmittingStore(true)
             await onUpdateTenantSettings({
                 storeName: trimmedStoreName,
+                dashboardName: trimmedDashboardName,
                 addressLines,
                 phone: storeForm.phone.trim(),
                 rentalDayCountMode: storeForm.rentalDayCountMode,
@@ -306,6 +316,24 @@ const Account = ({
                             onChange={(event) => setStoreForm((prev) => ({ ...prev, storeName: event.target.value }))}
                             required
                         />
+                    </div>
+                    <div>
+                        <div className="mb-1.5 flex items-center justify-between gap-3">
+                            <label htmlFor="dashboard-name" className="text-[0.85rem] text-text-muted">Nama Dashboard</label>
+                            <span className="text-[0.75rem] text-text-muted">
+                                {Array.from(storeForm.dashboardName.trim()).length}/{DASHBOARD_NAME_MAX_LENGTH}
+                            </span>
+                        </div>
+                        <input
+                            id="dashboard-name"
+                            type="text"
+                            className={FIELD_CLASS}
+                            value={storeForm.dashboardName}
+                            onChange={(event) => setStoreForm((prev) => ({ ...prev, dashboardName: event.target.value }))}
+                            maxLength={DASHBOARD_NAME_MAX_LENGTH}
+                            placeholder="AviaOutdoor"
+                        />
+                        <p className="mt-1.5 text-xs text-text-muted">Nama pendek yang tampil di sidebar kasir.</p>
                     </div>
                     <div>
                         <label className="block mb-1.5 text-[0.85rem] text-text-muted">Alamat Toko</label>
