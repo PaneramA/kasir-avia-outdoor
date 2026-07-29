@@ -112,6 +112,7 @@ model Branch {
 model TenantSettings {
   tenantId         String   @id
   storeName        String
+  dashboardName    String?  @default("AviaOutdoor") @db.VarChar(11)
   addressLines     Json
   phone            String?
   legalFooterLines Json

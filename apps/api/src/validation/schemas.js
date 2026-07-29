@@ -50,6 +50,7 @@ export const updateItemSchema = z.object({
 
 export const updateTenantSettingsSchema = z.object({
   storeName: z.string().trim().min(1).max(120).optional(),
+  dashboardName: z.string().trim().max(11).optional(),
   addressLines: z.array(z.string().trim().min(1).max(160)).max(6).optional(),
   phone: z.string().trim().max(40).optional(),
   legalFooterLines: z.array(z.string().trim().min(1).max(160)).max(8).optional(),

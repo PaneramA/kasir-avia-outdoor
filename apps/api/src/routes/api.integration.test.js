@@ -871,16 +871,22 @@ describe('critical API workflow integration', () => {
         token: cashierToken,
         tenantId,
         branchId,
-        body: { phone: '081234567890' },
+        body: { phone: '081234567890', dashboardName: 'AVO#2026' },
       });
       expect(cashierSettingsUpdate.status).toBe(403);
       const ownerSettingsUpdate = await callApi('PATCH', '/api/tenants/current/settings', {
         token: ownerToken,
         tenantId,
         branchId,
-        body: { phone: '081234567890' },
+        body: { phone: '081234567890', dashboardName: 'AVO#2026' },
       });
       expect(ownerSettingsUpdate.status).toBe(200);
+      expect(ownerSettingsUpdate.body.data.dashboardName).toBe('AVO#2026');
+      expect((await callApi('GET', '/api/tenants/current/settings', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+      })).body.data.dashboardName).toBe('AVO#2026');
 
       const cashierBranchSettingsUpdate = await callApi('PATCH', '/api/branches/current/settings', {
         token: cashierToken,

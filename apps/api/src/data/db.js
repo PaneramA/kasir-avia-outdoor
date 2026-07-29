@@ -27,6 +27,7 @@ const DEFAULT_BRANCH_CODE = 'pusat';
 const DEFAULT_BRANCH_NAME = 'Toko Pusat';
 const DEFAULT_TENANT_SETTINGS = {
   storeName: 'AviaOutdoor',
+  dashboardName: 'AviaOutdoor',
   addressLines: ['Jl. Contoh Alamat No. 123', 'Bandung, Jawa Barat'],
   phone: '0812-0000-0000',
   legalFooterLines: [
@@ -272,6 +273,7 @@ function toTenantSettingsDto(settings) {
   return {
     tenantId: settings.tenantId,
     storeName: settings.storeName,
+    dashboardName: settings.dashboardName || DEFAULT_TENANT_SETTINGS.dashboardName,
     addressLines: normalizeLines(settings.addressLines),
     phone: settings.phone || '',
     legalFooterLines: normalizeLines(settings.legalFooterLines),
@@ -737,6 +739,7 @@ async function ensureDefaultTenantAndBranch(tx) {
     create: {
       tenantId: tenant.id,
       storeName: DEFAULT_TENANT_SETTINGS.storeName,
+      dashboardName: DEFAULT_TENANT_SETTINGS.dashboardName,
       addressLines: DEFAULT_TENANT_SETTINGS.addressLines,
       phone: DEFAULT_TENANT_SETTINGS.phone,
       legalFooterLines: DEFAULT_TENANT_SETTINGS.legalFooterLines,
@@ -1587,6 +1590,7 @@ export async function createRental(payload, context) {
       create: {
         tenantId,
         storeName: DEFAULT_TENANT_SETTINGS.storeName,
+        dashboardName: DEFAULT_TENANT_SETTINGS.dashboardName,
         addressLines: DEFAULT_TENANT_SETTINGS.addressLines,
         phone: DEFAULT_TENANT_SETTINGS.phone,
         legalFooterLines: DEFAULT_TENANT_SETTINGS.legalFooterLines,
@@ -3598,6 +3602,7 @@ export async function getTenantSettingsForUser({ userId, role, requestedTenantId
     create: {
       tenantId: tenant.id,
       storeName: tenant.name || DEFAULT_TENANT_SETTINGS.storeName,
+      dashboardName: DEFAULT_TENANT_SETTINGS.dashboardName,
       addressLines: DEFAULT_TENANT_SETTINGS.addressLines,
       phone: DEFAULT_TENANT_SETTINGS.phone,
       legalFooterLines: DEFAULT_TENANT_SETTINGS.legalFooterLines,
@@ -3733,6 +3738,9 @@ export async function updateTenantSettingsByTenantId(tenantId, payload, actor = 
   const nextStoreName = typeof payload?.storeName === 'string'
     ? payload.storeName.trim()
     : undefined;
+  const nextDashboardName = typeof payload?.dashboardName === 'string'
+    ? payload.dashboardName.trim()
+    : undefined;
   const nextAddressLines = Array.isArray(payload?.addressLines)
     ? normalizeLines(payload.addressLines)
     : undefined;
@@ -3765,6 +3773,7 @@ export async function updateTenantSettingsByTenantId(tenantId, payload, actor = 
     where: { tenantId: tenant.id },
     update: {
       ...(typeof nextStoreName === 'string' ? { storeName: nextStoreName || tenant.name } : {}),
+      ...(typeof nextDashboardName === 'string' ? { dashboardName: nextDashboardName || null } : {}),
       ...(typeof nextAddressLines !== 'undefined' ? { addressLines: nextAddressLines } : {}),
       ...(typeof nextLegalFooterLines !== 'undefined' ? { legalFooterLines: nextLegalFooterLines } : {}),
       ...(typeof nextPhone === 'string' ? { phone: nextPhone || null } : {}),
@@ -3778,6 +3787,9 @@ export async function updateTenantSettingsByTenantId(tenantId, payload, actor = 
     create: {
       tenantId: tenant.id,
       storeName: nextStoreName || tenant.name || DEFAULT_TENANT_SETTINGS.storeName,
+      dashboardName: typeof nextDashboardName === 'string'
+        ? (nextDashboardName || null)
+        : DEFAULT_TENANT_SETTINGS.dashboardName,
       addressLines: nextAddressLines || DEFAULT_TENANT_SETTINGS.addressLines,
       phone: typeof nextPhone === 'string' ? (nextPhone || null) : DEFAULT_TENANT_SETTINGS.phone,
       legalFooterLines: nextLegalFooterLines || DEFAULT_TENANT_SETTINGS.legalFooterLines,
@@ -4780,6 +4792,7 @@ export async function onboardTenantForPlatformAdmin(payload, passwordPepper) {
       data: {
         tenantId: tenant.id,
         storeName,
+        dashboardName: DEFAULT_TENANT_SETTINGS.dashboardName,
         addressLines: DEFAULT_TENANT_SETTINGS.addressLines,
         phone: DEFAULT_TENANT_SETTINGS.phone,
         legalFooterLines: DEFAULT_TENANT_SETTINGS.legalFooterLines,

@@ -4,6 +4,12 @@ import ThemeToggle from './ThemeToggle'
 import { APP_ROUTES } from '../lib/routes'
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'avia_sidebar_collapsed'
+const DEFAULT_DASHBOARD_NAME = 'AviaOutdoor'
+
+function formatDashboardName(value) {
+    const normalized = String(value || '').trim()
+    return normalized ? Array.from(normalized).slice(0, 11).join('') : DEFAULT_DASHBOARD_NAME
+}
 
 const getInitialSidebarCollapsed = () => {
     if (typeof window === 'undefined') {
@@ -13,7 +19,7 @@ const getInitialSidebarCollapsed = () => {
     return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true'
 }
 
-const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onCloseMobile }) => {
+const Sidebar = ({ currentUser, tenantSettings, subscriptionSummary, onLogout, isMobileOpen, onCloseMobile }) => {
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false)
     const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(getInitialSidebarCollapsed)
     const normalizedRole = String(currentUser?.role || '').toLowerCase()
@@ -35,6 +41,7 @@ const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onC
 
     const displayName = currentUser?.username || 'Admin'
     const displayRole = currentUser?.role || 'staff'
+    const dashboardName = formatDashboardName(tenantSettings?.dashboardName)
     const desktopCollapsedClass = isDesktopCollapsed ? 'lg:w-[72px]' : 'lg:w-[232px]'
     const labelVisibilityClass = isDesktopCollapsed ? 'lg:sr-only' : ''
 
@@ -68,7 +75,7 @@ const Sidebar = ({ currentUser, subscriptionSummary, onLogout, isMobileOpen, onC
                 <div className={`flex items-center justify-between px-5 py-5 lg:px-5 lg:py-6 ${isDesktopCollapsed ? 'lg:flex-col lg:justify-center lg:gap-3 lg:px-3' : ''}`}>
                     <div className="flex items-center gap-2.5 text-[1.1rem] font-bold text-accent tracking-[-0.3px] font-display sm:text-[1.25rem]">
                         <i className="fas fa-mountain-sun text-[1.25rem] sm:text-[1.45rem]"></i>
-                        <span className={labelVisibilityClass}>AviaOutdoor</span>
+                        <span className={labelVisibilityClass}>{dashboardName}</span>
                     </div>
                     <button
                         type="button"

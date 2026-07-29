@@ -229,7 +229,6 @@ function App() {
   const isInventoryRoute = activePath === APP_ROUTES.inventory
   const isRentalRoute = activePath === APP_ROUTES.rental
   const isReturnRoute = activePath === APP_ROUTES.return
-  const isFinancialRoute = activePath === APP_ROUTES.financial
   const isAccountRoute = activePath === APP_ROUTES.settingsAccount || activePath === APP_ROUTES.account
   const shouldLoadItems = hasOperationalContext && (
     isRentalRoute || isReturnRoute || isHeaderDataRequested
@@ -238,9 +237,7 @@ function App() {
   const shouldLoadRentals = hasOperationalContext && (
     isRentalRoute || isReturnRoute || isHeaderDataRequested
   )
-  const shouldLoadTenantSettings = hasOperationalContext && (
-    isRentalRoute || isFinancialRoute || isAccountRoute
-  )
+  const shouldLoadTenantSettings = hasOperationalContext
   const shouldLoadBranchSettings = hasOperationalContext && (isRentalRoute || isAccountRoute)
   const itemQuery = useSWR(
     shouldLoadItems ? APP_CACHE_KEYS.items(currentUserId, activeTenantId, activeBranchId) : null,
@@ -792,6 +789,7 @@ function App() {
     <div className="flex h-screen w-full overflow-hidden bg-bg-main">
       <Sidebar
         currentUser={currentUser}
+        tenantSettings={tenantSettings}
         subscriptionSummary={subscriptionSummary}
         onLogout={handleLogout}
         isMobileOpen={isSidebarOpen}

@@ -14,6 +14,7 @@ const DEFAULT_BRANCH = {
 
 const DEFAULT_SETTINGS = {
   storeName: 'AviaOutdoor',
+  dashboardName: 'AviaOutdoor',
   addressLines: ['Jl. Contoh Alamat No. 123', 'Bandung, Jawa Barat'],
   phone: '0812-0000-0000',
   legalFooterLines: [

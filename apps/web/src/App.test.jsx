@@ -221,15 +221,31 @@ describe('application state orchestration', () => {
     fetchCurrentUser.mockResolvedValue(owner);
     fetchTenants.mockResolvedValue([{ id: 'tenant-1', name: 'Toko Uji' }]);
     fetchBranches.mockResolvedValue([{ id: 'branch-1', tenantId: 'tenant-1', name: 'Pusat' }]);
+    fetchCurrentTenantSettings.mockResolvedValue({
+      tenantId: 'tenant-1',
+      storeName: 'Toko Uji',
+      dashboardName: 'KASIR#2026!',
+      addressLines: [],
+      phone: '',
+      legalFooterLines: [],
+      timezone: 'Asia/Jakarta',
+      currency: 'IDR',
+      rentalDayCountMode: 'ROLLING_24H',
+      rentalCutoffHour: 8,
+      rentalCutoffMinute: 0,
+      financialClosingDay: 31,
+    });
     renderApp('/dashboard');
 
     expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
     await waitFor(() => {
       expect(fetchDashboardSummary).toHaveBeenCalledWith('all');
     });
+    expect(await screen.findByText('KASIR#2026!')).toBeInTheDocument();
     expect(fetchItems).not.toHaveBeenCalled();
     expect(fetchCategories).not.toHaveBeenCalled();
     expect(fetchRentals).not.toHaveBeenCalled();
+    expect(fetchCurrentTenantSettings).toHaveBeenCalledOnce();
     expect(fetchBranches).toHaveBeenCalledWith('tenant-1');
     expect(setActiveTenantContext).toHaveBeenCalledWith({ tenantId: 'tenant-1', branchId: 'branch-1' });
     expect(screen.getAllByDisplayValue('Toko Uji')).toHaveLength(2);
