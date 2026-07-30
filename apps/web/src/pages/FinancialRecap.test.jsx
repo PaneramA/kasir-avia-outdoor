@@ -9,12 +9,28 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import FinancialRecap from './FinancialRecap.jsx'
 import * as api from '../lib/api'
 
+const xlsxMock = vi.hoisted(() => ({
+  aoaToSheet: vi.fn(() => ({})),
+  bookAppendSheet: vi.fn(),
+  bookNew: vi.fn(() => ({})),
+  writeFile: vi.fn(),
+}))
+
 vi.mock('../lib/api', () => ({
   createExpense: vi.fn(),
   deleteExpense: vi.fn(),
   fetchExpensesPage: vi.fn(),
   fetchFinancialRecapPage: vi.fn(),
   updateExpense: vi.fn(),
+}))
+
+vi.mock('xlsx', () => ({
+  utils: {
+    aoa_to_sheet: xlsxMock.aoaToSheet,
+    book_append_sheet: xlsxMock.bookAppendSheet,
+    book_new: xlsxMock.bookNew,
+  },
+  writeFile: xlsxMock.writeFile,
 }))
 
 const summary = {
@@ -115,5 +131,24 @@ describe('FinancialRecap', () => {
       amount: 60000,
     })))
     await waitFor(() => expect(api.fetchExpensesPage.mock.calls.length).toBeGreaterThan(fetchCountBeforeSubmit))
+  })
+
+  it('exports Excel as readable multi-sheet workbook', async () => {
+    const user = userEvent.setup()
+
+    renderFinance()
+
+    await user.click(await screen.findByRole('button', { name: /^Excel$/i }))
+
+    await waitFor(() => expect(xlsxMock.writeFile).toHaveBeenCalled())
+    expect(xlsxMock.bookAppendSheet.mock.calls.map((call) => call[2])).toEqual([
+      'Ringkasan',
+      'Transaksi',
+      'Pengeluaran',
+      'Kategori Pengeluaran',
+      'Barang Terlaris',
+      'Metode Bayar',
+      'Catatan',
+    ])
   })
 })

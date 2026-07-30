@@ -56,37 +56,6 @@ function triggerDownload(content, fileName, contentType) {
   URL.revokeObjectURL(url)
 }
 
-function buildCsvRows(recap) {
-  const rows = []
-  rows.push(['Laporan Keuangan AviaOutdoor'])
-  rows.push(['Periode', `${recap.startDate || '-'} s/d ${recap.endDate || '-'}`])
-  rows.push(['Tanggal Tutup Buku', recap.financialClosingDay || 31])
-  rows.push([])
-  rows.push(['Ringkasan'])
-  rows.push(['Total Pendapatan', recap.totalRevenue])
-  rows.push(['Jumlah Transaksi', recap.totalTransactions])
-  rows.push(['Rata-rata Transaksi', Math.round(recap.averageTransaction)])
-  rows.push([])
-  rows.push(['Metode Pembayaran', 'Jumlah Transaksi', 'Pendapatan'])
-  recap.methods.forEach((method) => rows.push([method.method, method.count, Math.round(method.revenue)]))
-  rows.push([])
-  rows.push(['Top Barang', 'Qty', 'Estimasi Omzet'])
-  recap.topItems.slice(0, 20).forEach((item) => rows.push([item.name, item.qty, Math.round(item.estimatedRevenue)]))
-  rows.push([])
-  rows.push(['Detail Transaksi', 'Tanggal', 'Pelanggan', 'Metode', 'Status Pembayaran', 'Total'])
-  recap.filteredRentals.forEach((rental) => {
-    rows.push([
-      rental.id,
-      formatJakartaDateLabel(rental.date, true),
-      rental?.customer?.name || '-',
-      rental?.payment?.method || 'TUNAI',
-      rental?.payment?.status || 'LUNAS',
-      Math.round(Number(rental?.finalTotal ?? rental?.total ?? 0)),
-    ])
-  })
-  return rows
-}
-
 function escapeCsvCell(value) {
   const text = String(value ?? '')
   return text.includes(',') || text.includes('"') || text.includes('\n')
@@ -95,17 +64,29 @@ function escapeCsvCell(value) {
 }
 
 function exportCsv(recap) {
-  const csv = buildCsvRows(recap).map((row) => row.map(escapeCsvCell).join(',')).join('\n')
-  triggerDownload(csv, `recap-keuangan-${recap.startDate || 'all'}_${recap.endDate || 'all'}.csv`, 'text/csv;charset=utf-8;')
+  const csv = buildTransactionRows(recap).map((row) => row.map(escapeCsvCell).join(',')).join('\n')
+  triggerDownload(csv, `transaksi-keuangan-${recap.startDate || 'all'}_${recap.endDate || 'all'}.csv`, 'text/csv;charset=utf-8;')
 }
 
-async function exportExcel(recap) {
+async function exportExcel(recap, expenses) {
   const XLSX = await import('xlsx')
-  const worksheet = XLSX.utils.aoa_to_sheet(buildCsvRows(recap))
-  worksheet['!cols'] = [{ wch: 26 }, { wch: 24 }, { wch: 30 }, { wch: 20 }, { wch: 20 }, { wch: 18 }]
   const workbook = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Recap Keuangan')
-  XLSX.writeFile(workbook, `recap-keuangan-${recap.startDate || 'all'}_${recap.endDate || 'all'}.xlsx`)
+  const sheets = [
+    ['Ringkasan', buildSummaryRows(recap), [{ wch: 26 }, { wch: 28 }]],
+    ['Transaksi', buildTransactionRows(recap), [{ wch: 22 }, { wch: 28 }, { wch: 22 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }]],
+    ['Pengeluaran', buildExpenseRows(expenses), [{ wch: 22 }, { wch: 22 }, { wch: 34 }, { wch: 16 }, { wch: 14 }, { wch: 36 }]],
+    ['Kategori Pengeluaran', buildExpenseCategoryRows(recap), [{ wch: 26 }, { wch: 16 }, { wch: 14 }]],
+    ['Barang Terlaris', buildTopItemRows(recap), [{ wch: 30 }, { wch: 14 }, { wch: 18 }]],
+    ['Metode Bayar', buildPaymentMethodRows(recap), [{ wch: 18 }, { wch: 18 }, { wch: 18 }]],
+    ['Catatan', buildNotesRows(), [{ wch: 90 }]],
+  ]
+
+  sheets.forEach(([name, rows, cols]) => {
+    const worksheet = XLSX.utils.aoa_to_sheet(rows)
+    worksheet['!cols'] = cols
+    XLSX.utils.book_append_sheet(workbook, worksheet, name)
+  })
+  XLSX.writeFile(workbook, `laporan-keuangan-${recap.startDate || 'all'}_${recap.endDate || 'all'}.xlsx`)
 }
 
 function getRentalInvoiceAmount(rental) {
@@ -124,6 +105,111 @@ function getRentalCashAmount(rental) {
 function getRentalReceivableAmount(rental) {
   const fallback = Math.max(0, getRentalInvoiceAmount(rental) - getRentalCashAmount(rental))
   return Number(rental?.payment?.remainingAmount ?? fallback) || 0
+}
+
+function buildSummaryRows(recap) {
+  return [
+    ['Laporan Keuangan AviaOutdoor'],
+    ['Periode', `${recap.startDate || '-'} s/d ${recap.endDate || '-'}`],
+    ['Tanggal Tutup Buku', recap.financialClosingDay || 31],
+    ['Basis Laporan', 'Cash-based sederhana'],
+    [],
+    ['Omzet Sewa', Math.round(recap.invoiceRevenue)],
+    ['Uang Diterima', Math.round(recap.cashReceived)],
+    ['Piutang', Math.round(recap.receivables)],
+    ['Pengeluaran', Math.round(recap.totalExpenses)],
+    ['Laba/Rugi', Math.round(recap.netProfit)],
+    ['Margin', `${Math.round(Number(recap.profitMargin || 0) * 10000) / 100}%`],
+    ['Jumlah Transaksi', recap.totalTransactions],
+    ['Rata-rata Transaksi', Math.round(recap.averageTransaction)],
+  ]
+}
+
+function buildTransactionRows(recap) {
+  const rows = [[
+    'Tanggal',
+    'Transaksi',
+    'Pelanggan',
+    'Metode Bayar',
+    'Status Bayar',
+    'Omzet',
+    'Dibayar',
+    'Piutang',
+  ]]
+
+  recap.filteredRentals.forEach((rental) => {
+    rows.push([
+      formatJakartaDateLabel(rental.date, true),
+      rental.id,
+      rental?.customer?.name || '-',
+      rental?.payment?.method || 'TUNAI',
+      rental?.payment?.status || 'LUNAS',
+      Math.round(getRentalInvoiceAmount(rental)),
+      Math.round(getRentalCashAmount(rental)),
+      Math.round(getRentalReceivableAmount(rental)),
+    ])
+  })
+
+  return rows
+}
+
+function buildExpenseRows(expenses) {
+  const rows = [['Tanggal', 'Kategori', 'Deskripsi', 'Metode Bayar', 'Jumlah', 'Catatan']]
+  expenses.forEach((expense) => {
+    rows.push([
+      formatJakartaDateLabel(expense.date, false),
+      expense.category || '-',
+      expense.description || '-',
+      expense.paymentMethod || 'TUNAI',
+      Math.round(Number(expense.amount || 0)),
+      expense.notes || '',
+    ])
+  })
+  return rows
+}
+
+function buildExpenseCategoryRows(recap) {
+  const rows = [['Kategori', 'Jumlah', 'Jumlah Catatan']]
+  recap.expenseCategories.forEach((category) => {
+    rows.push([
+      category.category || '-',
+      Math.round(Number(category.amount || 0)),
+      Number(category.count || 0),
+    ])
+  })
+  return rows
+}
+
+function buildTopItemRows(recap) {
+  const rows = [['Barang', 'Qty', 'Estimasi Omzet']]
+  recap.topItems.forEach((item) => {
+    rows.push([
+      item.name || '-',
+      Number(item.qty || 0),
+      Math.round(Number(item.estimatedRevenue || 0)),
+    ])
+  })
+  return rows
+}
+
+function buildPaymentMethodRows(recap) {
+  const rows = [['Metode Bayar', 'Jumlah Transaksi', 'Pendapatan']]
+  recap.methods.forEach((method) => {
+    rows.push([
+      method.method || '-',
+      Number(method.count || 0),
+      Math.round(Number(method.revenue || 0)),
+    ])
+  })
+  return rows
+}
+
+function buildNotesRows() {
+  return [
+    ['Laporan ini adalah laporan cash-based sederhana.'],
+    ['Laba/rugi dihitung dari uang diterima dikurangi pengeluaran manual.'],
+    ['Pembelian inventaris, penyusutan aset, pajak, payroll otomatis, dan double-entry accounting belum dihitung pada V1.'],
+  ]
 }
 
 function getInitialExpenseForm() {
@@ -286,6 +372,17 @@ const FinancialRecap = ({ userId, tenantId, branchId, tenantSettings, canExportD
     return allRentals
   }
 
+  const loadAllExpensesForExport = async () => {
+    const allExpenses = []
+    let cursor = ''
+    do {
+      const page = await fetchExpensesPage({ startDate, endDate, cursor, limit: 100 })
+      allExpenses.push(...(Array.isArray(page?.items) ? page.items : []))
+      cursor = page?.nextCursor || ''
+    } while (cursor)
+    return allExpenses
+  }
+
   const handleExport = async (format) => {
     try {
       setIsExporting(true)
@@ -293,7 +390,8 @@ const FinancialRecap = ({ userId, tenantId, branchId, tenantSettings, canExportD
       const filteredRentals = await loadAllTransactionsForExport()
       const exportRecap = { ...recap, filteredRentals }
       if (format === 'xlsx') {
-        await exportExcel(exportRecap)
+        const exportExpenses = await loadAllExpensesForExport()
+        await exportExcel(exportRecap, exportExpenses)
       } else {
         exportCsv(exportRecap)
       }
