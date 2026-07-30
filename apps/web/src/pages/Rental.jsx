@@ -19,6 +19,7 @@ const INITIAL_CUSTOMER = {
     guarantee: 'KTP',
     guaranteeOther: '',
     idNumber: '',
+    identityCardHeld: true,
 };
 
 const INITIAL_CUSTOMER_ERRORS = {
@@ -240,6 +241,9 @@ const Rental = ({
             ...(draftPayload.customer || {}),
             phone: sanitizeDigits(draftPayload?.customer?.phone || ''),
             idNumber: sanitizeDigits(draftPayload?.customer?.idNumber || ''),
+            identityCardHeld: draftPayload?.identityCardHeld === false || draftPayload?.customer?.identityCardHeld === false
+                ? false
+                : true,
         };
 
         const draftItems = Array.isArray(draftPayload.items) ? draftPayload.items : [];
@@ -816,6 +820,7 @@ const Rental = ({
             customer: {
                 ...customer,
             },
+            identityCardHeld: customer.identityCardHeld !== false,
             items: cart.map((item) => ({
                 id: item.id,
                 qty: item.qty,
@@ -917,6 +922,7 @@ const Rental = ({
             guarantee: pickedCustomer.guarantee || 'KTP',
             guaranteeOther: pickedCustomer.guaranteeOther || '',
             idNumber: sanitizeDigits(pickedCustomer.idNumber || ''),
+            identityCardHeld: customer.identityCardHeld !== false,
         });
         setCustomerErrors(INITIAL_CUSTOMER_ERRORS);
         setSelectedCustomerId(pickedCustomer.id || null);
@@ -964,6 +970,11 @@ const Rental = ({
 
     const handleIdNumberChange = (value) => {
         setCustomer((previous) => ({ ...previous, idNumber: sanitizeDigits(value) }));
+        setMobileStepHint('');
+    };
+
+    const handleIdentityCardHeldChange = (isHeld) => {
+        setCustomer((previous) => ({ ...previous, identityCardHeld: isHeld }));
         setMobileStepHint('');
     };
 
@@ -1015,6 +1026,7 @@ const Rental = ({
         const nameErrorId = `${layout}-customer-name-error`;
         const phoneErrorId = `${layout}-customer-phone-error`;
         const guaranteeOtherErrorId = `${layout}-customer-guarantee-other-error`;
+        const isIdentityCardHeld = customer.identityCardHeld !== false;
 
         return (
             <>
@@ -1121,6 +1133,39 @@ const Rental = ({
                     {customerErrors.guaranteeOther && <p id={guaranteeOtherErrorId} className="mt-1 text-xs text-[#e74c3c]">{customerErrors.guaranteeOther}</p>}
                 </div>
             )}
+            <div className="form-group">
+                <p className="block mb-1.5 text-[0.85rem] text-text-muted">Kartu Identitas</p>
+                <div
+                    role="group"
+                    aria-label="Status kartu identitas"
+                    className="grid grid-cols-2 border border-[#cfd8d3] bg-white"
+                >
+                    <button
+                        type="button"
+                        aria-pressed={isIdentityCardHeld}
+                        aria-label="Tahan kartu identitas"
+                        className={`h-11 border-r border-[#cfd8d3] text-sm font-bold transition ${isIdentityCardHeld
+                            ? 'bg-[#146c43] text-white'
+                            : 'bg-white text-[#10231c] hover:bg-[#eef5f1]'
+                        }`}
+                        onClick={() => handleIdentityCardHeldChange(true)}
+                    >
+                        Tahan
+                    </button>
+                    <button
+                        type="button"
+                        aria-pressed={!isIdentityCardHeld}
+                        aria-label="Tidak tahan kartu identitas"
+                        className={`h-11 text-sm font-bold transition ${!isIdentityCardHeld
+                            ? 'bg-[#146c43] text-white'
+                            : 'bg-white text-[#10231c] hover:bg-[#eef5f1]'
+                        }`}
+                        onClick={() => handleIdentityCardHeldChange(false)}
+                    >
+                        Tidak
+                    </button>
+                </div>
+            </div>
             </>
         );
     };
@@ -1323,6 +1368,7 @@ const Rental = ({
                                     <div className="mb-5 rounded-md border border-[#d7ded9] bg-white p-3 text-sm text-text-muted">
                                         <p className="text-text-main font-semibold">{customer.name || '-'}</p>
                                         <p>{customer.phone || '-'}</p>
+                                        <p>Kartu identitas: {customer.identityCardHeld !== false ? 'Ditahan' : 'Tidak ditahan'}</p>
                                         <p>{cart.length} item dipilih ({cartQuantity} unit)</p>
                                         <div className="mt-3 flex gap-2">
                                             <button
@@ -1514,6 +1560,9 @@ const Rental = ({
                                 <p className="text-xs uppercase tracking-wide text-text-muted">Penyewa</p>
                                 <p className="mt-1 font-semibold text-text-main">{customer.name || '-'}</p>
                                 <p className="text-sm text-text-muted">{customer.phone || '-'}</p>
+                                <p className="mt-1 text-sm text-text-muted">
+                                    Kartu identitas: <span className="font-semibold text-text-main">{customer.identityCardHeld !== false ? 'Ditahan' : 'Tidak ditahan'}</span>
+                                </p>
                             </div>
 
                             <div className="rounded-md border border-[#d7ded9] bg-white p-3">

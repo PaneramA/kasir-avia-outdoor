@@ -50,7 +50,7 @@ const inventory = [
   },
 ];
 
-function RentalHarness() {
+function RentalHarness({ onCheckout = vi.fn().mockResolvedValue(null) } = {}) {
   const [cart, setCart] = useState([]);
 
   return (
@@ -60,7 +60,7 @@ function RentalHarness() {
         categories={['Tenda', 'Alat Masak']}
         cart={cart}
         setCart={setCart}
-        onCheckout={vi.fn()}
+        onCheckout={onCheckout}
         currentUser={{ id: 'user-1', username: 'kasir', role: 'kasir' }}
         tenantId="tenant-1"
         branchId="branch-1"
@@ -70,8 +70,8 @@ function RentalHarness() {
   );
 }
 
-function renderRental() {
-  return render(<RentalHarness />);
+function renderRental(props = {}) {
+  return render(<RentalHarness {...props} />);
 }
 
 beforeEach(() => {
@@ -151,6 +151,32 @@ describe('Rental page item picker', () => {
 
     expect(screen.getAllByPlaceholderText('Pilih tanggal & jam mulai - selesai').length).toBeGreaterThan(0);
     expect(document.querySelector('input[type="datetime-local"]')).toBeNull();
+  });
+
+  it('submits whether the cashier keeps the customer identity card', async () => {
+    const onCheckout = vi.fn().mockResolvedValue(null);
+    renderRental({ onCheckout });
+
+    fireEvent.change(screen.getAllByLabelText(/nama customer/i)[0], {
+      target: { value: 'Naufal Ramadhani' },
+    });
+    fireEvent.change(screen.getAllByPlaceholderText('0812...')[0], {
+      target: { value: '081234567890' },
+    });
+
+    const firstRow = screen.getByTestId('rental-inventory-row-item-1');
+    fireEvent.click(within(firstRow).getByRole('button', { name: /tambah tenda dome 4p/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /tidak tahan kartu identitas/i })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /lanjut ke review/i })[0]);
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /saya sudah cek data penyewa/i }));
+    fireEvent.click(screen.getByRole('button', { name: /konfirmasi sewa/i }));
+
+    await waitFor(() => expect(onCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({
+        identityCardHeld: false,
+      }),
+    ));
   });
 
   it('updates rental duration from the combined range picker', () => {

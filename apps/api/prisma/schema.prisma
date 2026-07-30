@@ -197,6 +197,7 @@ model Rental {
   guarantee      String
   guaranteeOther String?
   idNumber       String?
+  identityCardHeld Boolean      @default(true)
   duration       Int
   total          Int
   paymentStatus  String        @default("LUNAS")

@@ -1026,6 +1026,7 @@ describe('critical API workflow integration', () => {
       ].map((item) => item.id).sort()).toEqual([itemId, secondItemId].sort());
 
       for (let index = 1; index <= 3; index += 1) {
+        const identityCardHeld = index !== 1;
         const rental = await callApi('POST', '/api/rentals', {
           token: ownerToken,
           tenantId,
@@ -1037,12 +1038,14 @@ describe('critical API workflow integration', () => {
               address: 'Alamat Vitest',
               guarantee: 'KTP',
             },
+            identityCardHeld,
             items: [{ id: itemId, qty: 1 }],
             duration: 1,
             payment: { status: 'LUNAS', method: 'TUNAI', paidAmount: 50_000 },
           },
         });
         expect(rental.status, `rental ke-${index} gagal: ${rental.body?.message || ''}`).toBe(201);
+        expect(rental.body.data.customer.identityCardHeld).toBe(identityCardHeld);
       }
 
       const ownerDeleteRental = await callApi('POST', '/api/rentals', {

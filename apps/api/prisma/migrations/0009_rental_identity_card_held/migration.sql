@@ -1,0 +1,1 @@
+ALTER TABLE "Rental" ADD COLUMN "identityCardHeld" BOOLEAN NOT NULL DEFAULT true;

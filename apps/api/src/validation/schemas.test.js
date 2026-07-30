@@ -59,6 +59,20 @@ describe('API validation schemas', () => {
     expect(parsed.payment).toMatchObject({ status: 'LUNAS', method: 'TUNAI' });
   });
 
+  it('defaults new rentals to holding an identity card but accepts not holding it', () => {
+    const baseRental = {
+      customer: { name: 'Fuad', phone: '0812' },
+      items: [{ id: 'item-1', qty: 1 }],
+      duration: 1,
+    };
+
+    expect(createRentalSchema.parse(baseRental).identityCardHeld).toBe(true);
+    expect(createRentalSchema.parse({
+      ...baseRental,
+      identityCardHeld: false,
+    }).identityCardHeld).toBe(false);
+  });
+
   it('rejects empty partial updates', () => {
     expect(updatePlanSchema.safeParse({}).success).toBe(false);
     expect(updateTenantSubscriptionSchema.safeParse({}).success).toBe(false);

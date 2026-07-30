@@ -221,6 +221,7 @@ export const upsertBranchAccessSchema = z.object({
 
 export const createRentalSchema = z.object({
   customer: customerSchema,
+  identityCardHeld: z.boolean().optional().default(true),
   items: z.array(rentalItemSchema).min(1),
   duration: z.coerce.number().int().min(1).optional(),
   rentalStartAt: z.string().datetime().optional(),
