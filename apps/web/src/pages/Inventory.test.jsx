@@ -55,7 +55,6 @@ describe('Inventory archive controls', () => {
         branchId="branch-1"
         categories={['Tenda']}
         onSaveItem={vi.fn()}
-        onImportItems={vi.fn()}
         onDeleteItem={onDeleteItem}
         onRestoreItem={onRestoreItem}
         onAddCategory={vi.fn()}
@@ -69,5 +68,28 @@ describe('Inventory archive controls', () => {
 
     expect(onRestoreItem).toHaveBeenCalledWith('item-1');
     expect(onDeleteItem).not.toHaveBeenCalled();
+  });
+
+  it('keeps the inventory toolbar simple without import and template actions', () => {
+    render(
+      <Inventory
+        tenantId="tenant-1"
+        branchId="branch-1"
+        categories={['Tenda']}
+        onSaveItem={vi.fn()}
+        onDeleteItem={vi.fn()}
+        onRestoreItem={vi.fn()}
+        onAddCategory={vi.fn()}
+        onDeleteCategory={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('heading', { name: 'Daftar Barang' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /download template/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /import csv\/excel/i })).toBeNull();
+    expect(screen.queryByText(/kolom wajib import/i)).toBeNull();
+    expect(screen.getByTestId('inventory-status-tabs')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Kategori' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Tambah Barang' })).toBeTruthy();
   });
 });

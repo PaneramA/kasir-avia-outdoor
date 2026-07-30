@@ -412,103 +412,6 @@ function App() {
     [activeBranchId, activeTenantId, currentUserId, itemQuery, mutateCache],
   )
 
-  const handleImportItems = useCallback(
-    async (itemsPayload, options = {}) => {
-      const safeItems = Array.isArray(itemsPayload) ? itemsPayload : []
-      if (safeItems.length === 0) {
-        return {
-          total: 0,
-          createdCount: 0,
-          createdCategories: [],
-          failedItems: [],
-        }
-      }
-
-      const shouldCreateMissingCategories = options.createMissingCategories !== false
-      const normalizedCategoryMap = new Map(
-        categories.map((categoryName) => {
-          const trimmed = String(categoryName || '').trim()
-          return [trimmed.toLowerCase(), trimmed]
-        }),
-      )
-
-      const createdCategories = []
-      if (shouldCreateMissingCategories) {
-        const categoriesToCreate = []
-
-        safeItems.forEach((item) => {
-          const categoryName = String(item?.category || '').trim()
-          if (!categoryName) {
-            return
-          }
-
-          const key = categoryName.toLowerCase()
-          if (normalizedCategoryMap.has(key) || categoriesToCreate.some((existing) => existing.toLowerCase() === key)) {
-            return
-          }
-
-          categoriesToCreate.push(categoryName)
-        })
-
-        for (const categoryName of categoriesToCreate) {
-          try {
-            await createCategory(categoryName)
-            normalizedCategoryMap.set(categoryName.toLowerCase(), categoryName)
-            createdCategories.push(categoryName)
-          } catch (error) {
-            const message = error instanceof Error ? error.message : ''
-            if (message.toLowerCase().includes('already exists')) {
-              normalizedCategoryMap.set(categoryName.toLowerCase(), categoryName)
-              continue
-            }
-
-            throw error
-          }
-        }
-      }
-
-      const failedItems = []
-      const createdItems = []
-      let createdCount = 0
-
-      for (const itemPayload of safeItems) {
-        try {
-          const createdItem = await createItem(itemPayload)
-          createdItems.push(createdItem)
-          createdCount += 1
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Gagal menyimpan item.'
-          failedItems.push({
-            name: String(itemPayload?.name || '').trim() || '-',
-            message,
-          })
-        }
-      }
-
-      if (createdItems.length > 0) {
-        await itemQuery.mutate((current = []) => [...current, ...createdItems], { revalidate: false })
-        void itemQuery.mutate()
-        void mutateCache(
-          (key) => isInventoryMutationKeyForScope(key, currentUserId, activeTenantId, activeBranchId),
-          undefined,
-          { revalidate: true },
-        )
-      }
-      if (createdCategories.length > 0) {
-        await categoryQuery.mutate((current = []) => [...new Set([...current, ...createdCategories])], { revalidate: false })
-        void categoryQuery.mutate()
-      }
-
-      return {
-        total: safeItems.length,
-        createdCount,
-        createdCategories,
-        failedItems,
-      }
-    },
-    [activeBranchId, activeTenantId, categories, categoryQuery, currentUserId, itemQuery, mutateCache],
-  )
-
   const handleDeleteItem = useCallback(
     async (id) => {
       await removeItem(id)
@@ -841,7 +744,6 @@ function App() {
                   branchId={activeBranchId}
                   categories={categories}
                   onSaveItem={handleCreateOrUpdateItem}
-                  onImportItems={handleImportItems}
                   onDeleteItem={handleDeleteItem}
                   onRestoreItem={handleRestoreItem}
                   onAddCategory={handleCreateCategory}
