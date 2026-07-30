@@ -50,6 +50,14 @@ export const APP_CACHE_KEYS = {
     filters,
     normalizeCacheScopeValue(cursor),
   ),
+  expenses: (userId, tenantId, branchId, filters, cursor = '') => createBranchKey(
+    'app/expenses',
+    userId,
+    tenantId,
+    branchId,
+    filters,
+    normalizeCacheScopeValue(cursor),
+  ),
   rentalHistory: (userId, tenantId, branchId, filters, cursor = '') => createBranchKey(
     'app/rental-history',
     userId,
