@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { useSWRConfig } from 'swr'
 import useSWRInfinite from 'swr/infinite'
 import {
   formatCurrency,
@@ -16,7 +17,7 @@ import {
   fetchFinancialRecapPage,
   updateExpense,
 } from '../lib/api'
-import { APP_CACHE_KEYS } from '../lib/appCache'
+import { APP_CACHE_KEYS, isFinancialMutationKeyForScope } from '../lib/appCache'
 
 const EMPTY_RECAP = {
   totalRevenue: 0,
@@ -223,7 +224,15 @@ const inputClass = 'min-h-10 w-full rounded-md border border-border bg-white px-
 const secondaryButtonClass = 'min-h-10 rounded-md border border-border bg-white px-3 py-2 text-sm font-semibold text-text-main transition hover:border-accent disabled:cursor-wait disabled:opacity-60'
 const primaryButtonClass = 'min-h-10 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-hover disabled:cursor-wait disabled:opacity-60'
 
-const FinancialRecap = ({ userId, tenantId, branchId, tenantSettings, canExportData = true }) => {
+const FinancialRecap = ({
+  userId,
+  tenantId,
+  branchId,
+  tenantSettings,
+  canExportData = true,
+  canManageExpenses = false,
+}) => {
+  const { mutate: mutateCache } = useSWRConfig()
   const financialClosingDay = useMemo(() => getFinancialClosingDay(tenantSettings), [tenantSettings])
   const { monthKey: currentMonthKey, startDate: currentMonthStart, endDate: currentMonthEnd } = useMemo(
     () => getCurrentFinancialMonthRangeDateKeys(financialClosingDay),
@@ -403,6 +412,8 @@ const FinancialRecap = ({ userId, tenantId, branchId, tenantSettings, canExportD
   }
 
   const openCreateExpense = () => {
+    if (!canManageExpenses) return
+
     setMessage('')
     setMessageError('')
     setEditingExpenseId('')
@@ -411,6 +422,8 @@ const FinancialRecap = ({ userId, tenantId, branchId, tenantSettings, canExportD
   }
 
   const openEditExpense = (expense) => {
+    if (!canManageExpenses) return
+
     setMessage('')
     setMessageError('')
     setEditingExpenseId(expense.id)
@@ -435,11 +448,21 @@ const FinancialRecap = ({ userId, tenantId, branchId, tenantSettings, canExportD
     await Promise.all([
       mutateExpensePages(),
       mutateRecapPages(),
+      mutateCache(
+        (key) => isFinancialMutationKeyForScope(key, userId, tenantId, branchId),
+        undefined,
+        { revalidate: true },
+      ),
     ])
   }
 
   const handleSubmitExpense = async (event) => {
     event.preventDefault()
+    if (!canManageExpenses) {
+      setMessageError('Akun ini tidak punya akses mengelola pengeluaran.')
+      return
+    }
+
     setMessage('')
     setMessageError('')
 
@@ -476,6 +499,11 @@ const FinancialRecap = ({ userId, tenantId, branchId, tenantSettings, canExportD
   }
 
   const handleDeleteExpense = async (expense) => {
+    if (!canManageExpenses) {
+      setMessageError('Akun ini tidak punya akses mengelola pengeluaran.')
+      return
+    }
+
     if (!window.confirm(`Hapus pengeluaran ${expense.description}?`)) {
       return
     }
@@ -517,10 +545,12 @@ const FinancialRecap = ({ userId, tenantId, branchId, tenantSettings, canExportD
               </button>
             </>
           )}
-          <button type="button" className={primaryButtonClass} onClick={openCreateExpense}>
-            <i className="fas fa-plus mr-2"></i>
-            Tambah Pengeluaran
-          </button>
+          {canManageExpenses && (
+            <button type="button" className={primaryButtonClass} onClick={openCreateExpense}>
+              <i className="fas fa-plus mr-2"></i>
+              Tambah Pengeluaran
+            </button>
+          )}
         </div>
       </section>
 
@@ -601,6 +631,7 @@ const FinancialRecap = ({ userId, tenantId, branchId, tenantSettings, canExportD
               isLoading={isExpenseLoading}
               hasMore={hasMoreExpenses}
               isLoadingMore={isLoadingMoreExpenses}
+              canManageExpenses={canManageExpenses}
               onLoadMore={() => { void setExpenseSize((size) => size + 1) }}
               onEdit={openEditExpense}
               onDelete={handleDeleteExpense}
@@ -609,7 +640,7 @@ const FinancialRecap = ({ userId, tenantId, branchId, tenantSettings, canExportD
         </div>
       </section>
 
-      {isExpenseModalOpen && (
+      {canManageExpenses && isExpenseModalOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3 sm:p-4">
           <div className="w-full max-w-[620px] overflow-hidden rounded-md border border-border bg-white">
             <div className="flex items-center justify-between border-b border-border px-4 py-4">
@@ -817,7 +848,7 @@ function TransactionView({ rentals, isLoading, hasMore, isLoadingMore, onLoadMor
   )
 }
 
-function ExpenseView({ expenses, isLoading, hasMore, isLoadingMore, onLoadMore, onEdit, onDelete }) {
+function ExpenseView({ expenses, isLoading, hasMore, isLoadingMore, canManageExpenses, onLoadMore, onEdit, onDelete }) {
   if (isLoading) {
     return <div className="flex min-h-[220px] items-center justify-center text-text-muted">Memuat pengeluaran...</div>
   }
@@ -837,7 +868,7 @@ function ExpenseView({ expenses, isLoading, hasMore, isLoadingMore, onLoadMore, 
               <TableHead>Deskripsi</TableHead>
               <TableHead>Metode</TableHead>
               <TableHead align="right">Jumlah</TableHead>
-              <TableHead align="right">Aksi</TableHead>
+              {canManageExpenses && <TableHead align="right">Aksi</TableHead>}
             </tr>
           </thead>
           <tbody>
@@ -855,12 +886,14 @@ function ExpenseView({ expenses, isLoading, hasMore, isLoadingMore, onLoadMore, 
                 </TableCell>
                 <TableCell muted>{expense.paymentMethod || 'TUNAI'}</TableCell>
                 <TableCell align="right" strong>{formatCurrency(expense.amount)}</TableCell>
-                <TableCell align="right">
-                  <div className="flex justify-end gap-2">
-                    <button type="button" className="rounded-md border border-border bg-white px-3 py-1.5 text-xs text-text-main transition hover:border-accent" onClick={() => onEdit(expense)}>Edit</button>
-                    <button type="button" className="rounded-md border border-border bg-white px-3 py-1.5 text-xs text-[#c0392b] transition hover:border-[#c0392b]" onClick={() => onDelete(expense)}>Hapus</button>
-                  </div>
-                </TableCell>
+                {canManageExpenses && (
+                  <TableCell align="right">
+                    <div className="flex justify-end gap-2">
+                      <button type="button" className="rounded-md border border-border bg-white px-3 py-1.5 text-xs text-text-main transition hover:border-accent" onClick={() => onEdit(expense)}>Edit</button>
+                      <button type="button" className="rounded-md border border-border bg-white px-3 py-1.5 text-xs text-[#c0392b] transition hover:border-[#c0392b]" onClick={() => onDelete(expense)}>Hapus</button>
+                    </div>
+                  </TableCell>
+                )}
               </tr>
             ))}
           </tbody>

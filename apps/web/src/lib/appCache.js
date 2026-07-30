@@ -88,13 +88,45 @@ const INVENTORY_MUTATION_NAMESPACES = new Set([
   'app/dashboard',
 ])
 
-export function isInventoryMutationKeyForScope(key, userId, tenantId, branchId) {
+const FINANCIAL_MUTATION_NAMESPACES = new Set([
+  'app/financial-recap',
+  'app/expenses',
+])
+
+function isScopedMutationKeyForNamespaces(key, namespaces, userId, tenantId, branchId) {
   const [normalizedUserId, normalizedTenantId, normalizedBranchId] = createOperationalScope(userId, tenantId, branchId)
-  return Array.isArray(key)
-    && INVENTORY_MUTATION_NAMESPACES.has(key[0])
-    && key[1] === normalizedUserId
-    && key[2] === normalizedTenantId
-    && key[3] === normalizedBranchId
+  if (!normalizedUserId || !normalizedTenantId || !normalizedBranchId) {
+    return false
+  }
+
+  if (Array.isArray(key)) {
+    return namespaces.has(key[0])
+      && key[1] === normalizedUserId
+      && key[2] === normalizedTenantId
+      && key[3] === normalizedBranchId
+  }
+
+  if (typeof key !== 'string') {
+    return false
+  }
+
+  return [...namespaces].some((namespace) => {
+    const scopePrefix = `@${[
+      namespace,
+      normalizedUserId,
+      normalizedTenantId,
+      normalizedBranchId,
+    ].map((value) => JSON.stringify(value)).join(',')},`
+    return key.startsWith(scopePrefix) || key.startsWith(`$inf$${scopePrefix}`)
+  })
+}
+
+export function isInventoryMutationKeyForScope(key, userId, tenantId, branchId) {
+  return isScopedMutationKeyForNamespaces(key, INVENTORY_MUTATION_NAMESPACES, userId, tenantId, branchId)
+}
+
+export function isFinancialMutationKeyForScope(key, userId, tenantId, branchId) {
+  return isScopedMutationKeyForNamespaces(key, FINANCIAL_MUTATION_NAMESPACES, userId, tenantId, branchId)
 }
 
 export const APP_SWR_OPTIONS = {

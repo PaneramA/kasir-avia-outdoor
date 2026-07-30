@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import * as appCache from './appCache.js'
 
-const { APP_CACHE_KEYS, APP_SWR_OPTIONS, isInventoryMutationKeyForScope } = appCache
+const {
+  APP_CACHE_KEYS,
+  APP_SWR_OPTIONS,
+  isFinancialMutationKeyForScope,
+  isInventoryMutationKeyForScope,
+} = appCache
 
 describe('application SWR cache policy', () => {
   it('normalizes the operational identity and business scope', () => {
@@ -91,9 +96,26 @@ describe('application SWR cache policy', () => {
     expect(matches(APP_CACHE_KEYS.items('user-a', 'tenant-a', 'branch-a'))).toBe(true)
     expect(matches(APP_CACHE_KEYS.inventoryPage('user-a', 'tenant-a', 'branch-a'))).toBe(true)
     expect(matches(APP_CACHE_KEYS.dashboard('user-a', 'tenant-a', 'branch-a'))).toBe(true)
+    expect(matches('@"app/items","user-a","tenant-a","branch-a",')).toBe(true)
+    expect(matches('$inf$@"app/inventory-page","user-a","tenant-a","branch-a",#query:"tenda",')).toBe(true)
     expect(matches(APP_CACHE_KEYS.items('user-b', 'tenant-a', 'branch-a'))).toBe(false)
     expect(matches(APP_CACHE_KEYS.items('user-a', 'tenant-b', 'branch-a'))).toBe(false)
     expect(matches(APP_CACHE_KEYS.inventoryPage('user-a', 'tenant-a', 'branch-b'))).toBe(false)
     expect(matches(APP_CACHE_KEYS.rentals('user-a', 'tenant-a', 'branch-a'))).toBe(false)
+    expect(matches('@"app/items","user-b","tenant-b","branch-b",#query:"user-a tenant-a branch-a",')).toBe(false)
+  })
+
+  it('matches financial mutation keys only within the active user tenant and branch', () => {
+    const matches = (key) => isFinancialMutationKeyForScope(key, 'user-a', 'tenant-a', 'branch-a')
+
+    expect(matches(APP_CACHE_KEYS.financialRecap('user-a', 'tenant-a', 'branch-a', { startDate: '2026-07-01' }))).toBe(true)
+    expect(matches(APP_CACHE_KEYS.expenses('user-a', 'tenant-a', 'branch-a', { query: 'repair' }))).toBe(true)
+    expect(matches('@"app/expenses","user-a","tenant-a","branch-a",#query:"repair",')).toBe(true)
+    expect(matches('$inf$@"app/expenses","user-a","tenant-a","branch-a",#query:"repair",')).toBe(true)
+    expect(matches(APP_CACHE_KEYS.financialRecap('user-b', 'tenant-a', 'branch-a', {}))).toBe(false)
+    expect(matches(APP_CACHE_KEYS.expenses('user-a', 'tenant-b', 'branch-a', {}))).toBe(false)
+    expect(matches(APP_CACHE_KEYS.expenses('user-a', 'tenant-a', 'branch-b', {}))).toBe(false)
+    expect(matches(APP_CACHE_KEYS.dashboard('user-a', 'tenant-a', 'branch-a'))).toBe(false)
+    expect(matches('@"app/expenses","user-b","tenant-b","branch-b",#query:"user-a tenant-a branch-a",')).toBe(false)
   })
 })

@@ -52,7 +52,7 @@ const summary = {
   expenseCategories: [{ category: 'Laundry', amount: 25000, count: 1 }],
 }
 
-function renderFinance() {
+function renderFinance({ canManageExpenses = true } = {}) {
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <FinancialRecap
@@ -61,6 +61,7 @@ function renderFinance() {
         branchId="branch-1"
         tenantSettings={{ financialClosingDay: 31 }}
         canExportData
+        canManageExpenses={canManageExpenses}
       />
     </SWRConfig>,
   )
@@ -131,6 +132,20 @@ describe('FinancialRecap', () => {
       amount: 60000,
     })))
     await waitFor(() => expect(api.fetchExpensesPage.mock.calls.length).toBeGreaterThan(fetchCountBeforeSubmit))
+  })
+
+  it('hides expense management actions when the user cannot manage expenses', async () => {
+    const user = userEvent.setup()
+
+    renderFinance({ canManageExpenses: false })
+
+    expect(screen.queryByRole('button', { name: /Tambah Pengeluaran/i })).not.toBeInTheDocument()
+
+    await user.click(await screen.findByRole('button', { name: /^Pengeluaran$/i }))
+
+    expect(await screen.findByText('Cuci tenda')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Edit$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Hapus$/i })).not.toBeInTheDocument()
   })
 
   it('exports Excel as readable multi-sheet workbook', async () => {

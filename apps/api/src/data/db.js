@@ -523,7 +523,7 @@ function toTenantMembershipDto(membership) {
   };
 }
 
-function toTenantDto(tenant) {
+function toTenantDto(tenant, { membership } = {}) {
   const ownerUsernames = Array.isArray(tenant.memberships)
     ? tenant.memberships
       .filter((membership) => String(membership?.role || '').trim().toLowerCase() === 'owner')
@@ -537,6 +537,8 @@ function toTenantDto(tenant) {
     name: tenant.name,
     status: tenant.status,
     ownerUsernames,
+    membershipRole: membership?.role || null,
+    membershipStatus: membership?.status || null,
     branchCount: typeof tenant?._count?.branches === 'number' ? tenant._count.branches : undefined,
     membershipCount: typeof tenant?._count?.memberships === 'number' ? tenant._count.memberships : undefined,
     subscription: tenant.subscription ? toTenantSubscriptionDto(tenant.subscription) : null,
@@ -1610,6 +1612,7 @@ export async function listExpensesPage({ startDate, endDate, query, cursor, limi
   requireBranchId(context);
 
   const where = buildExpenseWhere({ startDate, endDate, query }, context);
+  const summaryWhere = buildExpenseWhere({ startDate, endDate }, context);
   const pageSize = Math.min(100, Math.max(1, Math.trunc(Number(limit) || 50)));
   const [expenses, summary] = await Promise.all([
     prisma.expense.findMany({
@@ -1618,7 +1621,7 @@ export async function listExpensesPage({ startDate, endDate, query, cursor, limi
       take: pageSize + 1,
       orderBy: [{ date: 'desc' }, { id: 'desc' }],
     }),
-    cursor ? Promise.resolve(null) : getExpenseSummary(where),
+    cursor ? Promise.resolve(null) : getExpenseSummary(summaryWhere),
   ]);
   const hasNextPage = expenses.length > pageSize;
   const pageExpenses = hasNextPage ? expenses.slice(0, pageSize) : expenses;
@@ -2405,7 +2408,7 @@ export async function listTenantsForUser({ userId, role }) {
     throw new Error('Tenant membership is required');
   }
 
-  return memberships.map(({ tenant }) => toTenantDto(tenant));
+  return memberships.map((membership) => toTenantDto(membership.tenant, { membership }));
 }
 
 export async function listPublicActiveTenants() {
