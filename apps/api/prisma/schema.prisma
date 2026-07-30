@@ -30,6 +30,7 @@ model Tenant {
   settings       TenantSettings?
   memberships    UserMembership[]
   subscription   TenantSubscription?
+  expenses       Expense[]
 }
 
 model Plan {
@@ -104,6 +105,7 @@ model Branch {
   tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   settings   BranchSettings?
   accesses   UserBranchAccess[]
+  expenses   Expense[]
 
   @@unique([tenantId, code])
   @@index([tenantId, status])
@@ -262,6 +264,29 @@ model ReturnRecord {
   @@index([tenantId, branchId, returnDate])
 }
 
+model Expense {
+  id              String   @id @default(cuid())
+  tenantId        String
+  branchId        String
+  createdByUserId String?
+  date            DateTime
+  category        String
+  description     String
+  amount          Int
+  paymentMethod   String   @default("TUNAI")
+  notes           String?
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch          Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdBy       User?    @relation("ExpenseCreatedByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, branchId, date])
+  @@index([tenantId, branchId, deletedAt, date])
+  @@index([createdByUserId])
+}
+
 model User {
   id           String   @id @default(cuid())
   username     String   @unique
@@ -272,6 +297,7 @@ model User {
   memberships  UserMembership[]
   branchAccesses UserBranchAccess[]
   deletedRentals Rental[] @relation("RentalDeletedByUser")
+  createdExpenses Expense[] @relation("ExpenseCreatedByUser")
   auditLogs    AuditLog[]
 }
 

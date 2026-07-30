@@ -1292,12 +1292,116 @@ describe('critical API workflow integration', () => {
       expect(financialRecap.body.data.nextCursor).toBeTruthy();
       expect(financialRecap.body.data.summary).toMatchObject({
         totalRevenue: 150_000,
+        invoiceRevenue: 150_000,
+        cashReceived: 150_000,
+        receivables: 0,
+        totalExpenses: 0,
+        netProfit: 150_000,
         totalTransactions: 3,
         averageTransaction: 50_000,
       });
       expect(financialRecap.body.data.summary.methods).toEqual([
         expect.objectContaining({ method: 'TUNAI', count: 3, revenue: 150_000 }),
       ]);
+
+      const cashierExpenseCreate = await callApi('POST', '/api/expenses', {
+        token: cashierToken,
+        tenantId,
+        branchId,
+        body: {
+          date: '2026-07-30',
+          category: 'Operasional',
+          description: 'Tes kasir',
+          amount: 10_000,
+          paymentMethod: 'TUNAI',
+        },
+      });
+      expect(cashierExpenseCreate.status).toBe(403);
+
+      const createdExpense = await callApi('POST', '/api/expenses', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          date: '2026-07-30',
+          category: 'Laundry',
+          description: 'Cuci tenda',
+          amount: 25_000,
+          paymentMethod: 'TUNAI',
+          notes: 'Setelah sewa weekend',
+        },
+      });
+      expect(createdExpense.status).toBe(201);
+      expect(createdExpense.body.data).toMatchObject({
+        category: 'Laundry',
+        description: 'Cuci tenda',
+        amount: 25_000,
+        paymentMethod: 'TUNAI',
+      });
+
+      const listedExpenses = await callApi('GET', '/api/expenses?startDate=2026-07-01&endDate=2026-07-31&q=tenda', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+      });
+      expect(listedExpenses.status).toBe(200);
+      expect(listedExpenses.body.data.items.map((expense) => expense.id)).toContain(createdExpense.body.data.id);
+      expect(listedExpenses.body.data.summary).toMatchObject({
+        totalExpenses: 25_000,
+        categories: [{ category: 'Laundry', amount: 25_000, count: 1 }],
+      });
+
+      const updatedExpense = await callApi('PATCH', `/api/expenses/${createdExpense.body.data.id}`, {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          date: '2026-07-31',
+          category: 'Repair',
+          description: 'Ganti frame tenda',
+          amount: 60_000,
+          paymentMethod: 'QRIS',
+          notes: 'Naik karena sparepart',
+        },
+      });
+      expect(updatedExpense.status).toBe(200);
+      expect(updatedExpense.body.data).toMatchObject({
+        id: createdExpense.body.data.id,
+        category: 'Repair',
+        amount: 60_000,
+        paymentMethod: 'QRIS',
+      });
+
+      const financialRecapWithExpense = await callApi('GET', '/api/financial/recap?startDate=2026-07-01&endDate=2026-07-31', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+      });
+      expect(financialRecapWithExpense.status).toBe(200);
+      expect(financialRecapWithExpense.body.data.summary).toMatchObject({
+        totalRevenue: 150_000,
+        invoiceRevenue: 150_000,
+        cashReceived: 150_000,
+        receivables: 0,
+        totalExpenses: 60_000,
+        netProfit: 90_000,
+        expenseCategories: [{ category: 'Repair', amount: 60_000, count: 1 }],
+      });
+
+      const deletedExpense = await callApi('DELETE', `/api/expenses/${createdExpense.body.data.id}`, {
+        token: ownerToken,
+        tenantId,
+        branchId,
+      });
+      expect(deletedExpense.status).toBe(200);
+
+      const afterExpenseDelete = await callApi('GET', '/api/expenses?startDate=2026-07-01&endDate=2026-07-31&q=frame', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+      });
+      expect(afterExpenseDelete.status).toBe(200);
+      expect(afterExpenseDelete.body.data.items.map((expense) => expense.id)).not.toContain(createdExpense.body.data.id);
 
       const nextFinancialRecap = await callApi(
         'GET',

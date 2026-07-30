@@ -21,6 +21,8 @@ const rentalPaymentSchema = z.object({
   paidAmount: z.coerce.number().int().min(0).optional(),
 });
 
+const expensePaymentMethodSchema = z.enum(['QRIS', 'BANK', 'TUNAI', 'LAINNYA']);
+
 export const loginSchema = z.object({
   username: z.string().trim().min(1),
   password: z.string().min(1),
@@ -67,6 +69,17 @@ export const updateTenantSchema = z.object({
   slug: z.string().trim().min(2).max(80).optional(),
   status: z.enum(['active', 'suspended']).optional(),
 });
+
+export const expenseSchema = z.object({
+  date: z.string().trim().min(1),
+  category: z.string().trim().min(1).max(80),
+  description: z.string().trim().min(1).max(160),
+  amount: z.coerce.number().int().min(0),
+  paymentMethod: expensePaymentMethodSchema.default('TUNAI'),
+  notes: z.string().trim().max(500).optional().default(''),
+});
+
+export const updateExpenseSchema = expenseSchema;
 
 export const onboardTenantSchema = z.object({
   storeName: z.string().trim().min(2).max(120),
