@@ -27,6 +27,16 @@ const getPaymentInfo = (rental) => {
     };
 };
 
+const getIdentityCardHoldLabel = (rental) => (
+    rental?.customer?.identityCardHeld === false ? 'Kartu tidak ditahan' : 'Kartu ditahan'
+);
+
+const renderIdentityCardHoldBadge = (rental) => (
+    <span className="inline-flex items-center rounded-md border border-[#f59e0b] bg-[#fef3c7] px-2 py-0.5 text-xs font-semibold text-[#92400e]">
+        {getIdentityCardHoldLabel(rental)}
+    </span>
+);
+
 const Return = ({ rentals, onProcessReturn }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
@@ -283,8 +293,9 @@ const Return = ({ rentals, onProcessReturn }) => {
                                     >
                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                             <div className="min-w-0">
-                                                <div className="mb-1 flex flex-wrap items-center gap-2">
+                                                <div className="mb-1 flex flex-wrap items-center gap-2" data-testid={`return-rental-heading-${rental.id}`}>
                                                     <h4 className="font-bold text-text-main">{rental.customer.name}</h4>
+                                                    {renderIdentityCardHoldBadge(rental)}
                                                     <span className="border border-border bg-white px-2 py-0.5 text-xs text-text-muted">{rental.id}</span>
                                                     {dueStatus === 'overdue' && (
                                                         <span className="border border-[#dc2626] bg-[#fee2e2] px-2 py-0.5 text-xs font-semibold text-[#991b1b]">

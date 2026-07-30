@@ -2,7 +2,7 @@
 
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Return from './Return.jsx';
 
@@ -16,6 +16,7 @@ const activeOverdueRental = {
   customer: {
     name: 'Ayu Pratiwi',
     phone: '08123456789',
+    identityCardHeld: false,
   },
   items: [
     {
@@ -167,6 +168,14 @@ describe('Return page theme', () => {
 
     expect(screen.getByText('Citra Lestari')).toBeInTheDocument();
     expect(screen.queryByText('Bima Santoso')).not.toBeInTheDocument();
+  });
+
+  it('shows the identity card hold badge beside the customer name', () => {
+    render(<Return rentals={[activeOverdueRental]} onProcessReturn={vi.fn()} />);
+
+    const heading = screen.getByTestId('return-rental-heading-RTR-001');
+    expect(within(heading).getByText('Ayu Pratiwi')).toBeInTheDocument();
+    expect(within(heading).getByText('Kartu tidak ditahan')).toBeInTheDocument();
   });
 
   it('filters active rentals by due status and unpaid payment state', () => {

@@ -24,6 +24,18 @@ function formatPaymentSummary(rental) {
     return { status, method, paidAmount, remainingAmount };
 }
 
+function getIdentityCardHoldLabel(rental) {
+    return rental?.customer?.identityCardHeld === false ? 'Kartu tidak ditahan' : 'Kartu ditahan';
+}
+
+function renderIdentityCardHoldBadge(rental) {
+    return (
+        <span className="inline-flex items-center rounded-md border border-[#f59e0b] bg-[#fef3c7] px-2 py-0.5 text-[0.72rem] font-semibold text-[#92400e]">
+            {getIdentityCardHoldLabel(rental)}
+        </span>
+    );
+}
+
 const History = ({
     currentUser,
     tenantId,
@@ -353,16 +365,19 @@ const History = ({
                                                     {new Date(rental.date).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' })}
                                                 </p>
                                             </div>
-                                            {rental.status === 'Active' ? (
-                                                <span className="inline-flex items-center gap-1 rounded-md border border-accent bg-accent px-2 py-1 text-[0.72rem] font-bold text-white">
-                                                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white"></span>
-                                                    Aktif
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center gap-1 rounded-md border border-accent bg-card-bg px-2 py-1 text-[0.72rem] font-bold text-accent">
-                                                    <i className="fas fa-check"></i> Selesai
-                                                </span>
-                                            )}
+                                            <div className="flex flex-col items-end gap-1.5">
+                                                {rental.status === 'Active' ? (
+                                                    <span className="inline-flex items-center gap-1 rounded-md border border-accent bg-accent px-2 py-1 text-[0.72rem] font-bold text-white">
+                                                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white"></span>
+                                                        Aktif
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 rounded-md border border-accent bg-card-bg px-2 py-1 text-[0.72rem] font-bold text-accent">
+                                                        <i className="fas fa-check"></i> Selesai
+                                                    </span>
+                                                )}
+                                                {renderIdentityCardHoldBadge(rental)}
+                                            </div>
                                         </div>
 
                                         <div className="mb-2">
@@ -453,22 +468,28 @@ const History = ({
                                                     ))}
                                                 </ul>
                                             </td>
-                                            <td className="align-top border-b border-border/50 p-4">
+                                            <td className="align-top border-b border-border/50 p-4" data-testid={`history-status-${rental.id}`}>
                                                 {rental.status === 'Active' ? (
                                                     <div>
-                                                        <span className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-accent bg-accent px-2.5 py-1 text-[0.75rem] font-bold text-white">
-                                                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white"></span>
-                                                            Aktif
-                                                        </span>
+                                                        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                                                            <span className="inline-flex items-center gap-1.5 rounded-md border border-accent bg-accent px-2.5 py-1 text-[0.75rem] font-bold text-white">
+                                                                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white"></span>
+                                                                Aktif
+                                                            </span>
+                                                            {renderIdentityCardHoldBadge(rental)}
+                                                        </div>
                                                         <div className="text-[0.7rem] text-text-muted">
                                                             Rencana kembali: <br />{formatReturnTimelineLabel(rental)}
                                                         </div>
                                                     </div>
                                                 ) : (
                                                     <div>
-                                                        <span className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-accent bg-card-bg px-2.5 py-1 text-[0.75rem] font-bold text-accent">
-                                                            <i className="fas fa-check"></i> Selesai
-                                                        </span>
+                                                        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                                                            <span className="inline-flex items-center gap-1.5 rounded-md border border-accent bg-card-bg px-2.5 py-1 text-[0.75rem] font-bold text-accent">
+                                                                <i className="fas fa-check"></i> Selesai
+                                                            </span>
+                                                            {renderIdentityCardHoldBadge(rental)}
+                                                        </div>
                                                         <div className="text-[0.7rem] text-text-muted">
                                                             Dikembalikan: <br />{formatReturnTimelineLabel(rental)}
                                                         </div>
