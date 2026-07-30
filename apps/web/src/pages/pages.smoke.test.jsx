@@ -75,7 +75,7 @@ const pageCases = [
   ['Dashboard', <Dashboard inventory={[]} rentals={[]} tenantSettings={null} />],
   ['FinancialRecap', <FinancialRecap tenantId="tenant-1" branchId="branch-1" tenantSettings={null} canExportData />],
   ['History', <History rentals={[]} currentUser={{ role: 'admin' }} onVerifyRentalDelete={fn} onDeleteRentalByAdmin={fn} />],
-  ['Inventory', <Inventory tenantId="tenant-1" branchId="branch-1" categories={[]} onSaveItem={fn} onImportItems={fn} onDeleteItem={fn} onAddCategory={fn} onDeleteCategory={fn} />],
+  ['Inventory', <Inventory tenantId="tenant-1" branchId="branch-1" categories={[]} onSaveItem={fn} onDeleteItem={fn} onAddCategory={fn} onDeleteCategory={fn} />],
   ['Rental', <Rental inventory={[]} categories={[]} cart={[]} setCart={fn} onCheckout={fn} currentUser={{ username: 'kasir' }} tenantSettings={null} />],
   ['Return', <Return rentals={[]} onProcessReturn={fn} />],
   ['TeamSettings', <TeamSettings />],
