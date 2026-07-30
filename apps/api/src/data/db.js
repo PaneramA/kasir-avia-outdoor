@@ -185,6 +185,7 @@ function toRentalDto(rental) {
       guarantee: rental.guarantee,
       guaranteeOther: rental.guaranteeOther || '',
       idNumber: rental.idNumber || '',
+      identityCardHeld: rental.identityCardHeld !== false,
     },
     items: rental.items.map((item) => ({
       id: item.itemId,
@@ -1545,6 +1546,7 @@ export async function createRental(payload, context) {
   const hasExplicitIdNumber = rawIdNumber !== '' && rawIdNumber !== '0';
   const customerIdNumber = hasExplicitIdNumber ? rawIdNumber : null;
   const rentalIdNumber = hasExplicitIdNumber ? rawIdNumber : `RNDM-${Math.floor(100000 + Math.random() * 900000)}`;
+  const identityCardHeld = payload?.identityCardHeld !== false;
   const items = Array.isArray(payload?.items) ? payload.items : [];
   const startAtInput = parseIsoDate(payload?.rentalStartAt, 'rentalStartAt');
   const endAtInput = parseIsoDate(payload?.rentalEndAt, 'rentalEndAt');
@@ -1762,6 +1764,7 @@ export async function createRental(payload, context) {
         guarantee,
         guaranteeOther,
         idNumber: rentalIdNumber,
+        identityCardHeld,
         duration,
         total,
         paymentStatus,
@@ -4289,6 +4292,7 @@ function toAuditRentalSnapshot(rental) {
     guarantee: rental.guarantee,
     guaranteeOther: rental.guaranteeOther || null,
     idNumber: rental.idNumber || null,
+    identityCardHeld: rental.identityCardHeld !== false,
     duration: rental.duration,
     total: rental.total,
     paymentStatus,
