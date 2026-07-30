@@ -151,40 +151,32 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
     const totalCustomers = useMemo(() => customers.length, [customers])
 
     return (
-        <div className="space-y-5 pt-0 pb-4 sm:pb-5">
-            <section className="rounded-md border border-border bg-sidebar-bg p-4 sm:p-6">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <h3 className="mb-1 text-[1.1rem] font-bold text-text-main">Data Customer</h3>
-                        <p className="text-sm text-text-muted">
-                            Simpan customer lebih awal supaya saat transaksi sewa cukup cari dan autofill.
-                        </p>
+        <div data-testid="customer-page-shell" className="flex min-h-0 flex-col gap-4 pb-4 lg:h-[calc(100%_-_2.5rem)] lg:overflow-hidden lg:pb-0">
+            <section data-testid="customer-toolbar" className="flex flex-col gap-3 rounded-md border border-border bg-white p-3 lg:shrink-0 xl:flex-row xl:items-center xl:justify-between">
+                <div className="relative w-full xl:max-w-[520px]">
+                    <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-sm text-text-muted"></i>
+                    <input
+                        className="min-h-10 w-full rounded-md border border-border bg-white px-3 pl-9 text-sm text-text-main outline-none placeholder:text-text-muted focus:border-accent"
+                        type="search"
+                        placeholder="Cari nama, nomor HP, alamat, atau identitas"
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                    />
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                    <div className="flex min-h-10 items-center justify-between gap-2 rounded-md border border-border bg-bg-main px-3 text-sm text-text-muted sm:min-w-[130px]">
+                        <span>Total hasil:</span>
+                        <span className="font-semibold text-text-main">{totalCustomers}</span>
                     </div>
                     <button
                         type="button"
                         onClick={openCreateModal}
-                        className={primaryButtonClass}
+                        className="min-h-10 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-accent-hover disabled:opacity-60"
                     >
                         <i className="fas fa-user-plus mr-2"></i>
                         Add Customer
                     </button>
-                </div>
-
-                <div className="mt-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div className="w-full md:max-w-[380px]">
-                        <label className="mb-1.5 block text-[0.85rem] text-text-muted">Cari Customer</label>
-                        <input
-                            className={fieldClass}
-                            type="text"
-                            placeholder="Nama / No HP / Alamat / No Identitas"
-                            value={query}
-                            onChange={(event) => setQuery(event.target.value)}
-                        />
-                    </div>
-
-                    <div className="text-sm text-text-muted">
-                        Total hasil: <span className="font-semibold text-text-main">{totalCustomers}</span>
-                    </div>
                 </div>
             </section>
 
@@ -198,16 +190,16 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
                 </div>
             )}
 
-            <section className="rounded-md border border-border bg-sidebar-bg p-4 sm:p-6">
+            <section data-testid="customer-table-panel" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-sidebar-bg">
                 {isLoading ? (
-                    <div className="text-text-muted">Memuat data customer...</div>
+                    <div className="flex min-h-[220px] flex-1 items-center justify-center text-text-muted">Memuat data customer...</div>
                 ) : (
                     <>
                         {customers.length === 0 ? (
-                            <div className="rounded-md border border-border bg-sidebar-bg p-4 text-center text-text-muted">Belum ada data customer.</div>
+                            <div className="flex min-h-[220px] flex-1 items-center justify-center p-4 text-center text-text-muted">Belum ada data customer.</div>
                         ) : (
                             <>
-                                <div className="space-y-3 md:hidden">
+                                <div className="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto p-3 md:hidden">
                                     {customers.map((customer) => (
                                         <article key={customer.id} className="rounded-md border border-border bg-sidebar-bg p-4">
                                             <p className="font-semibold text-text-main">{customer.name}</p>
@@ -234,9 +226,9 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
                                     ))}
                                 </div>
 
-                                <div className="hidden overflow-x-auto md:block">
+                                <div data-testid="customer-table-scroll" className="custom-scrollbar hidden min-h-0 flex-1 overflow-x-auto overflow-y-auto md:block">
                                     <table className="w-full min-w-[980px] border-collapse">
-                                        <thead>
+                                        <thead data-testid="customer-table-head" className="sticky top-0 z-10 bg-sidebar-bg">
                                             <tr>
                                                 <th className="border-b border-border p-3 text-left text-xs uppercase tracking-wider text-text-muted">Nama</th>
                                                 <th className="border-b border-border p-3 text-left text-xs uppercase tracking-wider text-text-muted">No HP</th>
