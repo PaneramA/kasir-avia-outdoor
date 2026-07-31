@@ -26,8 +26,6 @@ const Sidebar = ({ currentUser, tenantSettings, subscriptionSummary, onLogout, i
     const isPlatformAdmin = normalizedRole === 'superuser'
     const features = subscriptionSummary?.features || {}
     const canUseFinancialRecap = features.canUseFinancialRecap !== false
-    const canManageBranches = features.canManageBranches !== false
-    const canManageStaff = features.canManageStaff !== false
 
     const menuItems = [
         { path: APP_ROUTES.dashboard, icon: 'fas fa-th-large', label: 'Dashboard' },
@@ -146,45 +144,19 @@ const Sidebar = ({ currentUser, tenantSettings, subscriptionSummary, onLogout, i
                         {isProfileMenuOpen && (
                             <div className={`mt-2 flex flex-col gap-1 rounded-md border border-border bg-bg-main p-1.5 ${isDesktopCollapsed ? 'lg:hidden' : ''}`}>
                                 <NavLink
-                                    to={isPlatformAdmin ? APP_ROUTES.adminAccount : APP_ROUTES.settingsAccount}
+                                    to={isPlatformAdmin ? APP_ROUTES.adminAccount : APP_ROUTES.settings}
                                     onClick={onCloseMobile}
                                     className={({ isActive }) => `border-l-2 px-2.5 py-2 text-sm transition ${isActive
                                         ? 'border-accent text-accent'
                                         : 'border-transparent text-text-muted hover:border-border hover:bg-surface-hover hover:text-text-main'
                                     }`}
                                 >
-                                    <i className="fas fa-user-cog mr-2"></i>
-                                    Akun Saya
+                                    <i className="fas fa-gear mr-2"></i>
+                                    Pengaturan
                                 </NavLink>
-                                {!isPlatformAdmin && canManageBranches && (
-                                    <NavLink
-                                        to={APP_ROUTES.settingsBranches}
-                                        onClick={onCloseMobile}
-                                        className={({ isActive }) => `border-l-2 px-2.5 py-2 text-sm transition ${isActive
-                                            ? 'border-accent text-accent'
-                                            : 'border-transparent text-text-muted hover:border-border hover:bg-surface-hover hover:text-text-main'
-                                        }`}
-                                    >
-                                        <i className="fas fa-code-branch mr-2"></i>
-                                        Cabang Toko
-                                    </NavLink>
-                                )}
-                                {!isPlatformAdmin && canManageStaff && (
-                                    <NavLink
-                                        to={APP_ROUTES.settingsTeam}
-                                        onClick={onCloseMobile}
-                                        className={({ isActive }) => `border-l-2 px-2.5 py-2 text-sm transition ${isActive
-                                            ? 'border-accent text-accent'
-                                            : 'border-transparent text-text-muted hover:border-border hover:bg-surface-hover hover:text-text-main'
-                                        }`}
-                                    >
-                                        <i className="fas fa-users-cog mr-2"></i>
-                                        Tim & Akses
-                                    </NavLink>
-                                )}
                                 <button
                                     onClick={onLogout}
-                                    className="border-l-2 border-transparent px-2.5 py-2 text-left text-sm text-text-muted hover:bg-surface-hover hover:text-[#e74c3c]"
+                                    className="border-l-2 border-transparent px-2.5 py-2 text-left text-sm font-semibold text-red-600 hover:border-red-600 hover:bg-red-50 hover:text-red-700"
                                     title="Logout"
                                 >
                                     <i className="fas fa-sign-out-alt mr-2"></i>

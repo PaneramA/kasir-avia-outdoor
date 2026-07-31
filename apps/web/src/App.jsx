@@ -52,8 +52,7 @@ const Customers = lazy(() => import('./pages/Customers'))
 const AdminAccount = lazy(() => import('./pages/AdminAccount'))
 const Users = lazy(() => import('./pages/Users'))
 const Account = lazy(() => import('./pages/Account'))
-const Branches = lazy(() => import('./pages/Branches'))
-const TeamSettings = lazy(() => import('./pages/TeamSettings'))
+const Settings = lazy(() => import('./pages/Settings'))
 function NotFoundPage() {
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-text-muted text-center">
@@ -236,7 +235,9 @@ function App() {
   const isInventoryRoute = activePath === APP_ROUTES.inventory
   const isRentalRoute = activePath === APP_ROUTES.rental
   const isReturnRoute = activePath === APP_ROUTES.return
-  const isAccountRoute = activePath === APP_ROUTES.settingsAccount || activePath === APP_ROUTES.account
+  const isSettingsRoute = activePath === APP_ROUTES.settings
+    || activePath === APP_ROUTES.settingsAccount
+    || activePath === APP_ROUTES.account
   const shouldLoadItems = hasOperationalContext && (
     isRentalRoute || isReturnRoute || isHeaderDataRequested
   )
@@ -245,7 +246,7 @@ function App() {
     isRentalRoute || isReturnRoute || isHeaderDataRequested
   )
   const shouldLoadTenantSettings = hasOperationalContext
-  const shouldLoadBranchSettings = hasOperationalContext && (isRentalRoute || isAccountRoute)
+  const shouldLoadBranchSettings = hasOperationalContext && (isRentalRoute || isSettingsRoute)
   const itemQuery = useSWR(
     shouldLoadItems ? APP_CACHE_KEYS.items(currentUserId, activeTenantId, activeBranchId) : null,
     fetchItems,
@@ -818,32 +819,20 @@ function App() {
             />
             <Route
               path={APP_ROUTES.users}
-              element={<Navigate to={APP_ROUTES.settingsTeam} replace />}
+              element={<Navigate to={`${APP_ROUTES.settings}?bagian=tim`} replace />}
             />
             <Route
               path={APP_ROUTES.branches}
-              element={<Navigate to={APP_ROUTES.settingsBranches} replace />}
-            />
-            <Route
-              path={APP_ROUTES.settingsBranches}
-              element={subscriptionSummary?.features?.canManageBranches === false
-                ? <Navigate to={APP_ROUTES.dashboard} replace />
-                : <Branches userId={currentUserId} tenantId={activeTenantId} branchId={activeBranchId} />}
-            />
-            <Route
-              path={APP_ROUTES.settingsTeam}
-              element={subscriptionSummary?.features?.canManageStaff === false
-                ? <Navigate to={APP_ROUTES.dashboard} replace />
-                : <TeamSettings userId={currentUserId} tenantId={activeTenantId} branchId={activeBranchId} />}
+              element={<Navigate to={`${APP_ROUTES.settings}?bagian=cabang`} replace />}
             />
             <Route
               path={APP_ROUTES.account}
-              element={<Navigate to={APP_ROUTES.settingsAccount} replace />}
+              element={<Navigate to={`${APP_ROUTES.settings}?bagian=profil`} replace />}
             />
             <Route
-              path={APP_ROUTES.settingsAccount}
+              path={APP_ROUTES.settings}
               element={(
-                <Account
+                <Settings
                   currentUser={currentUser}
                   tenantSettings={tenantSettings}
                   branchSettings={branchSettings}
@@ -852,8 +841,24 @@ function App() {
                   subscriptionErrorMessage={subscriptionQuery.error instanceof Error ? subscriptionQuery.error.message : ''}
                   onUpdateTenantSettings={handleUpdateTenantSettings}
                   onUpdateBranchSettings={handleUpdateBranchSettings}
+                  userId={currentUserId}
+                  tenantId={activeTenantId}
+                  branchId={activeBranchId}
+                  onLogout={handleLogout}
                 />
               )}
+            />
+            <Route
+              path={APP_ROUTES.settingsBranches}
+              element={<Navigate to={`${APP_ROUTES.settings}?bagian=cabang`} replace />}
+            />
+            <Route
+              path={APP_ROUTES.settingsTeam}
+              element={<Navigate to={`${APP_ROUTES.settings}?bagian=tim`} replace />}
+            />
+            <Route
+              path={APP_ROUTES.settingsAccount}
+              element={<Navigate to={`${APP_ROUTES.settings}?bagian=profil`} replace />}
             />
             <Route
               path={APP_ROUTES.adminAccount}

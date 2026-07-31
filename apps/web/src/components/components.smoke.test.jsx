@@ -150,6 +150,27 @@ describe('shared component smoke and interaction tests', () => {
     expect(screen.queryByText('Keuangan')).not.toBeInTheDocument();
   });
 
+  it('keeps profile navigation focused on Pengaturan and Logout', async () => {
+    const user = userEvent.setup();
+    const onLogout = vi.fn();
+    withRouter(<Sidebar
+      currentUser={{ username: 'owner', role: 'kasir' }}
+      tenantSettings={{ dashboardName: 'AVO-2026!' }}
+      subscriptionSummary={{ features: { canUseFinancialRecap: true, canManageBranches: true, canManageStaff: true } }}
+      onLogout={onLogout}
+      isMobileOpen={false}
+      onCloseMobile={vi.fn()}
+    />);
+
+    await user.click(screen.getByRole('button', { name: /menu profil owner/i }));
+
+    expect(screen.getByRole('link', { name: /Pengaturan/i })).toHaveAttribute('href', '/pengaturan');
+    expect(screen.getByRole('button', { name: /Logout/i }).className).toContain('text-red-600');
+    expect(screen.queryByRole('link', { name: /Akun Saya/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Cabang Toko/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Tim & Akses/i })).not.toBeInTheDocument();
+  });
+
   it('falls back to the default sidebar brand when tenant settings are empty', () => {
     withRouter(<Sidebar
       currentUser={{ username: 'owner', role: 'kasir' }}

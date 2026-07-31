@@ -19,6 +19,7 @@ import History from './History.jsx';
 import Inventory from './Inventory.jsx';
 import Rental from './Rental.jsx';
 import Return from './Return.jsx';
+import Settings from './Settings.jsx';
 import TeamSettings from './TeamSettings.jsx';
 import Users from './Users.jsx';
 
@@ -78,6 +79,7 @@ const pageCases = [
   ['Inventory', <Inventory tenantId="tenant-1" branchId="branch-1" categories={[]} onSaveItem={fn} onDeleteItem={fn} onAddCategory={fn} onDeleteCategory={fn} />],
   ['Rental', <Rental inventory={[]} categories={[]} cart={[]} setCart={fn} onCheckout={fn} currentUser={{ username: 'kasir' }} tenantSettings={null} />],
   ['Return', <Return rentals={[]} onProcessReturn={fn} />],
+  ['Settings', <Settings currentUser={{ username: 'owner', role: 'kasir' }} tenantSettings={null} branchSettings={null} onUpdateTenantSettings={fn} onUpdateBranchSettings={fn} onLogout={fn} />],
   ['TeamSettings', <TeamSettings />],
   ['Users', <Users />],
 ];

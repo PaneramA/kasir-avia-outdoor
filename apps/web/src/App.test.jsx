@@ -307,6 +307,37 @@ describe('application state orchestration', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: /Tambah Pengeluaran/i })).not.toBeInTheDocument());
   });
 
+  it('opens the unified Pengaturan page for cashier users', async () => {
+    mockOperationalSession();
+    fetchCurrentTenantSettings.mockResolvedValue({
+      tenantId: 'tenant-1',
+      storeName: 'Toko Uji',
+      dashboardName: 'KASIR',
+      addressLines: [],
+      phone: '',
+      legalFooterLines: [],
+      timezone: 'Asia/Jakarta',
+      currency: 'IDR',
+      rentalDayCountMode: 'ROLLING_24H',
+      rentalCutoffHour: 8,
+      rentalCutoffMinute: 0,
+      financialClosingDay: 31,
+    });
+    fetchCurrentTenantSubscriptionSummary.mockResolvedValue({
+      subscription: { status: 'active', plan: { name: 'Basic', pricePeriod: 'monthly' } },
+      tenantStatus: 'active',
+      tenantName: 'Toko Uji',
+      usage: {},
+      features: { canManageBranches: true, canManageStaff: true, canUseFinancialRecap: true },
+    });
+
+    renderApp('/pengaturan');
+
+    expect(await screen.findByRole('heading', { name: 'Pengaturan' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Profil & Keamanan/i })).toBeInTheDocument();
+    expect(screen.queryByText('Halaman tidak ditemukan')).not.toBeInTheDocument();
+  });
+
   it('ignores stale auth expiry events but clears the matching active session', async () => {
     const owner = { id: 'owner-1', username: 'owner', role: 'kasir' };
     getStoredSession.mockReturnValue({ token: 'token-b', user: owner });
