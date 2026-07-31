@@ -1,6 +1,7 @@
 export const APP_ROUTES = {
   login: '/login',
   dashboard: '/dashboard',
+  settings: '/pengaturan',
   settingsAccount: '/settings/account',
   settingsBranches: '/settings/branches',
   settingsTeam: '/settings/team',
@@ -22,23 +23,20 @@ export const APP_ROUTES = {
   account: '/account',
 };
 
+const SETTINGS_PAGE_INFO = {
+  title: 'Pengaturan',
+  subtitle: 'Kelola akun, toko, cabang, tim, transaksi, keuangan, dan paket.',
+};
+
 export const PAGE_INFO = {
   [APP_ROUTES.dashboard]: {
     title: 'Dashboard',
     subtitle: 'Status inventaris dan penyewaan hari ini.',
   },
-  [APP_ROUTES.settingsAccount]: {
-    title: 'Settings • Akun',
-    subtitle: 'Kelola akun, paket tenant, dan pengaturan toko kamu.',
-  },
-  [APP_ROUTES.settingsBranches]: {
-    title: 'Settings • Cabang',
-    subtitle: 'Kelola daftar cabang toko dan status operasional tenant kamu.',
-  },
-  [APP_ROUTES.settingsTeam]: {
-    title: 'Settings • Tim & Akses',
-    subtitle: 'Kelola user toko, membership tenant, dan akses user per cabang.',
-  },
+  [APP_ROUTES.settings]: SETTINGS_PAGE_INFO,
+  [APP_ROUTES.settingsAccount]: SETTINGS_PAGE_INFO,
+  [APP_ROUTES.settingsBranches]: SETTINGS_PAGE_INFO,
+  [APP_ROUTES.settingsTeam]: SETTINGS_PAGE_INFO,
   [APP_ROUTES.admin]: {
     title: 'Admin Panel',
     subtitle: 'Pusat kontrol approval tenant dan pengaturan paket platform.',
