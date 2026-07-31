@@ -728,6 +728,10 @@ describe('critical API workflow integration', () => {
       const ownerTenants = await callApi('GET', '/api/tenants', { token: ownerToken });
       expect(ownerTenants.status).toBe(200);
       expect(ownerTenants.body.data.map((tenant) => tenant.id)).toEqual([tenantId]);
+      expect(ownerTenants.body.data[0]).toMatchObject({
+        membershipRole: 'owner',
+        membershipStatus: 'active',
+      });
 
       const itemResponse = await callApi('POST', '/api/items', {
         token: ownerToken,
@@ -1292,12 +1296,168 @@ describe('critical API workflow integration', () => {
       expect(financialRecap.body.data.nextCursor).toBeTruthy();
       expect(financialRecap.body.data.summary).toMatchObject({
         totalRevenue: 150_000,
+        invoiceRevenue: 150_000,
+        cashReceived: 150_000,
+        receivables: 0,
+        totalExpenses: 0,
+        netProfit: 150_000,
         totalTransactions: 3,
         averageTransaction: 50_000,
       });
       expect(financialRecap.body.data.summary.methods).toEqual([
         expect.objectContaining({ method: 'TUNAI', count: 3, revenue: 150_000 }),
       ]);
+
+      const cashierExpenseCreate = await callApi('POST', '/api/expenses', {
+        token: cashierToken,
+        tenantId,
+        branchId,
+        body: {
+          date: '2026-07-30',
+          category: 'Operasional',
+          description: 'Tes kasir',
+          amount: 10_000,
+          paymentMethod: 'TUNAI',
+        },
+      });
+      expect(cashierExpenseCreate.status).toBe(403);
+
+      const createdExpense = await callApi('POST', '/api/expenses', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          date: '2026-07-30',
+          category: 'Laundry',
+          description: 'Cuci tenda',
+          amount: 25_000,
+          paymentMethod: 'TUNAI',
+          notes: 'Setelah sewa weekend',
+        },
+      });
+      expect(createdExpense.status).toBe(201);
+      expect(createdExpense.body.data).toMatchObject({
+        category: 'Laundry',
+        description: 'Cuci tenda',
+        amount: 25_000,
+        paymentMethod: 'TUNAI',
+      });
+
+      const otherExpense = await callApi('POST', '/api/expenses', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          date: '2026-07-29',
+          category: 'Operasional',
+          description: 'Beli gas',
+          amount: 15_000,
+          paymentMethod: 'BANK',
+          notes: 'Dapur',
+        },
+      });
+      expect(otherExpense.status).toBe(201);
+
+      const listedExpenses = await callApi('GET', '/api/expenses?startDate=2026-07-01&endDate=2026-07-31&q=tenda', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+      });
+      expect(listedExpenses.status).toBe(200);
+      expect(listedExpenses.body.data.items.map((expense) => expense.id)).toContain(createdExpense.body.data.id);
+      expect(listedExpenses.body.data.items.map((expense) => expense.id)).not.toContain(otherExpense.body.data.id);
+      expect(listedExpenses.body.data.summary).toMatchObject({
+        totalExpenses: 40_000,
+        categories: [
+          { category: 'Laundry', amount: 25_000, count: 1 },
+          { category: 'Operasional', amount: 15_000, count: 1 },
+        ],
+      });
+
+      const emptySearchExpenses = await callApi('GET', '/api/expenses?startDate=2026-07-01&endDate=2026-07-31&q=tidak-ada', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+      });
+      expect(emptySearchExpenses.status).toBe(200);
+      expect(emptySearchExpenses.body.data.items).toEqual([]);
+      expect(emptySearchExpenses.body.data.summary).toMatchObject({
+        totalExpenses: 40_000,
+        categories: [
+          { category: 'Laundry', amount: 25_000, count: 1 },
+          { category: 'Operasional', amount: 15_000, count: 1 },
+        ],
+      });
+
+      const updatedExpense = await callApi('PATCH', `/api/expenses/${createdExpense.body.data.id}`, {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          date: '2026-07-31',
+          category: 'Repair',
+          description: 'Ganti frame tenda',
+          amount: 60_000,
+          paymentMethod: 'QRIS',
+          notes: 'Naik karena sparepart',
+        },
+      });
+      expect(updatedExpense.status).toBe(200);
+      expect(updatedExpense.body.data).toMatchObject({
+        id: createdExpense.body.data.id,
+        category: 'Repair',
+        amount: 60_000,
+        paymentMethod: 'QRIS',
+      });
+
+      const expenseSearchWithoutRows = await callApi('GET', '/api/expenses?startDate=2026-07-01&endDate=2026-07-31&q=tidak-ada', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+      });
+      expect(expenseSearchWithoutRows.status).toBe(200);
+      expect(expenseSearchWithoutRows.body.data.items).toHaveLength(0);
+      expect(expenseSearchWithoutRows.body.data.summary).toMatchObject({
+        totalExpenses: 75_000,
+        categories: [
+          { category: 'Repair', amount: 60_000, count: 1 },
+          { category: 'Operasional', amount: 15_000, count: 1 },
+        ],
+      });
+
+      const financialRecapWithExpense = await callApi('GET', '/api/financial/recap?startDate=2026-07-01&endDate=2026-07-31', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+      });
+      expect(financialRecapWithExpense.status).toBe(200);
+      expect(financialRecapWithExpense.body.data.summary).toMatchObject({
+        totalRevenue: 150_000,
+        invoiceRevenue: 150_000,
+        cashReceived: 150_000,
+        receivables: 0,
+        totalExpenses: 75_000,
+        netProfit: 75_000,
+        expenseCategories: [
+          { category: 'Repair', amount: 60_000, count: 1 },
+          { category: 'Operasional', amount: 15_000, count: 1 },
+        ],
+      });
+
+      const deletedExpense = await callApi('DELETE', `/api/expenses/${createdExpense.body.data.id}`, {
+        token: ownerToken,
+        tenantId,
+        branchId,
+      });
+      expect(deletedExpense.status).toBe(200);
+
+      const afterExpenseDelete = await callApi('GET', '/api/expenses?startDate=2026-07-01&endDate=2026-07-31&q=frame', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+      });
+      expect(afterExpenseDelete.status).toBe(200);
+      expect(afterExpenseDelete.body.data.items.map((expense) => expense.id)).not.toContain(createdExpense.body.data.id);
 
       const nextFinancialRecap = await callApi(
         'GET',
@@ -1314,6 +1474,34 @@ describe('critical API workflow integration', () => {
       });
       expect(inventory.status).toBe(200);
       expect(inventory.body.data.find((item) => item.id === itemId)?.stock).toBe(7);
+
+      const dpRental = await callApi('POST', '/api/rentals', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: {
+          customer: { name: 'DP Customer', phone: '081277777770', guarantee: 'KTP' },
+          items: [{ id: itemId, qty: 1 }],
+          duration: 1,
+          payment: { status: 'DP', method: 'BANK', paidAmount: 20_000 },
+        },
+      });
+      expect(dpRental.status).toBe(201);
+
+      const financialRecapWithDp = await callApi('GET', '/api/financial/recap?startDate=2026-07-01&endDate=2026-07-31', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+      });
+      expect(financialRecapWithDp.status).toBe(200);
+      expect(financialRecapWithDp.body.data.summary).toMatchObject({
+        invoiceRevenue: 200_000,
+        cashReceived: 170_000,
+        receivables: 30_000,
+        totalExpenses: 15_000,
+        netProfit: 155_000,
+        totalTransactions: 4,
+      });
 
       const deleteRaceRental = await callApi('POST', '/api/rentals', {
         token: ownerToken,

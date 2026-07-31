@@ -15,6 +15,8 @@ import {
   fetchCurrentTenantSubscriptionSummary,
   fetchCurrentUser,
   fetchDashboardSummary,
+  fetchExpensesPage,
+  fetchFinancialRecapPage,
   fetchItems,
   fetchPlans,
   fetchRentals,
@@ -44,6 +46,8 @@ vi.mock('./lib/api.js', () => ({
   fetchCategories: vi.fn(),
   fetchCustomers: vi.fn(),
   fetchDashboardSummary: vi.fn(),
+  fetchExpensesPage: vi.fn(),
+  fetchFinancialRecapPage: vi.fn(),
   fetchCurrentBranchSettings: vi.fn(),
   fetchCurrentTenantSettings: vi.fn(),
   fetchCurrentTenantSubscriptionSummary: vi.fn(),
@@ -93,8 +97,8 @@ function renderApp(path) {
 
 const operationalUser = { id: 'owner-1', username: 'owner', role: 'kasir' };
 const tenantOptions = [
-  { id: 'tenant-1', name: 'Tenant Satu' },
-  { id: 'tenant-2', name: 'Tenant Dua' },
+  { id: 'tenant-1', name: 'Tenant Satu', membershipRole: 'owner', membershipStatus: 'active' },
+  { id: 'tenant-2', name: 'Tenant Dua', membershipRole: 'kasir', membershipStatus: 'active' },
 ];
 const branchOptionsByTenant = {
   'tenant-1': [
@@ -136,6 +140,30 @@ beforeEach(() => {
   fetchCurrentBranchSettings.mockResolvedValue(null);
   fetchCurrentTenantSubscriptionSummary.mockResolvedValue(null);
   fetchDashboardSummary.mockResolvedValue({ stats: {}, period: {}, recentRentals: [] });
+  fetchFinancialRecapPage.mockResolvedValue({
+    summary: {
+      startDate: '2026-07-01',
+      endDate: '2026-07-31',
+      invoiceRevenue: 0,
+      cashReceived: 0,
+      receivables: 0,
+      totalExpenses: 0,
+      netProfit: 0,
+      totalTransactions: 0,
+      methods: [],
+      topItems: [],
+      monthlyTrend: [],
+      availableMonths: ['2026-07'],
+      expenseCategories: [],
+    },
+    items: [],
+    nextCursor: null,
+  });
+  fetchExpensesPage.mockResolvedValue({
+    summary: { totalExpenses: 0, categories: [] },
+    items: [],
+    nextCursor: null,
+  });
   fetchPlans.mockResolvedValue([]);
 });
 
@@ -250,6 +278,33 @@ describe('application state orchestration', () => {
     expect(setActiveTenantContext).toHaveBeenCalledWith({ tenantId: 'tenant-1', branchId: 'branch-1' });
     expect(screen.getAllByDisplayValue('Toko Uji')).toHaveLength(2);
     expect(screen.getAllByDisplayValue('Pusat')).toHaveLength(2);
+  });
+
+  it('opens expense management only for active owner or admin tenant memberships', async () => {
+    mockOperationalSession();
+    fetchCurrentTenantSubscriptionSummary.mockResolvedValue({
+      features: { canUseFinancialRecap: true, canExportData: true, canManageExpenses: true },
+    });
+    renderApp('/financial');
+
+    expect(await screen.findByText('Omzet sewa')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Tambah Pengeluaran/i })).toBeInTheDocument();
+  });
+
+  it('keeps expense management hidden for cashier tenant memberships', async () => {
+    const cashier = { id: 'cashier-1', username: 'cashier', role: 'kasir' };
+    getStoredSession.mockReturnValue({ token: 'cashier-token', user: cashier });
+    getActiveTenantContext.mockReturnValue({ tenantId: 'tenant-1', branchId: 'branch-1' });
+    fetchCurrentUser.mockResolvedValue(cashier);
+    fetchTenants.mockResolvedValue([{ id: 'tenant-1', name: 'Tenant Satu', membershipRole: 'kasir', membershipStatus: 'active' }]);
+    fetchBranches.mockResolvedValue([{ id: 'branch-1', tenantId: 'tenant-1', name: 'Pusat' }]);
+    fetchCurrentTenantSubscriptionSummary.mockResolvedValue({
+      features: { canUseFinancialRecap: true, canExportData: true, canManageExpenses: true },
+    });
+    renderApp('/financial');
+
+    expect(await screen.findByText('Omzet sewa')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Tambah Pengeluaran/i })).not.toBeInTheDocument());
   });
 
   it('ignores stale auth expiry events but clears the matching active session', async () => {

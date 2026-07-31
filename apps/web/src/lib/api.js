@@ -449,6 +449,37 @@ export function fetchFinancialRecapPage({ startDate = '', endDate = '', cursor =
   }));
 }
 
+export function fetchExpensesPage({ startDate = '', endDate = '', query = '', cursor = '', limit = 50 } = {}) {
+  const params = new URLSearchParams();
+  if (startDate) params.set('startDate', startDate);
+  if (endDate) params.set('endDate', endDate);
+  if (query) params.set('q', query);
+  if (cursor) params.set('cursor', cursor);
+  params.set('limit', String(limit));
+
+  return request(`/api/expenses?${params.toString()}`, {}, { auth: true });
+}
+
+export function createExpense(payload) {
+  return request('/api/expenses', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
+export function updateExpense(expenseId, payload) {
+  return request(`/api/expenses/${encodeURIComponent(expenseId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, { auth: true });
+}
+
+export function deleteExpense(expenseId) {
+  return request(`/api/expenses/${encodeURIComponent(expenseId)}`, {
+    method: 'DELETE',
+  }, { auth: true });
+}
+
 export function fetchRentalHistoryPage({
   status = '',
   query = '',

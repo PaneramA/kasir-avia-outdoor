@@ -19,6 +19,7 @@ const PLAN_FEATURE_VALUE_TYPES = new Set(['boolean', 'integer', 'string', 'json'
 const SUBSCRIPTION_STATUSES = new Set(['trial', 'active', 'suspended', 'expired']);
 const PAYMENT_STATUSES = new Set(['DP', 'LUNAS']);
 const PAYMENT_METHODS = new Set(['QRIS', 'BANK', 'TUNAI']);
+const EXPENSE_PAYMENT_METHODS = new Set(['QRIS', 'BANK', 'TUNAI', 'LAINNYA']);
 const RENTAL_DAY_COUNT_MODES = new Set(['ROLLING_24H', 'DAILY_CUTOFF']);
 const RETURNED_RENTAL_STATUSES = new Set(['returned', 'selesai', 'completed', 'done']);
 const DEFAULT_TENANT_SLUG = 'default-avia';
@@ -241,6 +242,22 @@ function toCustomerDto(customer) {
     idNumber: customer.idNumber || '',
     createdAt: customer.createdAt.toISOString(),
     updatedAt: customer.updatedAt.toISOString(),
+  };
+}
+
+function toExpenseDto(expense) {
+  return {
+    id: expense.id,
+    tenantId: expense.tenantId,
+    branchId: expense.branchId,
+    date: expense.date.toISOString(),
+    category: expense.category,
+    description: expense.description,
+    amount: Number(expense.amount || 0),
+    paymentMethod: expense.paymentMethod || 'TUNAI',
+    notes: expense.notes || '',
+    createdAt: expense.createdAt.toISOString(),
+    updatedAt: expense.updatedAt.toISOString(),
   };
 }
 
@@ -506,7 +523,7 @@ function toTenantMembershipDto(membership) {
   };
 }
 
-function toTenantDto(tenant) {
+function toTenantDto(tenant, { membership } = {}) {
   const ownerUsernames = Array.isArray(tenant.memberships)
     ? tenant.memberships
       .filter((membership) => String(membership?.role || '').trim().toLowerCase() === 'owner')
@@ -520,6 +537,8 @@ function toTenantDto(tenant) {
     name: tenant.name,
     status: tenant.status,
     ownerUsernames,
+    membershipRole: membership?.role || null,
+    membershipStatus: membership?.status || null,
     branchCount: typeof tenant?._count?.branches === 'number' ? tenant._count.branches : undefined,
     membershipCount: typeof tenant?._count?.memberships === 'number' ? tenant._count.memberships : undefined,
     subscription: tenant.subscription ? toTenantSubscriptionDto(tenant.subscription) : null,
@@ -1328,8 +1347,18 @@ export async function getDashboardSummary({ recentStatus } = {}, context) {
   };
 }
 
-function getRentalAmount(rental) {
+function getRentalInvoiceAmount(rental) {
   return Math.max(0, Number(rental?.finalTotal ?? rental?.total ?? 0) || 0);
+}
+
+function getRentalCashAmount(rental) {
+  const invoiceAmount = getRentalInvoiceAmount(rental);
+  const paymentStatus = String(rental?.paymentStatus || 'LUNAS').toUpperCase();
+  if (paymentStatus === 'DP') {
+    return Math.min(invoiceAmount, Math.max(0, Number(rental?.paidAmount || 0) || 0));
+  }
+
+  return invoiceAmount;
 }
 
 async function getFinancialRecapSummary({ startDate, endDate } = {}, context) {
@@ -1343,8 +1372,12 @@ async function getFinancialRecapSummary({ startDate, endDate } = {}, context) {
     deletedAt: null,
     ...(Object.keys(date).length > 0 ? { date } : {}),
   }, context, { includeBranchNull: false });
+  const expenseWhere = withTenantBranchScope({
+    deletedAt: null,
+    ...(Object.keys(date).length > 0 ? { date } : {}),
+  }, context, { includeBranchNull: false });
   const tenantRentalWhere = withTenantBranchScope({ deletedAt: null }, context, { includeBranchNull: false });
-  const [rentals, rentalItems, tenantRentalDates] = await Promise.all([
+  const [rentals, rentalItems, expenses, tenantRentalDates] = await Promise.all([
     prisma.rental.findMany({
       where,
       select: {
@@ -1352,6 +1385,8 @@ async function getFinancialRecapSummary({ startDate, endDate } = {}, context) {
         date: true,
         total: true,
         finalTotal: true,
+        paymentStatus: true,
+        paidAmount: true,
         paymentMethod: true,
       },
     }),
@@ -1365,6 +1400,13 @@ async function getFinancialRecapSummary({ startDate, endDate } = {}, context) {
         rental: { select: { duration: true } },
       },
     }),
+    prisma.expense.findMany({
+      where: expenseWhere,
+      select: {
+        category: true,
+        amount: true,
+      },
+    }),
     prisma.rental.findMany({
       where: tenantRentalWhere,
       select: { date: true },
@@ -1373,11 +1415,16 @@ async function getFinancialRecapSummary({ startDate, endDate } = {}, context) {
 
   const methodBuckets = new Map();
   const monthBuckets = new Map();
-  let totalRevenue = 0;
+  let invoiceRevenue = 0;
+  let cashReceived = 0;
+  let receivables = 0;
 
   for (const rental of rentals) {
-    const amount = getRentalAmount(rental);
-    totalRevenue += amount;
+    const amount = getRentalInvoiceAmount(rental);
+    const cashAmount = getRentalCashAmount(rental);
+    invoiceRevenue += amount;
+    cashReceived += cashAmount;
+    receivables += Math.max(0, amount - cashAmount);
     const method = String(rental.paymentMethod || 'TUNAI').toUpperCase();
     const methodBucket = methodBuckets.get(method) || { method, count: 0, revenue: 0 };
     methodBucket.count += 1;
@@ -1390,6 +1437,18 @@ async function getFinancialRecapSummary({ startDate, endDate } = {}, context) {
     monthBucket.revenue += amount;
     monthBucket.transactions += 1;
     monthBuckets.set(monthKey, monthBucket);
+  }
+
+  const expenseCategoryBuckets = new Map();
+  let totalExpenses = 0;
+  for (const expense of expenses) {
+    const amount = Math.max(0, Number(expense.amount || 0));
+    totalExpenses += amount;
+    const category = String(expense.category || 'Lainnya').trim() || 'Lainnya';
+    const bucket = expenseCategoryBuckets.get(category) || { category, amount: 0, count: 0 };
+    bucket.amount += amount;
+    bucket.count += 1;
+    expenseCategoryBuckets.set(category, bucket);
   }
 
   const itemBuckets = new Map();
@@ -1416,12 +1475,19 @@ async function getFinancialRecapSummary({ startDate, endDate } = {}, context) {
   return {
     startDate: String(startDate || ''),
     endDate: String(endDate || ''),
-    totalRevenue,
+    totalRevenue: invoiceRevenue,
+    invoiceRevenue,
+    cashReceived,
+    receivables,
+    totalExpenses,
+    netProfit: cashReceived - totalExpenses,
+    profitMargin: cashReceived > 0 ? (cashReceived - totalExpenses) / cashReceived : 0,
     totalTransactions: rentals.length,
-    averageTransaction: rentals.length > 0 ? totalRevenue / rentals.length : 0,
+    averageTransaction: rentals.length > 0 ? invoiceRevenue / rentals.length : 0,
     methods: [...methodBuckets.values()].sort((a, b) => b.revenue - a.revenue),
     topItems: [...itemBuckets.values()].sort((a, b) => b.estimatedRevenue - a.estimatedRevenue),
     monthlyTrend: [...monthBuckets.values()].sort((a, b) => a.monthKey.localeCompare(b.monthKey)),
+    expenseCategories: [...expenseCategoryBuckets.values()].sort((a, b) => b.amount - a.amount),
     availableMonths,
   };
 }
@@ -1456,6 +1522,175 @@ export async function getFinancialRecapPage({ startDate, endDate, cursor, limit 
     items: pageRentals.map(toRentalDto),
     nextCursor: hasNextPage ? pageRentals.at(-1)?.id || null : null,
   };
+}
+
+function parseExpenseDate(value) {
+  const rawValue = String(value || '').trim();
+  if (!rawValue) {
+    throw new Error('Expense date is required');
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(rawValue)) {
+    return parseJakartaDateBoundary(rawValue, 'start');
+  }
+
+  const parsed = new Date(rawValue);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error('Expense date is invalid');
+  }
+
+  return parsed;
+}
+
+function normalizeExpensePayload(payload) {
+  const paymentMethod = String(payload?.paymentMethod || 'TUNAI').trim().toUpperCase();
+  if (!EXPENSE_PAYMENT_METHODS.has(paymentMethod)) {
+    throw new Error('Expense payment method is invalid');
+  }
+
+  return {
+    date: parseExpenseDate(payload?.date),
+    category: String(payload?.category || '').trim(),
+    description: String(payload?.description || '').trim(),
+    amount: Math.max(0, Number(payload?.amount || 0)),
+    paymentMethod,
+    notes: String(payload?.notes || '').trim(),
+  };
+}
+
+function buildExpenseWhere({ startDate, endDate, query } = {}, context) {
+  const startAt = parseJakartaDateBoundary(startDate, 'start');
+  const endAt = parseJakartaDateBoundary(endDate, 'end');
+  const date = {
+    ...(startAt ? { gte: startAt } : {}),
+    ...(endAt ? { lte: endAt } : {}),
+  };
+  const keyword = String(query || '').trim();
+
+  return withTenantBranchScope({
+    deletedAt: null,
+    ...(Object.keys(date).length > 0 ? { date } : {}),
+    ...(keyword ? {
+      OR: [
+        { category: { contains: keyword, mode: 'insensitive' } },
+        { description: { contains: keyword, mode: 'insensitive' } },
+        { notes: { contains: keyword, mode: 'insensitive' } },
+      ],
+    } : {}),
+  }, context, { includeBranchNull: false });
+}
+
+async function getExpenseSummary(where) {
+  const expenses = await prisma.expense.findMany({
+    where,
+    select: {
+      category: true,
+      amount: true,
+    },
+  });
+  const categoryBuckets = new Map();
+  let totalExpenses = 0;
+
+  for (const expense of expenses) {
+    const amount = Math.max(0, Number(expense.amount || 0));
+    totalExpenses += amount;
+    const category = String(expense.category || 'Lainnya').trim() || 'Lainnya';
+    const bucket = categoryBuckets.get(category) || { category, amount: 0, count: 0 };
+    bucket.amount += amount;
+    bucket.count += 1;
+    categoryBuckets.set(category, bucket);
+  }
+
+  return {
+    totalExpenses,
+    categories: [...categoryBuckets.values()].sort((a, b) => b.amount - a.amount),
+  };
+}
+
+export async function listExpensesPage({ startDate, endDate, query, cursor, limit = 50 } = {}, context) {
+  requireTenantId(context);
+  requireBranchId(context);
+
+  const where = buildExpenseWhere({ startDate, endDate, query }, context);
+  const summaryWhere = buildExpenseWhere({ startDate, endDate }, context);
+  const pageSize = Math.min(100, Math.max(1, Math.trunc(Number(limit) || 50)));
+  const [expenses, summary] = await Promise.all([
+    prisma.expense.findMany({
+      where,
+      ...(cursor ? { cursor: { id: String(cursor) }, skip: 1 } : {}),
+      take: pageSize + 1,
+      orderBy: [{ date: 'desc' }, { id: 'desc' }],
+    }),
+    cursor ? Promise.resolve(null) : getExpenseSummary(summaryWhere),
+  ]);
+  const hasNextPage = expenses.length > pageSize;
+  const pageExpenses = hasNextPage ? expenses.slice(0, pageSize) : expenses;
+
+  return {
+    summary,
+    items: pageExpenses.map(toExpenseDto),
+    nextCursor: hasNextPage ? pageExpenses.at(-1)?.id || null : null,
+  };
+}
+
+export async function createExpense(payload, context, userId) {
+  const tenantId = requireTenantId(context);
+  const branchId = requireBranchId(context);
+  const normalizedPayload = normalizeExpensePayload(payload);
+  const created = await prisma.expense.create({
+    data: {
+      ...normalizedPayload,
+      tenantId,
+      branchId,
+      createdByUserId: userId || null,
+    },
+  });
+
+  return toExpenseDto(created);
+}
+
+export async function updateExpense(id, payload, context) {
+  const expenseId = String(id || '').trim();
+  if (!expenseId) {
+    throw new Error('Expense not found');
+  }
+
+  const normalizedPayload = normalizeExpensePayload(payload);
+  const updated = await prisma.expense.updateMany({
+    where: withTenantBranchScope({
+      id: expenseId,
+      deletedAt: null,
+    }, context, { includeBranchNull: false }),
+    data: normalizedPayload,
+  });
+
+  if (updated.count !== 1) {
+    throw new Error('Expense not found');
+  }
+
+  const expense = await prisma.expense.findUnique({ where: { id: expenseId } });
+  return toExpenseDto(expense);
+}
+
+export async function deleteExpense(id, context) {
+  const expenseId = String(id || '').trim();
+  if (!expenseId) {
+    throw new Error('Expense not found');
+  }
+
+  const deleted = await prisma.expense.updateMany({
+    where: withTenantBranchScope({
+      id: expenseId,
+      deletedAt: null,
+    }, context, { includeBranchNull: false }),
+    data: { deletedAt: new Date() },
+  });
+
+  if (deleted.count !== 1) {
+    throw new Error('Expense not found');
+  }
+
+  return { id: expenseId, deleted: true };
 }
 
 export async function listRentalHistoryPage({
@@ -2173,7 +2408,7 @@ export async function listTenantsForUser({ userId, role }) {
     throw new Error('Tenant membership is required');
   }
 
-  return memberships.map(({ tenant }) => toTenantDto(tenant));
+  return memberships.map((membership) => toTenantDto(membership.tenant, { membership }));
 }
 
 export async function listPublicActiveTenants() {

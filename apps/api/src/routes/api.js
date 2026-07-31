@@ -14,6 +14,7 @@ import {
   createUser,
   deleteRentalByAdmin,
   deleteCategory,
+  deleteExpense,
   deleteUserByAdmin,
   deleteTenantForPlatformAdmin,
   findUserById,
@@ -23,6 +24,7 @@ import {
   getBranchSettingsForUser,
   getDashboardSummary,
   getFinancialRecapPage,
+  listExpensesPage,
   updateBranchSettingsByIdForUser,
   getSchemaSummary,
   getUserTenantMembershipSummary,
@@ -59,7 +61,9 @@ import {
   updateCustomerById,
   updateTenantSettingsByTenantId,
   resolveTenantBranchContextForUser,
+  createExpense,
   deleteCustomerById,
+  updateExpense,
   updateUserByAdmin,
   updateItem,
 } from '../data/db.js';
@@ -80,6 +84,7 @@ import {
   createUserSchema,
   createTenantUserSchema,
   createRentalSchema,
+  expenseSchema,
   loginSchema,
   processReturnSchema,
   onboardTenantSchema,
@@ -88,6 +93,7 @@ import {
   selfChangePasswordSchema,
   updateUserSchema,
   updateTenantSchema,
+  updateExpenseSchema,
   deleteTenantSchema,
   updateTenantSettingsSchema,
   updateBranchSettingsSchema,
@@ -126,7 +132,7 @@ function normalizeUsername(value) {
 }
 
 function isSafeNotFoundMessage(message) {
-  return /^(?:Plan|Tenant|Category|Branch|User|Membership|Customer|Rental|Branch access) not found$/
+  return /^(?:Plan|Tenant|Category|Branch|User|Membership|Customer|Rental|Expense|Branch access) not found$/
     .test(message)
     || /^Item(?: .+)? not found$/.test(message)
     || message === 'Category does not exist';
@@ -1191,6 +1197,52 @@ export async function apiRoute(req, res, env) {
         limit: searchParams.get('limit') || undefined,
       }, context);
       sendSuccess(res, 200, recap);
+      return true;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/expenses') {
+      await ensureAuth();
+      const context = await ensureRequestContext();
+      assertFeatureEnabled(context.subscription, 'canUseFinancialRecap');
+      const expenses = await listExpensesPage({
+        startDate: searchParams.get('startDate') || undefined,
+        endDate: searchParams.get('endDate') || undefined,
+        query: searchParams.get('q') || undefined,
+        cursor: searchParams.get('cursor') || undefined,
+        limit: searchParams.get('limit') || undefined,
+      }, context);
+      sendSuccess(res, 200, expenses);
+      return true;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/expenses') {
+      const user = await ensureAuth();
+      const context = await ensureTenantManagerContext();
+      assertFeatureEnabled(context.subscription, 'canUseFinancialRecap');
+      const body = expenseSchema.parse(await readBody(req));
+      const expense = await createExpense(body, context, user.id);
+      sendSuccess(res, 201, expense);
+      return true;
+    }
+
+    if (req.method === 'PATCH' && pathname.startsWith('/api/expenses/')) {
+      await ensureAuth();
+      const context = await ensureTenantManagerContext();
+      assertFeatureEnabled(context.subscription, 'canUseFinancialRecap');
+      const expenseId = decodeURIComponent(pathname.replace('/api/expenses/', ''));
+      const body = updateExpenseSchema.parse(await readBody(req));
+      const expense = await updateExpense(expenseId, body, context);
+      sendSuccess(res, 200, expense);
+      return true;
+    }
+
+    if (req.method === 'DELETE' && pathname.startsWith('/api/expenses/')) {
+      await ensureAuth();
+      const context = await ensureTenantManagerContext();
+      assertFeatureEnabled(context.subscription, 'canUseFinancialRecap');
+      const expenseId = decodeURIComponent(pathname.replace('/api/expenses/', ''));
+      const expense = await deleteExpense(expenseId, context);
+      sendSuccess(res, 200, expense);
       return true;
     }
 

@@ -99,6 +99,13 @@ function isPlatformAdmin(user) {
   return role === 'superuser'
 }
 
+function canTenantMembershipManageExpenses(tenant, subscriptionSummary) {
+  const role = String(tenant?.membershipRole || '').trim().toLowerCase()
+  const status = String(tenant?.membershipStatus || '').trim().toLowerCase()
+  const hasManageRole = role === 'owner' || role === 'admin'
+  return status === 'active' && hasManageRole && subscriptionSummary?.features?.canManageExpenses !== false
+}
+
 function resolveCurrentUser(user, { trustPlatformAdmin = false } = {}) {
   if (!user || typeof user !== 'object') {
     return user
@@ -276,6 +283,8 @@ function App() {
   const tenantSettings = tenantSettingsQuery.data || null
   const branchSettings = branchSettingsQuery.data || null
   const subscriptionSummary = subscriptionQuery.data || null
+  const activeTenant = tenantOptions.find((tenant) => tenant.id === activeTenantId) || null
+  const canManageExpenses = canTenantMembershipManageExpenses(activeTenant, subscriptionSummary)
   const operationalQueries = [itemQuery, categoryQuery, rentalQuery, tenantSettingsQuery, branchSettingsQuery, subscriptionQuery]
   const isLoading = Boolean(
     shouldLoadOperationalData
@@ -791,6 +800,7 @@ function App() {
                   branchId={activeBranchId}
                   tenantSettings={tenantSettings}
                   canExportData={subscriptionSummary?.features?.canExportData !== false}
+                  canManageExpenses={canManageExpenses}
                 />
                 )}
             />
