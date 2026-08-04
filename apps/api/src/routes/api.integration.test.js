@@ -1045,6 +1045,7 @@ describe('critical API workflow integration', () => {
             identityCardHeld,
             items: [{ id: itemId, qty: 1 }],
             duration: 1,
+            rentalStartAt: `2026-07-${String(10 + index).padStart(2, '0')}T02:00:00.000Z`,
             payment: { status: 'LUNAS', method: 'TUNAI', paidAmount: 50_000 },
           },
         });
@@ -1483,6 +1484,7 @@ describe('critical API workflow integration', () => {
           customer: { name: 'DP Customer', phone: '081277777770', guarantee: 'KTP' },
           items: [{ id: itemId, qty: 1 }],
           duration: 1,
+          rentalStartAt: '2026-07-20T02:00:00.000Z',
           payment: { status: 'DP', method: 'BANK', paidAmount: 20_000 },
         },
       });
