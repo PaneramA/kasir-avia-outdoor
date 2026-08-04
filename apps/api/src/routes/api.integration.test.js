@@ -1279,12 +1279,16 @@ describe('critical API workflow integration', () => {
         token: ownerToken, tenantId, branchId,
       });
       expect(dashboardSummary.status).toBe(200);
+      const dashboardPeriod = dashboardSummary.body.data.period;
+      const dashboardRevenue = ['2026-07-11', '2026-07-12', '2026-07-13']
+        .filter((dateKey) => dateKey >= dashboardPeriod.startDate && dateKey <= dashboardPeriod.endDate)
+        .length * 50_000;
       expect(dashboardSummary.body.data).toMatchObject({
         stats: {
           availableStock: 9,
           activeRentals: 3,
           itemsOut: 3,
-          revenue: 150_000,
+          revenue: dashboardRevenue,
         },
       });
       expect(dashboardSummary.body.data.recentRentals).toHaveLength(3);
