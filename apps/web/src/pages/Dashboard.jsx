@@ -6,6 +6,7 @@ import { formatCurrency, formatMonthLabel } from '../lib/financial';
 import { getPlannedReturnDate } from '../lib/rentalTime';
 import { fetchDashboardSummary } from '../lib/api';
 import { APP_CACHE_KEYS } from '../lib/appCache';
+import { APP_BRAND } from '../lib/brand';
 
 const Dashboard = ({ userId = '', tenantId = '', branchId = '' }) => {
     const [statusFilter, setStatusFilter] = React.useState('all');
@@ -49,11 +50,9 @@ const Dashboard = ({ userId = '', tenantId = '', branchId = '' }) => {
         <div className="pt-0 pb-4 sm:pb-5">
             <div className="mb-6 rounded-md border border-border bg-card-bg p-5 sm:mb-8 sm:p-6">
                 <div className="flex items-start gap-4">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-accent text-lg text-white">
-                        <i className="fas fa-mountain"></i>
-                    </div>
+                    <img className="h-11 w-11 shrink-0 rounded-md bg-white object-contain" src={APP_BRAND.logoSrc} alt="" aria-hidden="true" />
                     <div>
-                        <h2 className="mb-2 text-[1.25rem] font-bold text-text-main sm:text-[1.5rem]">Sistem Rental AviaOutdoor</h2>
+                        <h2 className="mb-2 text-[1.25rem] font-bold text-text-main sm:text-[1.5rem]">Sistem Rental {APP_BRAND.name}</h2>
                         <p className="text-text-muted">Pusat kendali operasional persewaan alat camping & hiking.</p>
                     </div>
                 </div>

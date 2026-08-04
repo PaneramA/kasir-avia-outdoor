@@ -2,14 +2,9 @@ import React, { useEffect, useState } from 'react'
 import { NavLink } from 'react-router'
 import ThemeToggle from './ThemeToggle'
 import { APP_ROUTES } from '../lib/routes'
+import { APP_BRAND, formatDashboardBrandName } from '../lib/brand'
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'avia_sidebar_collapsed'
-const DEFAULT_DASHBOARD_NAME = 'AviaOutdoor'
-
-function formatDashboardName(value) {
-    const normalized = String(value || '').trim()
-    return normalized ? Array.from(normalized).slice(0, 11).join('') : DEFAULT_DASHBOARD_NAME
-}
 
 const getInitialSidebarCollapsed = () => {
     if (typeof window === 'undefined') {
@@ -39,7 +34,7 @@ const Sidebar = ({ currentUser, tenantSettings, subscriptionSummary, onLogout, i
 
     const displayName = currentUser?.username || 'Admin'
     const displayRole = currentUser?.role || 'staff'
-    const dashboardName = formatDashboardName(tenantSettings?.dashboardName)
+    const dashboardName = formatDashboardBrandName(tenantSettings?.dashboardName)
     const desktopCollapsedClass = isDesktopCollapsed ? 'lg:w-[72px]' : 'lg:w-[232px]'
     const labelVisibilityClass = isDesktopCollapsed ? 'lg:sr-only' : ''
 
@@ -72,7 +67,7 @@ const Sidebar = ({ currentUser, tenantSettings, subscriptionSummary, onLogout, i
             <aside aria-label="Navigasi utama" className={`fixed inset-y-0 left-0 z-[120] flex h-screen w-[248px] max-w-[85vw] -translate-x-full flex-col overflow-hidden border-r border-border bg-sidebar-bg transition-all duration-300 lg:static lg:z-[100] ${desktopCollapsedClass} lg:max-w-none lg:translate-x-0 ${isMobileOpen ? 'translate-x-0 shadow-2xl shadow-black/40' : ''}`}>
                 <div className={`flex items-center justify-between px-5 py-5 lg:px-5 lg:py-6 ${isDesktopCollapsed ? 'lg:flex-col lg:justify-center lg:gap-3 lg:px-3' : ''}`}>
                     <div className="flex items-center gap-2.5 text-[1.1rem] font-bold text-accent tracking-[-0.3px] font-display sm:text-[1.25rem]">
-                        <i className="fas fa-mountain-sun text-[1.25rem] sm:text-[1.45rem]"></i>
+                        <img className="h-8 w-8 shrink-0 rounded-sm bg-white object-contain" src={APP_BRAND.logoSrc} alt="" aria-hidden="true" />
                         <span className={labelVisibilityClass}>{dashboardName}</span>
                     </div>
                     <button

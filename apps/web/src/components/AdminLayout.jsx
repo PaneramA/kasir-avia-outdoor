@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router'
 import { SWRConfig } from 'swr'
 import { APP_ROUTES, resolvePageInfo } from '../lib/routes'
 import { ADMIN_SWR_OPTIONS } from '../lib/adminCache'
+import { APP_BRAND } from '../lib/brand'
 
 const navigationItems = [
   { path: APP_ROUTES.admin, label: 'Ringkasan', icon: 'fas fa-chart-pie', end: true },
@@ -50,11 +51,9 @@ const AdminLayout = ({ currentUser, onLogout, children }) => {
         }`}>
           <div className="flex h-[72px] items-center justify-between border-b border-border px-5">
             <div className="flex items-center gap-3">
-              <span className="flex h-9 w-9 items-center justify-center rounded-md bg-accent text-white">
-                <i className="fas fa-shield-halved" />
-              </span>
+              <img className="h-9 w-9 rounded-md bg-white object-contain" src={APP_BRAND.logoSrc} alt="" aria-hidden="true" />
               <div>
-                <p className="text-sm font-bold text-text-main">Avia Admin</p>
+                <p className="text-sm font-bold text-text-main">{APP_BRAND.adminName}</p>
                 <p className="text-xs text-text-muted">Control panel</p>
               </div>
             </div>

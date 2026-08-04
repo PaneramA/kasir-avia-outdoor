@@ -30,7 +30,7 @@ async function main() {
     update: {},
     create: {
       slug: 'default-avia',
-      name: 'AviaOutdoor',
+      name: 'Sewantara',
       status: 'active',
     },
   });
@@ -107,8 +107,8 @@ async function main() {
     update: {},
     create: {
       tenantId: tenant.id,
-      storeName: 'AviaOutdoor',
-      dashboardName: 'AviaOutdoor',
+      storeName: 'Sewantara',
+      dashboardName: 'Sewantara',
       addressLines: ['Jl. Contoh Alamat No. 123', 'Bandung, Jawa Barat'],
       phone: '0812-0000-0000',
       legalFooterLines: [

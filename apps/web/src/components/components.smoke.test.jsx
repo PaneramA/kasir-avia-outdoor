@@ -181,7 +181,20 @@ describe('shared component smoke and interaction tests', () => {
       onCloseMobile={vi.fn()}
     />);
 
-    expect(screen.getByText('AviaOutdoor')).toBeInTheDocument();
+    expect(screen.getByText('Sewantara')).toBeInTheDocument();
+  });
+
+  it('treats the old AviaOutdoor dashboard name as the Sewantara default brand', () => {
+    withRouter(<Sidebar
+      currentUser={{ username: 'owner', role: 'kasir' }}
+      tenantSettings={{ dashboardName: 'AviaOutdoor' }}
+      subscriptionSummary={{ features: { canUseFinancialRecap: true, canManageBranches: true, canManageStaff: true } }}
+      onLogout={vi.fn()}
+      isMobileOpen={false}
+      onCloseMobile={vi.fn()}
+    />);
+
+    expect(screen.getByText('Sewantara')).toBeInTheDocument();
   });
 
   it('uses a compact active sidebar indicator instead of a filled block', () => {
@@ -241,7 +254,7 @@ describe('shared component smoke and interaction tests', () => {
       </AdminLayout>,
       ['/admin'],
     );
-    expect(screen.getByText('Avia Admin')).toBeInTheDocument();
+    expect(screen.getByText('Sewantara Admin')).toBeInTheDocument();
     expect(screen.getByText('Konten admin')).toBeInTheDocument();
     expect(screen.getByText('Paket & Fitur')).toBeInTheDocument();
   });

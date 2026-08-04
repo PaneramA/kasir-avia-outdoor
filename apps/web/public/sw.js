@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aviaoutdoor-shell-v4'
+const CACHE_NAME = 'sewantara-shell-v1'
 const APP_SHELL = [
   '/',
   '/index.html',

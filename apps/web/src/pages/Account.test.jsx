@@ -12,8 +12,8 @@ vi.mock('../lib/api', () => ({
 }));
 
 const baseTenantSettings = {
-  storeName: 'AviaOutdoor',
-  dashboardName: 'Avia',
+  storeName: 'Sewantara',
+  dashboardName: 'Sewa',
   addressLines: [],
   phone: '',
   rentalDayCountMode: 'ROLLING_24H',
@@ -60,7 +60,7 @@ describe('Account tenant settings', () => {
     renderAccount({ onUpdateTenantSettings });
 
     const input = screen.getByLabelText(/nama dashboard/i);
-    fireEvent.change(input, { target: { value: 'AVIAOUTDOOR12' } });
+    fireEvent.change(input, { target: { value: 'SEWANTARA123' } });
     await user.click(screen.getByRole('button', { name: /simpan pengaturan toko/i }));
 
     expect(await screen.findByText('Nama dashboard maksimal 11 karakter.')).toBeInTheDocument();

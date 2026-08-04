@@ -32,14 +32,20 @@ describe('receipt generation', () => {
     });
   });
 
+  it('uses Sewantara as the default receipt brand', () => {
+    expect(resolveReceiptProfile()).toMatchObject({
+      storeName: 'Sewantara',
+    });
+  });
+
   it('uses final totals and derives due dates', () => {
     expect(getReceiptTotal({ total: 10, finalTotal: 12 })).toBe(12);
     expect(getReceiptDueDate(rental).toISOString()).toBe('2026-07-03T10:00:00.000Z');
   });
 
   it('creates a complete WhatsApp receipt', () => {
-    const text = buildReceiptWhatsAppText(rental, { storeName: 'Avia Test', cashierName: 'Admin' });
-    expect(text).toContain('*Avia Test - Receipt Sewa*');
+    const text = buildReceiptWhatsAppText(rental, { storeName: 'Sewa Test', cashierName: 'Admin' });
+    expect(text).toContain('*Sewa Test - Receipt Sewa*');
     expect(text).toContain('Kasir: Admin');
     expect(text).toContain('Tenda x2');
     expect(text).toContain('*TOTAL: Rp 200.000*');

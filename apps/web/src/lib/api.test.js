@@ -103,8 +103,8 @@ describe('web API client state and requests', () => {
     fetch.mockResolvedValue(jsonResponse([]));
     const api = await loadApi();
 
-    await api.fetchCustomers('Fuad & Avia');
-    expect(fetch.mock.calls[0][0]).toBe('http://localhost:4000/api/customers?q=Fuad%20%26%20Avia');
+    await api.fetchCustomers('Fuad & Sewa');
+    expect(fetch.mock.calls[0][0]).toBe('http://localhost:4000/api/customers?q=Fuad%20%26%20Sewa');
   });
 
   it('requests archived inventory pages and restores an item', async () => {

@@ -1,4 +1,6 @@
-const DEFAULT_STORE_NAME = 'AviaOutdoor';
+import { APP_BRAND, resolveAppBrandName } from './brand';
+
+const DEFAULT_STORE_NAME = APP_BRAND.name;
 
 export const DEFAULT_RECEIPT_PROFILE = {
     storeName: DEFAULT_STORE_NAME,
@@ -81,7 +83,7 @@ export function resolveReceiptProfile(options = {}) {
     };
 
     return {
-        storeName: String(merged.storeName || DEFAULT_STORE_NAME).trim() || DEFAULT_STORE_NAME,
+        storeName: resolveAppBrandName(merged.storeName || DEFAULT_STORE_NAME),
         addressLines: toLines(merged.addressLines),
         phone: String(merged.phone || '').trim(),
         legalFooterLines: toLines(merged.legalFooterLines),
