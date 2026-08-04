@@ -1,4 +1,4 @@
-# Monorepo Kasir AviaOutdoor
+# Monorepo Sewantara
 
 Struktur monorepo ini dipisah agar frontend dan backend bisa berkembang tanpa rewrite besar.
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { APP_ROUTES } from '../lib/routes'
+import { APP_BRAND } from '../lib/brand'
 
 const Login = ({ onLogin, isSubmitting, errorMessage }) => {
     const [username, setUsername] = useState('')
@@ -19,8 +20,8 @@ const Login = ({ onLogin, isSubmitting, errorMessage }) => {
             <div className="grid w-full max-w-[980px] grid-cols-1 overflow-hidden rounded-md border border-border bg-card-bg shadow-none lg:grid-cols-[1.2fr_1fr]">
                 <section className="relative border-b border-border p-8 sm:p-10 lg:border-b-0 lg:border-r lg:p-12">
                     <div className="inline-flex items-center gap-3 font-display text-[1.35rem] font-bold text-accent">
-                        <i className="fas fa-mountain-sun text-[1.6rem]" />
-                        <span>AviaOutdoor</span>
+                        <img className="h-9 w-9 rounded-sm bg-white object-contain" src={APP_BRAND.logoSrc} alt="" aria-hidden="true" />
+                        <span>{APP_BRAND.name}</span>
                     </div>
 
                     <h1 className="mt-8 text-[2rem] font-bold leading-tight text-text-main md:text-[2.4rem]">

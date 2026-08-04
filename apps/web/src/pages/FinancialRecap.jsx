@@ -18,6 +18,7 @@ import {
   updateExpense,
 } from '../lib/api'
 import { APP_CACHE_KEYS, isFinancialMutationKeyForScope } from '../lib/appCache'
+import { APP_BRAND } from '../lib/brand'
 
 const EMPTY_RECAP = {
   totalRevenue: 0,
@@ -110,7 +111,7 @@ function getRentalReceivableAmount(rental) {
 
 function buildSummaryRows(recap) {
   return [
-    ['Laporan Keuangan AviaOutdoor'],
+    [`Laporan Keuangan ${APP_BRAND.name}`],
     ['Periode', `${recap.startDate || '-'} s/d ${recap.endDate || '-'}`],
     ['Tanggal Tutup Buku', recap.financialClosingDay || 31],
     ['Basis Laporan', 'Cash-based sederhana'],

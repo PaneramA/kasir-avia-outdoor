@@ -35,8 +35,8 @@ function renderSettings(initialEntry = '/pengaturan') {
         <Settings
           currentUser={{ id: 'owner-1', username: 'aviaoutdoor2022', role: 'kasir' }}
           tenantSettings={{
-            storeName: 'AviaOutdoor',
-            dashboardName: 'AVIA',
+            storeName: 'Sewantara',
+            dashboardName: 'Sewa',
             addressLines: ['Jl. Toko'],
             phone: '0812',
             rentalDayCountMode: 'ROLLING_24H',
@@ -48,7 +48,7 @@ function renderSettings(initialEntry = '/pengaturan') {
           subscriptionSummary={{
             subscription: { status: 'active', plan: { name: 'Growth', pricePeriod: 'monthly' } },
             tenantStatus: 'active',
-            tenantName: 'AviaOutdoor',
+            tenantName: 'Sewantara',
             usage: {},
             features: { canManageBranches: true, canManageStaff: true, canUseFinancialRecap: true },
           }}

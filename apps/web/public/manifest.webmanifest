@@ -1,13 +1,13 @@
 {
-  "name": "AviaOutdoor Rental System",
-  "short_name": "AviaOutdoor",
-  "description": "Aplikasi kasir dan rental perlengkapan outdoor.",
+  "name": "Sewantara - Sewa Nusantara",
+  "short_name": "Sewantara",
+  "description": "Aplikasi kasir dan rental perlengkapan sewa.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#0b1520",
-  "theme_color": "#123f66",
+  "theme_color": "#146c43",
   "lang": "id-ID",
   "icons": [
     {

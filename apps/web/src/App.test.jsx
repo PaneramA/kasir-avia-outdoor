@@ -184,7 +184,7 @@ describe('application state orchestration', () => {
     fetchPlans.mockResolvedValue([]);
     renderApp('/admin');
 
-    expect(await screen.findByText('Avia Admin')).toBeInTheDocument();
+    expect(await screen.findByText('Sewantara Admin')).toBeInTheDocument();
     expect(await screen.findByText('Ringkasan platform')).toBeInTheDocument();
     await waitFor(() => expect(fetchCurrentUser).toHaveBeenCalledOnce());
     expect(fetchItems).not.toHaveBeenCalled();
@@ -197,7 +197,7 @@ describe('application state orchestration', () => {
     fetchPlans.mockResolvedValue([]);
     renderApp('/dashboard');
 
-    expect(await screen.findByText('Avia Admin')).toBeInTheDocument();
+    expect(await screen.findByText('Sewantara Admin')).toBeInTheDocument();
     expect(await screen.findByText('Ringkasan platform')).toBeInTheDocument();
     expect(fetchTenants).toHaveBeenCalledWith('admin/tenants');
     expect(fetchBranches).not.toHaveBeenCalled();
@@ -213,7 +213,7 @@ describe('application state orchestration', () => {
     renderApp('/dashboard');
 
     expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
-    expect(screen.queryByText('Avia Admin')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sewantara Admin')).not.toBeInTheDocument();
     await waitFor(() => expect(fetchDashboardSummary).toHaveBeenCalledWith('all'));
     expect(fetchItems).not.toHaveBeenCalled();
   });
@@ -222,12 +222,12 @@ describe('application state orchestration', () => {
     const cashier = { id: 'cashier-1', username: 'aviaoutdoor2022', role: 'superuser' };
     getStoredSession.mockReturnValue({ token: 'cashier-token', user: cashier });
     fetchCurrentUser.mockResolvedValue({ ...cashier, role: 'kasir' });
-    fetchTenants.mockResolvedValue([{ id: 'tenant-1', name: 'AviaOutdoor' }]);
+    fetchTenants.mockResolvedValue([{ id: 'tenant-1', name: 'Sewantara' }]);
     fetchBranches.mockResolvedValue([{ id: 'branch-1', tenantId: 'tenant-1', name: 'Pusat' }]);
     renderApp('/dashboard');
 
     expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
-    expect(screen.queryByText('Avia Admin')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sewantara Admin')).not.toBeInTheDocument();
     expect(screen.queryByText('Admin Panel')).not.toBeInTheDocument();
     expect(await screen.findByText('kasir')).toBeInTheDocument();
   });

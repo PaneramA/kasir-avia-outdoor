@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { APP_BRAND } from '../lib/brand'
 
 const AdminLogin = ({ onLogin, isSubmitting, errorMessage, currentUser, onClearSession }) => {
   const [username, setUsername] = useState('')
@@ -18,11 +19,9 @@ const AdminLogin = ({ onLogin, isSubmitting, errorMessage, currentUser, onClearS
     <div className="flex min-h-screen items-center justify-center bg-bg-main px-4 py-10 text-text-main">
       <div className="w-full max-w-[420px]">
         <div className="mb-6 flex items-center justify-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-md bg-accent text-lg text-white">
-            <i className="fas fa-shield-halved" />
-          </span>
+          <img className="h-11 w-11 rounded-md bg-white object-contain" src={APP_BRAND.logoSrc} alt="" aria-hidden="true" />
           <div>
-            <p className="text-lg font-bold">Avia Admin</p>
+            <p className="text-lg font-bold">{APP_BRAND.adminName}</p>
             <p className="text-xs text-text-muted">Platform control panel</p>
           </div>
         </div>

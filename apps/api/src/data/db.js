@@ -23,12 +23,12 @@ const EXPENSE_PAYMENT_METHODS = new Set(['QRIS', 'BANK', 'TUNAI', 'LAINNYA']);
 const RENTAL_DAY_COUNT_MODES = new Set(['ROLLING_24H', 'DAILY_CUTOFF']);
 const RETURNED_RENTAL_STATUSES = new Set(['returned', 'selesai', 'completed', 'done']);
 const DEFAULT_TENANT_SLUG = 'default-avia';
-const DEFAULT_TENANT_NAME = 'AviaOutdoor';
+const DEFAULT_TENANT_NAME = 'Sewantara';
 const DEFAULT_BRANCH_CODE = 'pusat';
 const DEFAULT_BRANCH_NAME = 'Toko Pusat';
 const DEFAULT_TENANT_SETTINGS = {
-  storeName: 'AviaOutdoor',
-  dashboardName: 'AviaOutdoor',
+  storeName: 'Sewantara',
+  dashboardName: 'Sewantara',
   addressLines: ['Jl. Contoh Alamat No. 123', 'Bandung, Jawa Barat'],
   phone: '0812-0000-0000',
   legalFooterLines: [

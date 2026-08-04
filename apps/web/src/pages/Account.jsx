@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { changeMyPassword } from '../lib/api'
+import { APP_BRAND } from '../lib/brand'
 
 function formatQuota(quota) {
     if (!quota || typeof quota !== 'object') {
@@ -389,7 +390,7 @@ const Account = ({
                                         value={storeForm.dashboardName}
                                         onChange={(event) => setStoreForm((prev) => ({ ...prev, dashboardName: event.target.value }))}
                                         maxLength={DASHBOARD_NAME_MAX_LENGTH}
-                                        placeholder="AviaOutdoor"
+                                        placeholder={APP_BRAND.name}
                                     />
                                     <p className="mt-1.5 text-xs text-text-muted">Nama pendek yang tampil di sidebar kasir.</p>
                                 </div>

@@ -1045,6 +1045,7 @@ describe('critical API workflow integration', () => {
             identityCardHeld,
             items: [{ id: itemId, qty: 1 }],
             duration: 1,
+            rentalStartAt: `2026-07-${String(10 + index).padStart(2, '0')}T02:00:00.000Z`,
             payment: { status: 'LUNAS', method: 'TUNAI', paidAmount: 50_000 },
           },
         });
@@ -1278,12 +1279,16 @@ describe('critical API workflow integration', () => {
         token: ownerToken, tenantId, branchId,
       });
       expect(dashboardSummary.status).toBe(200);
+      const dashboardPeriod = dashboardSummary.body.data.period;
+      const dashboardRevenue = ['2026-07-11', '2026-07-12', '2026-07-13']
+        .filter((dateKey) => dateKey >= dashboardPeriod.startDate && dateKey <= dashboardPeriod.endDate)
+        .length * 50_000;
       expect(dashboardSummary.body.data).toMatchObject({
         stats: {
           availableStock: 9,
           activeRentals: 3,
           itemsOut: 3,
-          revenue: 150_000,
+          revenue: dashboardRevenue,
         },
       });
       expect(dashboardSummary.body.data.recentRentals).toHaveLength(3);
@@ -1483,6 +1488,7 @@ describe('critical API workflow integration', () => {
           customer: { name: 'DP Customer', phone: '081277777770', guarantee: 'KTP' },
           items: [{ id: itemId, qty: 1 }],
           duration: 1,
+          rentalStartAt: '2026-07-20T02:00:00.000Z',
           payment: { status: 'DP', method: 'BANK', paidAmount: 20_000 },
         },
       });
