@@ -1,12 +1,12 @@
-const CACHE_NAME = 'sewantara-shell-v1'
+const CACHE_NAME = 'sewantara-shell-v2'
 const APP_SHELL = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
-  '/apple-touch-icon.png',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
-  '/icons/icon-maskable-512.png',
+  '/icons/sewantara-apple-touch-icon.png',
+  '/icons/sewantara-icon-192.png',
+  '/icons/sewantara-icon-512.png',
+  '/icons/sewantara-icon-maskable-512.png',
 ]
 
 self.addEventListener('install', (event) => {

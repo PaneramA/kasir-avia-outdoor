@@ -2,7 +2,7 @@ export const APP_BRAND = {
   name: 'Sewantara',
   fullName: 'Sewa Nusantara',
   adminName: 'Sewantara Admin',
-  logoSrc: '/icons/icon-192.png',
+  logoSrc: '/icons/sewantara-icon-192.png',
 }
 
 const LEGACY_BRAND_NAMES = new Set([
