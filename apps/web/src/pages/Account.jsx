@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { changeMyPassword } from '../lib/api'
 import { APP_BRAND } from '../lib/brand'
+import ReceiptSettingsPreview from '../components/ReceiptSettingsPreview.jsx'
 
 function formatQuota(quota) {
     if (!quota || typeof quota !== 'object') {
@@ -25,11 +26,17 @@ const DEFAULT_VISIBLE_SECTIONS = [
     'accountInfo',
     'subscription',
     'tenantIdentity',
+    'receiptPolicy',
     'financialPolicy',
     'rentalPolicy',
     'branchStore',
     'password',
 ]
+
+const toFormLines = (value) => String(value || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
 
 const Account = ({
     currentUser,
@@ -50,7 +57,10 @@ const Account = ({
             : DEFAULT_VISIBLE_SECTIONS,
     ), [visibleSections])
     const shouldShowSection = (sectionId) => visibleSectionSet.has(sectionId)
-    const shouldShowTenantSettings = shouldShowSection('tenantIdentity')
+    const shouldShowTenantIdentity = shouldShowSection('tenantIdentity')
+    const shouldShowReceiptPolicy = shouldShowSection('receiptPolicy')
+    const shouldShowTenantStoreFields = shouldShowTenantIdentity || shouldShowReceiptPolicy
+    const shouldShowTenantSettings = shouldShowTenantStoreFields
         || shouldShowSection('financialPolicy')
         || shouldShowSection('rentalPolicy')
     const wrapperClassName = embedded ? 'space-y-4' : 'max-w-[760px] pt-0 pb-5'
@@ -59,6 +69,10 @@ const Account = ({
     const storeSubmitLabel = (() => {
         if (shouldShowTenantSettings && visibleSectionSet.size === 1 && shouldShowSection('tenantIdentity')) {
             return 'Simpan Identitas Toko'
+        }
+
+        if (shouldShowTenantSettings && shouldShowReceiptPolicy && !shouldShowTenantIdentity && !shouldShowSection('financialPolicy') && !shouldShowSection('rentalPolicy')) {
+            return 'Simpan Pengaturan Struk'
         }
 
         if (shouldShowTenantSettings && visibleSectionSet.size === 1 && shouldShowSection('financialPolicy')) {
@@ -81,6 +95,7 @@ const Account = ({
         dashboardName: '',
         address: '',
         phone: '',
+        legalFooter: '',
         rentalDayCountMode: 'ROLLING_24H',
         rentalCutoffHour: 8,
         rentalCutoffMinute: 0,
@@ -109,6 +124,9 @@ const Account = ({
                 ? tenantSettings.addressLines.join('\n')
                 : '',
             phone: tenantSettings?.phone || '',
+            legalFooter: Array.isArray(tenantSettings?.legalFooterLines)
+                ? tenantSettings.legalFooterLines.join('\n')
+                : '',
             rentalDayCountMode: String(tenantSettings?.rentalDayCountMode || 'ROLLING_24H').toUpperCase() === 'DAILY_CUTOFF'
                 ? 'DAILY_CUTOFF'
                 : 'ROLLING_24H',
@@ -187,10 +205,8 @@ const Account = ({
             return
         }
 
-        const addressLines = storeForm.address
-            .split('\n')
-            .map((line) => line.trim())
-            .filter(Boolean)
+        const addressLines = toFormLines(storeForm.address)
+        const legalFooterLines = toFormLines(storeForm.legalFooter)
 
         try {
             setIsSubmittingStore(true)
@@ -199,6 +215,7 @@ const Account = ({
                 dashboardName: trimmedDashboardName,
                 addressLines,
                 phone: storeForm.phone.trim(),
+                ...(shouldShowReceiptPolicy ? { legalFooterLines } : {}),
                 rentalDayCountMode: storeForm.rentalDayCountMode,
                 rentalCutoffHour: Number(storeForm.rentalCutoffHour),
                 rentalCutoffMinute: Number(storeForm.rentalCutoffMinute),
@@ -223,14 +240,8 @@ const Account = ({
             return
         }
 
-        const addressLines = branchForm.address
-            .split('\n')
-            .map((line) => line.trim())
-            .filter(Boolean)
-        const legalFooterLines = branchForm.legalFooter
-            .split('\n')
-            .map((line) => line.trim())
-            .filter(Boolean)
+        const addressLines = toFormLines(branchForm.address)
+        const legalFooterLines = toFormLines(branchForm.legalFooter)
 
         try {
             setIsSubmittingBranchStore(true)
@@ -248,6 +259,22 @@ const Account = ({
             setIsSubmittingBranchStore(false)
         }
     }
+
+    const receiptPreviewProfile = useMemo(() => {
+        const tenantAddressLines = toFormLines(storeForm.address)
+        const tenantLegalFooterLines = toFormLines(storeForm.legalFooter)
+        const branchAddressLines = toFormLines(branchForm.address)
+        const branchLegalFooterLines = toFormLines(branchForm.legalFooter)
+        const branchStoreName = branchForm.storeName.trim()
+        const branchPhone = branchForm.phone.trim()
+
+        return {
+            storeName: branchStoreName || storeForm.storeName.trim() || APP_BRAND.name,
+            addressLines: branchAddressLines.length > 0 ? branchAddressLines : tenantAddressLines,
+            phone: branchPhone || storeForm.phone.trim(),
+            legalFooterLines: branchLegalFooterLines.length > 0 ? branchLegalFooterLines : tenantLegalFooterLines,
+        }
+    }, [branchForm, storeForm])
 
     return (
         <div className={wrapperClassName}>
@@ -364,10 +391,12 @@ const Account = ({
                     )}
 
                     <form onSubmit={handleSubmitStoreSettings} className="space-y-4">
-                        {shouldShowSection('tenantIdentity') && (
+                        {shouldShowTenantStoreFields && (
                             <>
                                 <div>
-                                    <label className="mb-1.5 block text-[0.85rem] text-text-muted">Nama Toko</label>
+                                    <label className="mb-1.5 block text-[0.85rem] text-text-muted">
+                                        {shouldShowReceiptPolicy && !shouldShowTenantIdentity ? 'Nama Toko di Struk' : 'Nama Toko'}
+                                    </label>
                                     <input
                                         type="text"
                                         className={FIELD_CLASS}
@@ -376,7 +405,8 @@ const Account = ({
                                         required
                                     />
                                 </div>
-                                <div>
+                                {shouldShowTenantIdentity && (
+                                    <div>
                                     <div className="mb-1.5 flex items-center justify-between gap-3">
                                         <label htmlFor="dashboard-name" className="text-[0.85rem] text-text-muted">Nama Dashboard</label>
                                         <span className="text-[0.75rem] text-text-muted">
@@ -392,8 +422,9 @@ const Account = ({
                                         maxLength={DASHBOARD_NAME_MAX_LENGTH}
                                         placeholder={APP_BRAND.name}
                                     />
-                                    <p className="mt-1.5 text-xs text-text-muted">Nama pendek yang tampil di sidebar kasir.</p>
+                                    <p className="mt-1.5 text-xs text-text-muted">Nama pendek aplikasi yang tampil di sidebar kasir. Jika kosong, sistem memakai nama toko.</p>
                                 </div>
+                                )}
                                 <div>
                                     <label className="mb-1.5 block text-[0.85rem] text-text-muted">Alamat Toko</label>
                                     <textarea
@@ -412,6 +443,19 @@ const Account = ({
                                         onChange={(event) => setStoreForm((prev) => ({ ...prev, phone: event.target.value }))}
                                     />
                                 </div>
+                                {shouldShowReceiptPolicy && (
+                                    <div>
+                                        <label htmlFor="tenant-receipt-footer" className="mb-1.5 block text-[0.85rem] text-text-muted">Footer Legal Struk</label>
+                                        <textarea
+                                            id="tenant-receipt-footer"
+                                            className={`${FIELD_CLASS} min-h-[96px] resize-y`}
+                                            value={storeForm.legalFooter}
+                                            onChange={(event) => setStoreForm((prev) => ({ ...prev, legalFooter: event.target.value }))}
+                                            placeholder="Satu baris per catatan struk"
+                                        ></textarea>
+                                        <p className="mt-1.5 text-xs text-text-muted">Dipakai di WhatsApp dan struk print jika cabang aktif tidak punya override footer.</p>
+                                    </div>
+                                )}
                             </>
                         )}
 
@@ -571,6 +615,18 @@ const Account = ({
                             {isSubmittingBranchStore ? 'Menyimpan...' : 'Simpan Pengaturan Cabang'}
                         </button>
                     </form>
+                </section>
+            )}
+
+            {shouldShowReceiptPolicy && (
+                <section className={`${sectionClassName} ${sectionMarginClassName}`}>
+                    <div className="mb-4">
+                        <h3 className="mb-1 text-[1.1rem] font-bold text-text-main">Preview Struk</h3>
+                        <p className="text-sm text-text-muted">
+                            Preview ini memakai format receipt asli untuk tombol WhatsApp dan Print.
+                        </p>
+                    </div>
+                    <ReceiptSettingsPreview profile={receiptPreviewProfile} />
                 </section>
             )}
 

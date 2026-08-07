@@ -1,0 +1,1 @@
+-- No-op migration kept so fresh databases can replay the historical migration order.

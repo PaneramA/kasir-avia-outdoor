@@ -134,13 +134,13 @@ const Settings = ({
     {
       id: 'struk',
       icon: 'fas fa-receipt',
-      title: 'Struk Cabang Aktif',
-      summary: branchSettings?.storeName || 'Override nama, alamat, kontak, dan footer struk cabang',
+      title: 'Struk & Preview',
+      summary: 'Atur header, footer, dan preview WhatsApp/print',
       body: (
         <Account
           {...commonAccountProps}
           hideSectionHeading
-          visibleSections={['branchStore']}
+          visibleSections={['receiptPolicy', 'branchStore']}
         />
       ),
     },

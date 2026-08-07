@@ -2,7 +2,7 @@
 
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import Account from './Account.jsx';
@@ -16,6 +16,7 @@ const baseTenantSettings = {
   dashboardName: 'Sewa',
   addressLines: [],
   phone: '',
+  legalFooterLines: ['Barang sewa wajib dikembalikan sesuai jadwal.'],
   rentalDayCountMode: 'ROLLING_24H',
   rentalCutoffHour: 8,
   rentalCutoffMinute: 0,
@@ -65,5 +66,34 @@ describe('Account tenant settings', () => {
 
     expect(await screen.findByText('Nama dashboard maksimal 11 karakter.')).toBeInTheDocument();
     expect(onUpdateTenantSettings).not.toHaveBeenCalled();
+  });
+
+  it('submits receipt footer lines and shows WhatsApp plus print previews', async () => {
+    const user = userEvent.setup();
+    const onUpdateTenantSettings = vi.fn().mockResolvedValue({});
+    renderAccount({
+      onUpdateTenantSettings,
+      hideSectionHeading: true,
+      visibleSections: ['receiptPolicy'],
+    });
+
+    const previewPanel = screen.getByTestId('receipt-settings-preview');
+    expect(previewPanel).toBeInTheDocument();
+    expect(within(previewPanel).getByText(/Preview WhatsApp/i)).toBeInTheDocument();
+    expect(within(previewPanel).getByTitle(/Preview print struk/i)).toBeInTheDocument();
+
+    const footerInput = screen.getByLabelText(/Footer Legal Struk/i);
+    await user.clear(footerInput);
+    await user.type(footerInput, 'Cek barang sebelum dibawa{enter}Telat kembali kena biaya');
+
+    expect(within(previewPanel).getByText(/Cek barang sebelum dibawa/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Simpan Pengaturan Struk/i }));
+
+    await waitFor(() => expect(onUpdateTenantSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        legalFooterLines: ['Cek barang sebelum dibawa', 'Telat kembali kena biaya'],
+      }),
+    ));
   });
 });

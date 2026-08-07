@@ -2,7 +2,7 @@
 
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { SWRConfig } from 'swr';
@@ -39,6 +39,7 @@ function renderSettings(initialEntry = '/pengaturan') {
             dashboardName: 'Sewa',
             addressLines: ['Jl. Toko'],
             phone: '0812',
+            legalFooterLines: ['Barang sewa wajib dijaga.'],
             rentalDayCountMode: 'ROLLING_24H',
             rentalCutoffHour: 8,
             rentalCutoffMinute: 0,
@@ -74,6 +75,7 @@ describe('Settings page', () => {
     expect(screen.getByText(/Semua pengaturan toko dikumpulkan di sini/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Profil & Keamanan/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Identitas Toko/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Struk & Preview/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Cabang Toko/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Tim & Akses/i })).toBeInTheDocument();
 
@@ -109,5 +111,18 @@ describe('Settings page', () => {
     const profileIcon = screen.getByTestId('settings-card-icon-profil');
     expect(profileIcon.className).toContain('group-hover:bg-white');
     expect(profileIcon.className).toContain('group-hover:text-accent');
+  });
+
+  it('opens receipt settings with live WhatsApp and print preview', async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(screen.getByRole('button', { name: /Struk & Preview/i }));
+
+    expect(screen.getByLabelText(/Footer Legal Struk/i)).toBeInTheDocument();
+    const previewPanel = screen.getByTestId('receipt-settings-preview');
+    expect(previewPanel).toBeInTheDocument();
+    expect(within(previewPanel).getByText(/Preview WhatsApp/i)).toBeInTheDocument();
+    expect(within(previewPanel).getByTitle(/Preview print struk/i)).toBeInTheDocument();
   });
 });
