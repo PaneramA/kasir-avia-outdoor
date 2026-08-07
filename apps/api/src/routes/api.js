@@ -34,6 +34,7 @@ import {
   updatePlanForPlatformAdmin,
   updateTenantSubscriptionForPlatformAdmin,
   updateTenantForSuperuser,
+  updateRental,
   listBranchAccessForUser,
   listPlansForPlatformAdmin,
   upsertBranchAccessForUser,
@@ -84,6 +85,7 @@ import {
   createUserSchema,
   createTenantUserSchema,
   createRentalSchema,
+  updateRentalSchema,
   expenseSchema,
   loginSchema,
   processReturnSchema,
@@ -1260,6 +1262,16 @@ export async function apiRoute(req, res, env) {
       const body = createRentalSchema.parse(await readBody(req));
       const rental = await createRental(body, context);
       sendSuccess(res, 201, rental);
+      return true;
+    }
+
+    if (req.method === 'PATCH' && pathname.startsWith('/api/rentals/')) {
+      const actor = await ensureAuth();
+      const context = await ensureRequestContext();
+      const rentalId = decodeURIComponent(pathname.replace('/api/rentals/', ''));
+      const body = updateRentalSchema.parse(await readBody(req));
+      const rental = await updateRental(rentalId, body, { ...context, actorUserId: actor.id });
+      sendSuccess(res, 200, rental);
       return true;
     }
 

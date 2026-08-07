@@ -1509,6 +1509,148 @@ describe('critical API workflow integration', () => {
         totalTransactions: 4,
       });
 
+      const editPrimaryItem = await callApi('POST', '/api/items', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: { name: 'Edit Tenda Vitest', category: 'Tenda', stock: 5, price: 12_000, image: '' },
+      });
+      expect(editPrimaryItem.status).toBe(201);
+      const editExtraItem = await callApi('POST', '/api/items', {
+        token: ownerToken,
+        tenantId,
+        branchId,
+        body: { name: 'Edit Lampu Vitest', category: 'Tenda', stock: 4, price: 8_000, image: '' },
+      });
+      expect(editExtraItem.status).toBe(201);
+      const editPrimaryItemId = editPrimaryItem.body.data.id;
+      const editExtraItemId = editExtraItem.body.data.id;
+
+      const editableRental = await callApi('POST', '/api/rentals', {
+        token: cashierToken,
+        tenantId,
+        branchId,
+        body: {
+          customer: {
+            name: 'Edit Customer Awal',
+            phone: '081277777780',
+            address: 'Alamat awal',
+            guarantee: 'KTP',
+            idNumber: '12345',
+          },
+          identityCardHeld: true,
+          items: [{ id: editPrimaryItemId, qty: 2 }],
+          duration: 1,
+          rentalStartAt: '2026-07-24T02:00:00.000Z',
+          payment: { status: 'LUNAS', method: 'TUNAI', paidAmount: 24_000 },
+        },
+      });
+      expect(editableRental.status).toBe(201);
+      expect((await prisma.item.findUnique({ where: { id: editPrimaryItemId } })).stock).toBe(3);
+      expect((await prisma.item.findUnique({ where: { id: editExtraItemId } })).stock).toBe(4);
+
+      const editedRental = await callApi('PATCH', `/api/rentals/${editableRental.body.data.id}`, {
+        token: cashierToken,
+        tenantId,
+        branchId,
+        body: {
+          editReason: 'Tambah item yang lupa diinput',
+          customer: {
+            name: 'Edit Customer Final',
+            phone: '081277777780',
+            address: 'Alamat final',
+            guarantee: 'SIM',
+            idNumber: 'SIM-67890',
+          },
+          identityCardHeld: false,
+          items: [
+            { id: editPrimaryItemId, qty: 1, notes: 'Dikurangi satu' },
+            { id: editExtraItemId, qty: 3, notes: 'Tambahan lampu' },
+          ],
+          rentalStartAt: '2026-07-24T02:00:00.000Z',
+          rentalEndAt: '2026-07-26T02:00:00.000Z',
+          payment: { status: 'DP', method: 'BANK', paidAmount: 30_000 },
+        },
+      });
+      expect(editedRental.status, JSON.stringify(editedRental.body)).toBe(200);
+      expect(editedRental.body.data).toMatchObject({
+        id: editableRental.body.data.id,
+        customer: {
+          name: 'Edit Customer Final',
+          phone: '081277777780',
+          guarantee: 'SIM',
+          idNumber: 'SIM-67890',
+          identityCardHeld: false,
+        },
+        duration: 2,
+        total: 72_000,
+        payment: {
+          status: 'DP',
+          method: 'BANK',
+          paidAmount: 30_000,
+          remainingAmount: 42_000,
+        },
+      });
+      expect(editedRental.body.data.items).toEqual([
+        expect.objectContaining({ id: editPrimaryItemId, qty: 1, price: 12_000, notes: 'Dikurangi satu' }),
+        expect.objectContaining({ id: editExtraItemId, qty: 3, price: 8_000, notes: 'Tambahan lampu' }),
+      ]);
+      expect((await prisma.item.findUnique({ where: { id: editPrimaryItemId } })).stock).toBe(4);
+      expect((await prisma.item.findUnique({ where: { id: editExtraItemId } })).stock).toBe(1);
+      const editAudit = await prisma.auditLog.findFirst({
+        where: { action: 'rental.edit', targetId: editableRental.body.data.id },
+      });
+      expect(editAudit?.actorUserId).toBeTruthy();
+      expect(editAudit?.snapshotBefore).toMatchObject({
+        reason: 'Tambah item yang lupa diinput',
+        before: {
+          customerName: 'Edit Customer Awal',
+          total: 24_000,
+          items: [expect.objectContaining({ itemId: editPrimaryItemId, qty: 2 })],
+        },
+        after: {
+          customerName: 'Edit Customer Final',
+          total: 72_000,
+          items: [
+            expect.objectContaining({ itemId: editPrimaryItemId, qty: 1 }),
+            expect.objectContaining({ itemId: editExtraItemId, qty: 3 }),
+          ],
+        },
+      });
+
+      const returnedEditedRental = await callApi('POST', '/api/returns', {
+        token: cashierToken,
+        tenantId,
+        branchId,
+        body: {
+          rentalId: editableRental.body.data.id,
+          settleRemainingPayment: true,
+        },
+      });
+      expect(returnedEditedRental.status).toBe(200);
+      expect((await prisma.item.findUnique({ where: { id: editPrimaryItemId } })).stock).toBe(5);
+      expect((await prisma.item.findUnique({ where: { id: editExtraItemId } })).stock).toBe(4);
+      const editReturnedRental = await callApi('PATCH', `/api/rentals/${editableRental.body.data.id}`, {
+        token: cashierToken,
+        tenantId,
+        branchId,
+        body: {
+          editReason: 'Tidak boleh edit setelah kembali',
+          customer: {
+            name: 'Edit Customer Final',
+            phone: '081277777780',
+            guarantee: 'SIM',
+            idNumber: 'SIM-67890',
+          },
+          identityCardHeld: false,
+          items: [{ id: editPrimaryItemId, qty: 1 }],
+          duration: 1,
+          payment: { status: 'LUNAS', method: 'TUNAI' },
+        },
+      });
+      expect(editReturnedRental.status).toBe(400);
+      expect(editReturnedRental.body.message).toBe('Rental already returned');
+
       const deleteRaceRental = await callApi('POST', '/api/rentals', {
         token: ownerToken,
         tenantId,

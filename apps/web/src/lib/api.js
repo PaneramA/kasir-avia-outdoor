@@ -374,6 +374,13 @@ export function createRental(rental) {
   }, { auth: true });
 }
 
+export function updateRental(rentalId, rental) {
+  return request(`/api/rentals/${encodeURIComponent(rentalId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(rental),
+  }, { auth: true }).then(normalizeRentalRecord);
+}
+
 export function processReturn(payload) {
   return request('/api/returns', {
     method: 'POST',

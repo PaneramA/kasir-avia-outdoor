@@ -243,6 +243,17 @@ export const createRentalSchema = z.object({
   id: z.string().trim().min(1).optional(),
 });
 
+export const updateRentalSchema = z.object({
+  editReason: z.string().trim().min(3).max(300),
+  customer: customerSchema,
+  identityCardHeld: z.boolean().optional().default(true),
+  items: z.array(rentalItemSchema).min(1),
+  duration: z.coerce.number().int().min(1).optional(),
+  rentalStartAt: z.string().datetime().optional(),
+  rentalEndAt: z.string().datetime().optional(),
+  payment: rentalPaymentSchema.optional(),
+});
+
 export const createCustomerSchema = customerSchema;
 export const updateCustomerSchema = customerSchema;
 
