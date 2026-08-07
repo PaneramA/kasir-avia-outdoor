@@ -93,6 +93,13 @@ const FINANCIAL_MUTATION_NAMESPACES = new Set([
   'app/expenses',
 ])
 
+const RENTAL_MUTATION_NAMESPACES = new Set([
+  'app/rentals',
+  'app/rental-history',
+  'app/dashboard',
+  'app/financial-recap',
+])
+
 function isScopedMutationKeyForNamespaces(key, namespaces, userId, tenantId, branchId) {
   const [normalizedUserId, normalizedTenantId, normalizedBranchId] = createOperationalScope(userId, tenantId, branchId)
   if (!normalizedUserId || !normalizedTenantId || !normalizedBranchId) {
@@ -127,6 +134,10 @@ export function isInventoryMutationKeyForScope(key, userId, tenantId, branchId) 
 
 export function isFinancialMutationKeyForScope(key, userId, tenantId, branchId) {
   return isScopedMutationKeyForNamespaces(key, FINANCIAL_MUTATION_NAMESPACES, userId, tenantId, branchId)
+}
+
+export function isRentalMutationKeyForScope(key, userId, tenantId, branchId) {
+  return isScopedMutationKeyForNamespaces(key, RENTAL_MUTATION_NAMESPACES, userId, tenantId, branchId)
 }
 
 export const APP_SWR_OPTIONS = {

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import useSWRInfinite from 'swr/infinite';
 import ReceiptModal from '../components/ReceiptModal';
+import RentalEditModal from '../components/RentalEditModal';
 import { openReceiptWhatsApp, printReceipt } from '../lib/receipt';
 import { formatCurrency, getCurrentMonthRangeDateKeys } from '../lib/financial';
 import { compareRentalsByClosestReturnDate, getRentalReturnTimelineDate } from '../lib/rentalTime';
@@ -40,6 +41,9 @@ const History = ({
     currentUser,
     tenantId,
     branchId,
+    inventory = [],
+    categories = [],
+    onUpdateRental,
     onVerifyRentalDelete,
     onDeleteRentalByAdmin,
 }) => {
@@ -59,6 +63,7 @@ const History = ({
     const [deleteErrorMessage, setDeleteErrorMessage] = useState('');
     const [deleteSuccessMessage, setDeleteSuccessMessage] = useState('');
     const [receiptRental, setReceiptRental] = useState(null);
+    const [editingRental, setEditingRental] = useState(null);
 
     useEffect(() => {
         const timeoutId = window.setTimeout(() => {
@@ -213,6 +218,22 @@ const History = ({
 
     const closeReceiptModal = () => {
         setReceiptRental(null);
+    };
+
+    const openEditModal = (rental) => {
+        setDeleteSuccessMessage('');
+        setDeleteErrorMessage('');
+        setEditingRental(rental);
+    };
+
+    const closeEditModal = () => {
+        setEditingRental(null);
+    };
+
+    const handleUpdateRental = async (rentalId, payload) => {
+        const updatedRental = await onUpdateRental(rentalId, payload);
+        await mutateHistory();
+        return updatedRental;
     };
 
     const handlePrintReceipt = (paperWidthMm = 80) => {
@@ -400,6 +421,15 @@ const History = ({
                                         )}
 
                                         <div className="mt-3 flex flex-wrap gap-2">
+                                            {rental.status === 'Active' && onUpdateRental && (
+                                                <button
+                                                    type="button"
+                                                    className="inline-flex items-center gap-2 rounded-md border border-accent bg-card-bg px-3 py-1.5 text-[0.75rem] font-semibold text-accent hover:bg-[#ecfdf5]"
+                                                    onClick={() => openEditModal(rental)}
+                                                >
+                                                    <i className="fas fa-pen"></i> Edit
+                                                </button>
+                                            )}
                                             <button
                                                 type="button"
                                                 className="inline-flex items-center gap-2 rounded-md border border-accent bg-accent px-3 py-1.5 text-[0.75rem] font-semibold text-white hover:bg-accent-hover"
@@ -521,6 +551,15 @@ const History = ({
                                             </td>
                                             <td className="align-top border-b border-border/50 p-4 text-right">
                                                 <div className="flex justify-end gap-2">
+                                                    {rental.status === 'Active' && onUpdateRental && (
+                                                        <button
+                                                            type="button"
+                                                            className="inline-flex items-center gap-2 rounded-md border border-accent bg-card-bg px-3 py-1.5 text-[0.75rem] font-semibold text-accent hover:bg-[#ecfdf5]"
+                                                            onClick={() => openEditModal(rental)}
+                                                        >
+                                                            <i className="fas fa-pen"></i> Edit
+                                                        </button>
+                                                    )}
                                                     <button
                                                         type="button"
                                                         className="inline-flex items-center gap-2 rounded-md border border-accent bg-accent px-3 py-1.5 text-[0.75rem] font-semibold text-white hover:bg-accent-hover"
@@ -656,6 +695,16 @@ const History = ({
                 onPrint={handlePrintReceipt}
                 onShareWhatsApp={handleShareReceiptWhatsApp}
             />
+
+            {editingRental && (
+                <RentalEditModal
+                    rental={editingRental}
+                    inventory={inventory}
+                    categories={categories}
+                    onClose={closeEditModal}
+                    onSubmit={handleUpdateRental}
+                />
+            )}
         </div>
     );
 };

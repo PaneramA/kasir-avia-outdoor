@@ -47,7 +47,7 @@ const historyRental = {
   },
 };
 
-function renderHistory() {
+function renderHistory(props = {}) {
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
       <History
@@ -56,6 +56,7 @@ function renderHistory() {
         branchId="branch-1"
         onVerifyRentalDelete={vi.fn()}
         onDeleteRentalByAdmin={vi.fn()}
+        {...props}
       />
     </SWRConfig>,
   );
@@ -84,5 +85,13 @@ describe('History identity card status', () => {
     const statusCell = await screen.findByTestId('history-status-TX-HOLD-001');
     expect(within(statusCell).getByText('Aktif')).toBeInTheDocument();
     expect(within(statusCell).getByText('Kartu tidak ditahan')).toBeInTheDocument();
+  });
+
+  it('shows an edit action for active rentals when the edit handler is available', async () => {
+    renderHistory({ onUpdateRental: vi.fn() });
+
+    await waitFor(() => expect(fetchRentalHistoryPage).toHaveBeenCalled());
+
+    expect(await screen.findAllByRole('button', { name: /edit/i })).not.toHaveLength(0);
   });
 });

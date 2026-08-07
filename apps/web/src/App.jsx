@@ -8,7 +8,7 @@ import AdminLayout from './components/AdminLayout'
 import Login from './pages/Login'
 import AdminLogin from './pages/AdminLogin'
 import { APP_ROUTES, resolvePageInfo } from './lib/routes'
-import { APP_CACHE_KEYS, isInventoryMutationKeyForScope } from './lib/appCache'
+import { APP_CACHE_KEYS, isInventoryMutationKeyForScope, isRentalMutationKeyForScope } from './lib/appCache'
 import {
   createCategory,
   createItem,
@@ -36,6 +36,7 @@ import {
   updateCurrentTenantSettings,
   updateCurrentBranchSettings,
   updateItem,
+  updateRental,
 } from './lib/api'
 import { setReceiptProfile } from './lib/receipt'
 
@@ -560,6 +561,30 @@ function App() {
     [activeBranchId, activeTenantId, currentUserId, getErrorMessage, itemQuery, mutateCache, rentalQuery],
   )
 
+  const handleUpdateRental = useCallback(
+    async (rentalId, payload) => {
+      const updatedRental = await updateRental(rentalId, payload)
+      await rentalQuery.mutate((previousRentals = []) => previousRentals.map((rental) => (
+        rental.id === updatedRental.id ? { ...rental, ...updatedRental } : rental
+      )), { revalidate: false })
+
+      void Promise.all([itemQuery.mutate(), rentalQuery.mutate()]).catch((error) => {
+        setErrorMessage(getErrorMessage(error))
+      })
+      void mutateCache(
+        (key) => (
+          isInventoryMutationKeyForScope(key, currentUserId, activeTenantId, activeBranchId)
+          || isRentalMutationKeyForScope(key, currentUserId, activeTenantId, activeBranchId)
+        ),
+        undefined,
+        { revalidate: true },
+      )
+
+      return updatedRental
+    },
+    [activeBranchId, activeTenantId, currentUserId, getErrorMessage, itemQuery, mutateCache, rentalQuery],
+  )
+
   const handleVerifyRentalDelete = useCallback(
     async (rentalId, password) => verifyRentalDelete(rentalId, password),
     [],
@@ -784,7 +809,10 @@ function App() {
                 <Return
                   key={operationalScopeKey}
                   rentals={rentals}
+                  inventory={inventory}
+                  categories={categories}
                   onProcessReturn={handleProcessReturn}
+                  onUpdateRental={handleUpdateRental}
                 />
               }
             />
@@ -812,6 +840,9 @@ function App() {
                   currentUser={currentUser}
                   tenantId={activeTenantId}
                   branchId={activeBranchId}
+                  inventory={inventory}
+                  categories={categories}
+                  onUpdateRental={handleUpdateRental}
                   onVerifyRentalDelete={handleVerifyRentalDelete}
                   onDeleteRentalByAdmin={handleDeleteRentalByAdmin}
                 />

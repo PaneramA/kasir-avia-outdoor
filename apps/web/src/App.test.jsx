@@ -77,6 +77,7 @@ vi.mock('./lib/api.js', () => ({
   updateCurrentBranchSettings: vi.fn(),
   updateCurrentTenantSettings: vi.fn(),
   updateItem: vi.fn(),
+  updateRental: vi.fn(),
   updatePlanDefinition: vi.fn(),
   updateTenant: vi.fn(),
   updateTenantMembership: vi.fn(),

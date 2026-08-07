@@ -140,6 +140,28 @@ describe('web API client state and requests', () => {
     ]);
   });
 
+  it('updates rentals through the active tenant context', async () => {
+    localStorage.setItem('avia_api_token', 'token-1');
+    fetch.mockResolvedValue(jsonResponse({ id: 'rental-1', status: 'active' }));
+    const api = await loadApi();
+    api.setActiveTenantContext({ tenantId: 'tenant-1', branchId: 'branch-1' });
+
+    await expect(api.updateRental('rental-1', { editReason: 'Tambah barang' }))
+      .resolves.toEqual({ id: 'rental-1', status: 'Active' });
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:4000/api/rentals/rental-1',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ editReason: 'Tambah barang' }),
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token-1',
+          'x-tenant-id': 'tenant-1',
+          'x-branch-id': 'branch-1',
+        }),
+      }),
+    );
+  });
+
   it('removes corrupt stored user and tenant context values', async () => {
     localStorage.setItem('avia_api_user', '{bad}');
     localStorage.setItem('avia_tenant_context_v1', '{bad}');

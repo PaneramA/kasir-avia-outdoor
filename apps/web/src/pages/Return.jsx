@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import RentalEditModal from '../components/RentalEditModal';
 import { formatJakartaDateLabel, getCurrentJakartaDateKey, toJakartaDateKey } from '../lib/financial';
 import { formatLateDuration, getDailyRate, getLateDurationMs, getPlannedReturnDate } from '../lib/rentalTime';
 
@@ -37,7 +38,7 @@ const renderIdentityCardHoldBadge = (rental) => (
     </span>
 );
 
-const Return = ({ rentals, onProcessReturn }) => {
+const Return = ({ rentals, inventory = [], categories = [], onProcessReturn, onUpdateRental }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [selectedRental, setSelectedRental] = useState(null);
@@ -46,6 +47,7 @@ const Return = ({ rentals, onProcessReturn }) => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [applyLateFee, setApplyLateFee] = useState(false);
     const [settleRemainingPayment, setSettleRemainingPayment] = useState(false);
+    const [editingRental, setEditingRental] = useState(null);
     const additionalFeeValue = Number.isFinite(Number(additionalFeeInput))
         ? Math.max(0, Number(additionalFeeInput))
         : 0;
@@ -223,6 +225,12 @@ const Return = ({ rentals, onProcessReturn }) => {
         }
     };
 
+    const handleUpdateRental = async (rentalId, payload) => {
+        const updatedRental = await onUpdateRental(rentalId, payload);
+        setSelectedRental(updatedRental);
+        return updatedRental;
+    };
+
     return (
         <div data-testid="return-page-shell" className="flex min-h-0 flex-col gap-4 pb-4 lg:h-[calc(100vh-8rem)] lg:overflow-hidden">
             <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
@@ -346,9 +354,21 @@ const Return = ({ rentals, onProcessReturn }) => {
 
                 <aside data-testid="return-detail-panel" className="flex min-h-0 flex-col rounded-md border border-border bg-white">
                     <div data-testid="return-detail-scroll" className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-                        <h4 className="mb-4 border-b border-border pb-2 text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.05rem]">
-                            Detail Pengembalian
-                        </h4>
+                        <div className="mb-4 flex items-center justify-between gap-3 border-b border-border pb-2">
+                            <h4 className="text-[1rem] font-bold uppercase tracking-wide text-accent sm:text-[1.05rem]">
+                                Detail Pengembalian
+                            </h4>
+                            {selectedRental && onUpdateRental && (
+                                <button
+                                    type="button"
+                                    className="inline-flex items-center gap-2 rounded-md border border-accent bg-white px-3 py-1.5 text-xs font-bold text-accent transition hover:bg-[#ecfdf5]"
+                                    onClick={() => setEditingRental(selectedRental)}
+                                >
+                                    <i className="fas fa-pen"></i>
+                                    Edit
+                                </button>
+                            )}
+                        </div>
 
                         {!selectedRental ? (
                             <div className="flex min-h-[260px] flex-col items-center justify-center text-text-muted">
@@ -494,6 +514,15 @@ const Return = ({ rentals, onProcessReturn }) => {
                     )}
                 </aside>
             </div>
+            {editingRental && (
+                <RentalEditModal
+                    rental={editingRental}
+                    inventory={inventory}
+                    categories={categories}
+                    onClose={() => setEditingRental(null)}
+                    onSubmit={handleUpdateRental}
+                />
+            )}
         </div>
     );
 };

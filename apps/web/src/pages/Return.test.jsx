@@ -228,6 +228,22 @@ describe('Return page theme', () => {
     expect(screen.getByRole('button', { name: /selesaikan pengembalian/i })).toBeInTheDocument();
   });
 
+  it('shows an edit shortcut in the selected return detail panel', () => {
+    render(
+      <Return
+        rentals={[activeOverdueRental]}
+        inventory={[{ id: 'item-1', name: 'Tenda Dome', category: 'Tenda', stock: 3, price: 100000 }]}
+        categories={['Tenda']}
+        onProcessReturn={vi.fn()}
+        onUpdateRental={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('Ayu Pratiwi'));
+
+    expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
+  });
+
   it('orders active rentals by overdue, due today, then upcoming', () => {
     render(
       <Return
