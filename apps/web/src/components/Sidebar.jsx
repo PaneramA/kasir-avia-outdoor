@@ -34,7 +34,7 @@ const Sidebar = ({ currentUser, tenantSettings, subscriptionSummary, onLogout, i
 
     const displayName = currentUser?.username || 'Admin'
     const displayRole = currentUser?.role || 'staff'
-    const dashboardName = formatDashboardBrandName(tenantSettings?.dashboardName)
+    const dashboardName = formatDashboardBrandName(tenantSettings?.dashboardName || tenantSettings?.storeName)
     const desktopCollapsedClass = isDesktopCollapsed ? 'lg:w-[72px]' : 'lg:w-[232px]'
     const labelVisibilityClass = isDesktopCollapsed ? 'lg:sr-only' : ''
 

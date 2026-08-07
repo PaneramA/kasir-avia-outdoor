@@ -184,6 +184,19 @@ describe('shared component smoke and interaction tests', () => {
     expect(screen.getByText('Sewantara')).toBeInTheDocument();
   });
 
+  it('uses the store name as the sidebar app name when dashboard name is empty', () => {
+    withRouter(<Sidebar
+      currentUser={{ username: 'owner', role: 'kasir' }}
+      tenantSettings={{ dashboardName: '', storeName: 'SewaKu12345' }}
+      subscriptionSummary={{ features: { canUseFinancialRecap: true, canManageBranches: true, canManageStaff: true } }}
+      onLogout={vi.fn()}
+      isMobileOpen={false}
+      onCloseMobile={vi.fn()}
+    />);
+
+    expect(screen.getByText('SewaKu12345')).toBeInTheDocument();
+  });
+
   it('treats the old AviaOutdoor dashboard name as the Sewantara default brand', () => {
     withRouter(<Sidebar
       currentUser={{ username: 'owner', role: 'kasir' }}
