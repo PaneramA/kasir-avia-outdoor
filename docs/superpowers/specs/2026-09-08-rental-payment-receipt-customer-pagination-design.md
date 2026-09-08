@@ -2,7 +2,7 @@
 
 ## Status
 
-Approved direction, pending final specification review before implementation.
+Approved for implementation.
 
 ## Scope
 
@@ -56,7 +56,8 @@ Each received payment is a separate record containing:
 - `method` (`TUNAI`, `QRIS`, or `BANK`)
 - `paidAt`
 - optional `note`
-- `createdByUserId`
+- `idempotencyKey`, unique within a tenant
+- optional `createdByUserId` (legacy backfill rows have no actor)
 - `createdAt`
 
 Payments are immutable in this scope. Editing, deleting, reversing, and refunding payments require a separate audited design.
@@ -94,7 +95,7 @@ The response reports `BELUM_BAYAR`, paid amount zero, and the full invoice balan
 
 ### Record Payment
 
-A dedicated endpoint records payment against a rental. The service verifies tenant and branch ownership, a positive integer amount, an allowed method, and that the amount does not exceed the current balance. It creates the payment and refreshes the rental aggregate fields atomically.
+A dedicated endpoint records payment against a rental. The service verifies tenant and branch ownership, a positive integer amount, an allowed method, a required idempotency key, and that the amount does not exceed the current balance. It creates the payment and refreshes the rental aggregate fields atomically. Repeating the same idempotency key returns the already-created result without recording cash twice.
 
 Concurrent payment attempts must not overpay the invoice. The transaction uses PostgreSQL serializable isolation with bounded retry for serialization conflicts, or an equivalent atomic claim enforced by the final implementation.
 
