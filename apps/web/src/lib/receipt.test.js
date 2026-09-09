@@ -21,6 +21,28 @@ const rental = {
   payment: { status: 'LUNAS', method: 'QRIS', paidAmount: 200_000 },
 };
 
+const rentalWithCharge = {
+  ...rental,
+  id: 'INV-CHARGE',
+  duration: 1,
+  total: 110_000,
+  items: [{ id: 'item-1', name: 'Tenda', qty: 1, price: 110_000 }],
+  charges: [
+    {
+      id: 'charge-1',
+      description: 'Keterlambatan 2 hari x Rp 55.000',
+      amount: 110_000,
+    },
+  ],
+  payment: {
+    status: 'SEBAGIAN',
+    method: 'QRIS',
+    paidAmount: 50_000,
+    remainingAmount: 170_000,
+    totalDue: 220_000,
+  },
+};
+
 beforeEach(() => setReceiptProfile(null));
 
 describe('receipt generation', () => {
@@ -51,15 +73,39 @@ describe('receipt generation', () => {
     expect(text).toContain('*TOTAL: Rp 200.000*');
   });
 
+  it('itemizes ledger charges in the WhatsApp receipt totals', () => {
+    const text = buildReceiptWhatsAppText(rentalWithCharge);
+
+    expect(text).toContain('Subtotal Sewa: Rp 110.000');
+    expect(text).toContain('Keterlambatan 2 hari x Rp 55.000: Rp 110.000');
+    expect(text).toContain('*TOTAL: Rp 220.000*');
+    expect(text).toContain('Terbayar: Rp 50.000');
+    expect(text).toContain('Sisa: Rp 170.000');
+    expect(text.indexOf('Subtotal Sewa')).toBeLessThan(text.indexOf('Keterlambatan 2 hari'));
+    expect(text.indexOf('Keterlambatan 2 hari')).toBeLessThan(text.indexOf('*TOTAL'));
+  });
+
   it('escapes user-controlled content in printable HTML', () => {
     const html = buildReceiptPrintHtml({
       ...rental,
       customer: { ...rental.customer, name: '<script>alert(1)</script>' },
       items: [{ ...rental.items[0], name: '<b>Tenda</b>' }],
+      charges: [{ id: 'charge-escape', description: '<b>Biaya</b>', amount: 10_000 }],
     });
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(html).toContain('&lt;b&gt;Tenda&lt;/b&gt;');
+    expect(html).toContain('&lt;b&gt;Biaya&lt;/b&gt;');
+  });
+
+  it('itemizes ledger charges in printable receipt totals', () => {
+    const html = buildReceiptPrintHtml(rentalWithCharge);
+
+    expect(html).toContain('Subtotal Sewa');
+    expect(html).toContain('Keterlambatan 2 hari x Rp 55.000');
+    expect(html).toContain('TOTAL: Rp 220.000');
+    expect(html).toContain('Terbayar: Rp 50.000');
+    expect(html).toContain('Sisa: Rp 170.000');
   });
 
   it('opens WhatsApp with an Indonesian international phone number', () => {
