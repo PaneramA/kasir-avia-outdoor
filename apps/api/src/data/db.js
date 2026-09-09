@@ -4374,49 +4374,44 @@ export async function updateTenantSettingsByTenantId(tenantId, payload, actor = 
   return toTenantSettingsDto(updated);
 }
 
-export async function listCustomers({ query } = {}, context) {
+export async function listCustomers({ query = '', page = 1, limit = 50 } = {}, context) {
   const keyword = String(query || '').trim();
+  const normalizedPage = Math.max(1, Math.trunc(Number(page) || 1));
+  const pageSize = Math.min(50, Math.max(1, Math.trunc(Number(limit) || 50)));
+  const where = withTenantBranchScope(keyword
+    ? {
+        AND: [
+          {
+            OR: [
+              { name: { contains: keyword, mode: 'insensitive' } },
+              { phone: { contains: keyword, mode: 'insensitive' } },
+              { idNumber: { contains: keyword, mode: 'insensitive' } },
+              { address: { contains: keyword, mode: 'insensitive' } },
+            ],
+          },
+        ],
+      }
+    : {}, context);
 
-  const customers = await prisma.customer.findMany({
-    where: keyword
-      ? withTenantBranchScope({
-          AND: [
-            {
-              OR: [
-                {
-                  name: {
-                    contains: keyword,
-                    mode: 'insensitive',
-                  },
-                },
-                {
-                  phone: {
-                    contains: keyword,
-                    mode: 'insensitive',
-                  },
-                },
-                {
-                  idNumber: {
-                    contains: keyword,
-                    mode: 'insensitive',
-                  },
-                },
-                {
-                  address: {
-                    contains: keyword,
-                    mode: 'insensitive',
-                  },
-                },
-              ],
-            },
-          ],
-        }, context)
-      : withTenantBranchScope({}, context),
-    orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
-    take: keyword ? 20 : 100,
-  });
+  const [customers, totalItems] = await prisma.$transaction([
+    prisma.customer.findMany({
+      where,
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      skip: (normalizedPage - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.customer.count({ where }),
+  ]);
 
-  return customers.map(toCustomerDto);
+  return {
+    items: customers.map(toCustomerDto),
+    pagination: {
+      page: normalizedPage,
+      pageSize,
+      totalItems,
+      totalPages: Math.ceil(totalItems / pageSize),
+    },
+  };
 }
 
 export async function upsertCustomer(payload, context) {

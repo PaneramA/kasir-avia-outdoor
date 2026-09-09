@@ -1022,7 +1022,9 @@ export async function apiRoute(req, res, env) {
       await ensureAuth();
       const context = await ensureRequestContext();
       const query = (searchParams.get('q') || '').trim();
-      sendSuccess(res, 200, await listCustomers({ query }, context));
+      const page = Math.max(1, Number.parseInt(searchParams.get('page') || '1', 10) || 1);
+      const limit = Math.min(50, Math.max(1, Number.parseInt(searchParams.get('limit') || '50', 10) || 50));
+      sendSuccess(res, 200, await listCustomers({ query, page, limit }, context));
       return true;
     }
 

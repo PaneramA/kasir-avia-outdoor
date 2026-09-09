@@ -1856,3 +1856,107 @@ describe('critical API workflow integration', () => {
     }
   }, 90_000);
 });
+
+describe('customer pagination', () => {
+  it('returns all scoped customers in stable, bounded pages', async () => {
+    const suffix = `${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
+    const tenantName = `Customer Pagination ${suffix}`;
+    const oldCustomerName = `Customer Pagination Oldest ${suffix}`;
+    let tenantId = '';
+    let userId = '';
+
+    try {
+      const plan = await prisma.plan.findUnique({ where: { code: 'growth' } });
+      expect(plan).toBeTruthy();
+
+      const tenant = await prisma.tenant.create({
+        data: {
+          name: tenantName,
+          slug: `customer-pagination-${suffix}`,
+          subscription: { create: { planId: plan.id, status: 'active' } },
+          branches: {
+            create: [
+              { code: 'primary', name: 'Primary' },
+              { code: 'other', name: 'Other' },
+            ],
+          },
+        },
+        include: { branches: true },
+      });
+      tenantId = tenant.id;
+      const [branch, otherBranch] = tenant.branches;
+
+      const user = await prisma.user.create({
+        data: {
+          username: `customer-pagination-${suffix}`,
+          passwordHash: 'not-used',
+          role: 'kasir',
+          memberships: { create: { tenantId, role: 'owner', status: 'active' } },
+        },
+      });
+      userId = user.id;
+      const token = createAccessToken({ sub: user.id, username: user.username, role: user.role }, env);
+
+      const oldestUpdatedAt = new Date('2020-01-01T00:00:00.000Z');
+      await prisma.customer.createMany({
+        data: Array.from({ length: 121 }, (_, index) => ({
+          name: index === 0 ? oldCustomerName : `Customer Pagination ${suffix} ${index}`,
+          phone: `081${String(index).padStart(9, '0')}`,
+          tenantId,
+          branchId: branch.id,
+          ...(index === 0 ? { createdAt: oldestUpdatedAt, updatedAt: oldestUpdatedAt } : {}),
+        })),
+      });
+      await prisma.customer.create({
+        data: { name: oldCustomerName, phone: '08999999999', tenantId, branchId: otherBranch.id },
+      });
+
+      const first = await callApi('GET', '/api/customers?page=1&limit=50', {
+        token, tenantId, branchId: branch.id,
+      });
+      const second = await callApi('GET', '/api/customers?page=2&limit=50', {
+        token, tenantId, branchId: branch.id,
+      });
+      const third = await callApi('GET', '/api/customers?page=3&limit=50', {
+        token, tenantId, branchId: branch.id,
+      });
+      const repeatedFirst = await callApi('GET', '/api/customers?page=1&limit=50', {
+        token, tenantId, branchId: branch.id,
+      });
+      const clampedLimit = await callApi('GET', '/api/customers?page=1&limit=500', {
+        token, tenantId, branchId: branch.id,
+      });
+      const search = await callApi('GET', `/api/customers?q=${encodeURIComponent(oldCustomerName)}`, {
+        token, tenantId, branchId: branch.id,
+      });
+
+      expect(first.status).toBe(200);
+      expect(first.body.data.items).toHaveLength(50);
+      expect(second.body.data.items).toHaveLength(50);
+      expect(third.body.data.items).toHaveLength(21);
+      expect(third.body.data.pagination).toEqual({
+        page: 3,
+        pageSize: 50,
+        totalItems: 121,
+        totalPages: 3,
+      });
+      expect(repeatedFirst.body.data.items.map((customer) => customer.id))
+        .toEqual(first.body.data.items.map((customer) => customer.id));
+      expect(new Set([...first.body.data.items, ...second.body.data.items].map((customer) => customer.id)).size)
+        .toBe(100);
+      expect(clampedLimit.body.data.items).toHaveLength(50);
+      expect(clampedLimit.body.data.pagination.pageSize).toBe(50);
+      expect(search.body.data.items.map((customer) => customer.name)).toEqual([oldCustomerName]);
+    } finally {
+      if (tenantId) {
+        const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+        if (tenant) {
+          await deleteTenantForPlatformAdmin(tenant.id, tenant.name);
+        }
+      }
+      if (userId) {
+        await prisma.user.deleteMany({ where: { id: userId } });
+      }
+    }
+  }, 60_000);
+});
