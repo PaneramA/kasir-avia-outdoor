@@ -2029,3 +2029,107 @@ describe('rental payment API', () => {
     }
   }, 90_000);
 });
+
+describe('rental payment regressions', () => {
+  it('does not replay another rental or branch payment and preserves legacy paid balances', async () => {
+    const suffix = `${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
+    let tenantId = '';
+    let otherTenantId = '';
+    let userId = '';
+    try {
+      const plan = await prisma.plan.findUnique({ where: { code: 'growth' } });
+      const tenant = await prisma.tenant.create({
+        data: {
+          name: `Payment Regression ${suffix}`,
+          slug: `payment-regression-${suffix}`,
+          subscription: { create: { planId: plan.id, status: 'active' } },
+          branches: { create: [{ code: 'primary', name: 'Primary' }, { code: 'secondary', name: 'Secondary' }] },
+        },
+        include: { branches: true },
+      });
+      tenantId = tenant.id;
+      const [branch, otherBranch] = tenant.branches;
+      const otherTenant = await prisma.tenant.create({
+        data: {
+          name: `Payment Regression Other ${suffix}`,
+          slug: `payment-regression-other-${suffix}`,
+          subscription: { create: { planId: plan.id, status: 'active' } },
+          branches: { create: { code: 'primary', name: 'Primary' } },
+        },
+        include: { branches: true },
+      });
+      otherTenantId = otherTenant.id;
+      const user = await prisma.user.create({
+        data: {
+          username: `payment-regression-${suffix}`,
+          passwordHash: 'not-used',
+          role: 'kasir',
+          memberships: { create: [{ tenantId, role: 'owner', status: 'active' }, { tenantId: otherTenantId, role: 'owner', status: 'active' }] },
+        },
+      });
+      userId = user.id;
+      const token = createAccessToken({ sub: user.id, username: user.username, role: user.role }, env);
+      const category = await prisma.category.create({ data: { tenantId, name: `Regression ${suffix}` } });
+      const item = await prisma.item.create({ data: { tenantId, branchId: branch.id, categoryId: category.id, name: `Regression Item ${suffix}`, stock: 10, price: 100_000 } });
+      const cheaperItem = await prisma.item.create({ data: { tenantId, branchId: branch.id, categoryId: category.id, name: `Regression Cheaper Item ${suffix}`, stock: 10, price: 50_000 } });
+
+      const createRental = async (branchId, phone, paid = false) => prisma.rental.create({
+        data: {
+          id: `REG-${suffix}-${phone}`,
+          tenantId,
+          branchId,
+          customerName: `Regression ${phone}`,
+          customerPhone: phone,
+          guarantee: 'KTP',
+          identityCardHeld: true,
+          duration: 1,
+          total: 100_000,
+          paymentStatus: paid ? 'LUNAS' : 'BELUM_BAYAR',
+          paymentMethod: 'TUNAI',
+          paidAmount: paid ? 100_000 : 0,
+          status: 'Active',
+          date: new Date(),
+          items: { create: [{ itemId: item.id, itemName: item.name, categoryName: category.name, price: item.price, qty: 1 }] },
+        },
+      });
+      const payment = (rentalId, branchId, body) => callApi('POST', `/api/rentals/${rentalId}/payments`, { token, tenantId, branchId, body });
+      const firstRental = await createRental(branch.id, '081211111111');
+      const sharedKey = `regression-key-${suffix}`;
+      expect((await payment(firstRental.id, branch.id, { amount: 40_000, method: 'QRIS', idempotencyKey: sharedKey })).status).toBe(201);
+      const paymentAudit = await prisma.auditLog.findFirst({ where: { action: 'RENTAL_PAYMENT_CREATED', targetId: firstRental.id } });
+      expect(paymentAudit?.snapshotBefore).toMatchObject({
+        before: { payment: { paidAmount: 0, remainingAmount: 100_000 } },
+        after: { payment: { paidAmount: 40_000, remainingAmount: 60_000 }, createdPayment: { amount: 40_000, method: 'QRIS' } },
+      });
+      const secondRental = await createRental(branch.id, '081211111112');
+      const sameBranchReuse = await payment(secondRental.id, branch.id, { amount: 10_000, method: 'BANK', idempotencyKey: sharedKey });
+      expect(sameBranchReuse.status).toBe(409);
+      expect(JSON.stringify(sameBranchReuse.body)).not.toContain(firstRental.id);
+      const otherBranchRental = await createRental(otherBranch.id, '081211111113');
+      const crossBranchReuse = await payment(otherBranchRental.id, otherBranch.id, { amount: 10_000, method: 'BANK', idempotencyKey: sharedKey });
+      expect(crossBranchReuse.status).toBe(409);
+      expect(JSON.stringify(crossBranchReuse.body)).not.toContain(firstRental.id);
+      const deletedRental = await createRental(branch.id, '081211111114');
+      await prisma.rental.update({ where: { id: deletedRental.id }, data: { deletedAt: new Date() } });
+      expect((await payment(deletedRental.id, branch.id, { amount: 10_000, method: 'BANK', idempotencyKey: sharedKey })).status).toBe(404);
+      const returnedRental = await createRental(branch.id, '081211111115');
+      await prisma.rental.update({ where: { id: returnedRental.id }, data: { status: 'Returned', returnDate: new Date() } });
+      expect((await payment(returnedRental.id, branch.id, { amount: 10_000, method: 'BANK', idempotencyKey: sharedKey })).status).toBe(400);
+      const legacyPaidRental = await createRental(branch.id, '081211111116', true);
+      const legacyPayment = await payment(legacyPaidRental.id, branch.id, { amount: 1, method: 'BANK', idempotencyKey: `legacy-${suffix}` });
+      expect(legacyPayment.status).toBe(409);
+      expect(legacyPayment.body.message).toContain('melebihi');
+      const editable = await createRental(branch.id, '081211111117');
+      await prisma.rentalPayment.create({ data: { rentalId: editable.id, tenantId, branchId: branch.id, amount: 80_000, method: 'TUNAI', paidAt: new Date(), note: '', idempotencyKey: `edit-paid-${suffix}`, createdByUserId: userId } });
+      const edit = await callApi('PATCH', `/api/rentals/${editable.id}`, { token, tenantId, branchId: branch.id, body: { editReason: 'Reduce invoice below paid amount', customer: { name: 'Reduced Invoice', phone: '081211111117', guarantee: 'KTP' }, items: [{ id: cheaperItem.id, qty: 1 }], duration: 1 } });
+      expect(edit.status).toBe(409);
+    } finally {
+      for (const id of [tenantId, otherTenantId]) {
+        if (!id) continue;
+        const tenant = await prisma.tenant.findUnique({ where: { id } });
+        if (tenant) await deleteTenantForPlatformAdmin(tenant.id, tenant.name);
+      }
+      if (userId) await prisma.user.deleteMany({ where: { id: userId } });
+    }
+  }, 90_000);
+});

@@ -196,14 +196,45 @@ function toRentalChargeDto(charge) {
   };
 }
 
-function toRentalDto(rental) {
+function getRentalPaymentRows(rental) {
   const payments = Array.isArray(rental.payments) ? rental.payments : [];
+  if (payments.length > 0) return payments;
+
+  const paymentStatus = String(rental.paymentStatus || '').toUpperCase();
+  if (paymentStatus === 'BELUM_BAYAR') return [];
+  const invoiceTotal = Math.max(0, Number(rental.finalTotal ?? rental.total ?? 0) || 0);
+  const paidAmount = paymentStatus === 'LUNAS'
+    ? invoiceTotal
+    : Math.min(invoiceTotal, Math.max(0, Number(rental.paidAmount || 0) || 0));
+  if (paidAmount <= 0) return [];
+
+  const legacyDate = rental.date || rental.createdAt || new Date();
+  return [{
+    id: `legacy-payment-${rental.id}`,
+    amount: paidAmount,
+    method: rental.paymentMethod || 'TUNAI',
+    paidAt: legacyDate,
+    note: '',
+    idempotencyKey: `legacy:${rental.id}`,
+    createdAt: legacyDate,
+  }];
+}
+
+function getRentalAccountingState(rental) {
   const charges = Array.isArray(rental.charges) ? rental.charges : [];
-  const accounting = deriveRentalAccounting({
-    baseTotal: rental.total,
-    charges,
+  const payments = getRentalPaymentRows(rental);
+  const baseTotal = payments.length > 0 && (!rental.payments || rental.payments.length > 0)
+    ? rental.total
+    : (rental.finalTotal ?? rental.total);
+  return {
     payments,
-  });
+    charges,
+    accounting: deriveRentalAccounting({ baseTotal, charges, payments }),
+  };
+}
+
+function toRentalDto(rental) {
+  const { payments, charges, accounting } = getRentalAccountingState(rental);
 
   return {
     id: rental.id,
@@ -2016,13 +2047,6 @@ export async function recordRentalPayment(rentalId, payload, context) {
   const paidAt = payload.paidAt ? new Date(payload.paidAt) : new Date();
 
   const execute = async () => withSerializableTransaction(async (tx) => {
-    const duplicate = await tx.rentalPayment.findUnique({
-      where: { tenantId_idempotencyKey: { tenantId, idempotencyKey: payload.idempotencyKey } },
-    });
-    if (duplicate) {
-      return { created: false, ...(await loadPaymentResult(tx, duplicate.rentalId, duplicate.id)) };
-    }
-
     const rental = await tx.rental.findFirst({
       where: { id: targetRentalId, tenantId, branchId, deletedAt: null },
       include: { items: true, payments: true, charges: true, returnRecord: true },
@@ -2032,8 +2056,20 @@ export async function recordRentalPayment(rentalId, payload, context) {
       throw createHttpError(400, 'Rental already returned');
     }
 
-    const accounting = deriveRentalAccounting({ baseTotal: rental.total, charges: rental.charges, payments: rental.payments });
-    if (payload.amount > accounting.remainingAmount) {
+    const duplicate = await tx.rentalPayment.findFirst({
+      where: { rentalId: targetRentalId, tenantId, branchId, idempotencyKey: payload.idempotencyKey },
+    });
+    if (duplicate) {
+      return { created: false, ...(await loadPaymentResult(tx, duplicate.rentalId, duplicate.id)) };
+    }
+    const keyUsedInBranch = await tx.rentalPayment.findFirst({
+      where: { tenantId, branchId, idempotencyKey: payload.idempotencyKey },
+      select: { id: true },
+    });
+    if (keyUsedInBranch) throw createHttpError(409, 'Idempotency key already used.');
+
+    const beforeState = getRentalAccountingState(rental);
+    if (payload.amount > beforeState.accounting.remainingAmount) {
       throw createHttpError(409, 'Nominal pembayaran melebihi sisa tagihan.');
     }
 
@@ -2052,8 +2088,8 @@ export async function recordRentalPayment(rentalId, payload, context) {
     });
     const nextAccounting = deriveRentalAccounting({
       baseTotal: rental.total,
-      charges: rental.charges,
-      payments: [...rental.payments, payment],
+      charges: beforeState.charges,
+      payments: [...beforeState.payments, payment],
     });
     await tx.rental.update({
       where: { id: rental.id },
@@ -2072,8 +2108,11 @@ export async function recordRentalPayment(rentalId, payload, context) {
         targetType: 'rental',
         targetId: rental.id,
         snapshotBefore: {
-          payment: { id: payment.id, amount: payment.amount, method: payment.method, paidAt: payment.paidAt.toISOString() },
-          accounting: nextAccounting,
+          before: { payment: beforeState.accounting },
+          after: {
+            payment: nextAccounting,
+            createdPayment: { id: payment.id, amount: payment.amount, method: payment.method, paidAt: payment.paidAt.toISOString() },
+          },
         },
       },
     });
@@ -2084,10 +2123,18 @@ export async function recordRentalPayment(rentalId, payload, context) {
     return await execute();
   } catch (error) {
     if (error?.code !== 'P2002') throw error;
-    const duplicate = await prisma.rentalPayment.findUnique({
-      where: { tenantId_idempotencyKey: { tenantId, idempotencyKey: payload.idempotencyKey } },
+    const authorizedRental = await prisma.rental.findFirst({
+      where: { id: targetRentalId, tenantId, branchId, deletedAt: null },
+      include: { returnRecord: true },
     });
-    if (!duplicate) throw error;
+    if (!authorizedRental) throw createHttpError(404, 'Transaksi sewa tidak ditemukan.');
+    if (isReturnedRentalStatus(authorizedRental.status) || authorizedRental.returnRecord) {
+      throw createHttpError(400, 'Rental already returned');
+    }
+    const duplicate = await prisma.rentalPayment.findFirst({
+      where: { rentalId: targetRentalId, tenantId, branchId, idempotencyKey: payload.idempotencyKey },
+    });
+    if (!duplicate) throw createHttpError(409, 'Idempotency key already used.');
     return { created: false, ...(await loadPaymentResult(prisma, duplicate.rentalId, duplicate.id)) };
   }
 }
@@ -2146,6 +2193,8 @@ export async function updateRental(rentalId, payload, context) {
           orderBy: { createdAt: 'asc' },
         },
         returnRecord: true,
+        payments: { orderBy: { paidAt: 'asc' } },
+        charges: { orderBy: { chargedAt: 'asc' } },
       },
     });
 
@@ -2352,6 +2401,10 @@ export async function updateRental(rentalId, payload, context) {
         });
 
     const total = normalizedItems.reduce((sum, item) => sum + (item.price * item.qty * duration), 0);
+    const existingAccounting = getRentalAccountingState(rental).accounting;
+    if (total < existingAccounting.paidAmount) {
+      throw createHttpError(409, 'Nilai transaksi sewa tidak boleh lebih kecil dari nominal yang sudah dibayar.');
+    }
     await tx.rentalItem.deleteMany({
       where: { rentalId: rental.id },
     });
@@ -2368,9 +2421,9 @@ export async function updateRental(rentalId, payload, context) {
         identityCardHeld,
         duration,
         total,
-        paymentStatus,
-        paymentMethod: rawPaymentMethod,
-        paidAmount,
+        paymentStatus: existingAccounting.paymentStatus,
+        paymentMethod: existingAccounting.latestPaymentMethod,
+        paidAmount: existingAccounting.paidAmount,
         status: 'Active',
         date: rentalStartAt,
         plannedReturnDate,
