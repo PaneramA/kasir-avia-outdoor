@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import useSWR from 'swr'
 import {
     createCustomerRecord,
@@ -7,6 +7,8 @@ import {
     updateCustomerRecord,
 } from '../lib/api'
 import { APP_CACHE_KEYS } from '../lib/appCache'
+
+const PAGE_SIZE = 50
 
 const initialForm = {
     name: '',
@@ -25,6 +27,7 @@ const destructiveButtonClass = 'rounded-md border border-border bg-sidebar-bg px
 const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
     const [query, setQuery] = useState('')
     const [debouncedQuery, setDebouncedQuery] = useState('')
+    const [page, setPage] = useState(1)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [message, setMessage] = useState('')
     const [messageError, setMessageError] = useState('')
@@ -33,19 +36,30 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
     const [editingCustomerId, setEditingCustomerId] = useState('')
     const [form, setForm] = useState(initialForm)
     useEffect(() => {
+        setPage(1)
         const timeoutId = setTimeout(() => setDebouncedQuery(query.trim()), 300)
         return () => clearTimeout(timeoutId)
     }, [query])
 
     const customerQuery = useSWR(
-        userId && tenantId && branchId ? APP_CACHE_KEYS.customers(userId, tenantId, branchId, debouncedQuery) : null,
-        ([, , , , searchValue]) => fetchCustomers(searchValue),
+        userId && tenantId && branchId
+            ? APP_CACHE_KEYS.customers(userId, tenantId, branchId, debouncedQuery, page, PAGE_SIZE)
+            : null,
+        ([, , , , searchValue, requestedPage, pageSize]) => fetchCustomers({
+            query: searchValue,
+            page: requestedPage,
+            limit: pageSize,
+        }),
+        { keepPreviousData: true },
     )
-    const customers = useMemo(
-        () => (Array.isArray(customerQuery.data) ? customerQuery.data : []),
-        [customerQuery.data],
-    )
-    const isLoading = customerQuery.isLoading
+    const customers = customerQuery.data?.items || []
+    const pagination = customerQuery.data?.pagination || {
+        page,
+        pageSize: PAGE_SIZE,
+        totalItems: 0,
+        totalPages: 0,
+    }
+    const isLoading = customerQuery.isLoading || customerQuery.isValidating
     const queryErrorMessage = customerQuery.error instanceof Error ? customerQuery.error.message : ''
 
     const closeModal = () => {
@@ -109,17 +123,22 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
 
             if (modalMode === 'edit' && editingCustomerId) {
                 const updated = await updateCustomerRecord(editingCustomerId, payload)
-                await customerQuery.mutate((current = []) => current.map((customer) => (
-                    customer.id === editingCustomerId ? updated : customer
-                )), { revalidate: false })
+                await customerQuery.mutate((current) => current ? ({
+                    ...current,
+                    items: current.items.map((customer) => (
+                        customer.id === editingCustomerId ? updated : customer
+                    )),
+                }) : current, { revalidate: false })
                 setMessage('Data customer berhasil diperbarui.')
             } else {
-                const created = await createCustomerRecord(payload)
-                await customerQuery.mutate((current = []) => [...current, created], { revalidate: false })
+                await createCustomerRecord(payload)
+                await customerQuery.mutate()
                 setMessage('Data customer berhasil disimpan dan siap dipakai di halaman sewa.')
             }
 
-            void customerQuery.mutate()
+            if (modalMode === 'edit' && editingCustomerId) {
+                void customerQuery.mutate()
+            }
             closeModal()
         } catch (error) {
             const messageText = error instanceof Error ? error.message : 'Gagal menyimpan data customer.'
@@ -140,15 +159,26 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
         try {
             await removeCustomerRecord(customer.id)
             setMessage('Data customer berhasil dihapus.')
-            await customerQuery.mutate((current = []) => current.filter((item) => item.id !== customer.id), { revalidate: false })
-            void customerQuery.mutate()
+            await customerQuery.mutate((current) => current ? ({
+                ...current,
+                items: current.items.filter((item) => item.id !== customer.id),
+                pagination: {
+                    ...current.pagination,
+                    totalItems: Math.max(0, current.pagination.totalItems - 1),
+                },
+            }) : current, { revalidate: false })
+            if (customers.length === 1 && page > 1) {
+                setPage((value) => value - 1)
+            } else {
+                void customerQuery.mutate()
+            }
         } catch (error) {
             const messageText = error instanceof Error ? error.message : 'Gagal menghapus customer.'
             setMessageError(messageText)
         }
     }
 
-    const totalCustomers = useMemo(() => customers.length, [customers])
+    const totalCustomers = pagination.totalItems
 
     return (
         <div data-testid="customer-page-shell" className="flex min-h-0 flex-col gap-4 pb-4 lg:h-[calc(100%_-_2.5rem)] lg:overflow-hidden lg:pb-0">
@@ -273,6 +303,25 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
                         )}
                     </>
                 )}
+                <footer data-testid="customer-pagination-footer" className="flex shrink-0 items-center justify-between gap-3 border-t border-border px-3 py-2.5 text-sm text-text-muted">
+                    <button
+                        type="button"
+                        className={secondaryButtonClass}
+                        onClick={() => setPage((value) => Math.max(1, value - 1))}
+                        disabled={isLoading || pagination.page <= 1}
+                    >
+                        Sebelumnya
+                    </button>
+                    <span className="text-center">Halaman {pagination.page} dari {pagination.totalPages}</span>
+                    <button
+                        type="button"
+                        className={secondaryButtonClass}
+                        onClick={() => setPage((value) => Math.min(pagination.totalPages, value + 1))}
+                        disabled={isLoading || pagination.page >= pagination.totalPages}
+                    >
+                        Berikutnya
+                    </button>
+                </footer>
             </section>
 
             {isModalOpen && (
