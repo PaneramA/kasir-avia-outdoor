@@ -6,6 +6,10 @@ import {
   canAccessAllTenantBranches,
   isActiveStatus,
 } from './accessPolicy.js';
+import {
+  calculateRentalDurationFromRange,
+  resolveRentalDayPolicy,
+} from './rentalAccounting.js';
 
 const DEFAULT_CATEGORIES = ['Tenda', 'Carrier', 'Alat Masak', 'Lainnya'];
 const USER_ROLES = new Set(['admin', 'superuser', 'kasir']);
@@ -442,48 +446,6 @@ function normalizeFinancialClosingDay(rawDay) {
   }
 
   return Math.min(31, Math.max(1, Math.trunc(parsed)));
-}
-
-function resolveRentalDayPolicy(settings) {
-  return {
-    mode: normalizeRentalDayCountMode(settings?.rentalDayCountMode),
-    cutoffHour: normalizeCutoffHour(settings?.rentalCutoffHour),
-    cutoffMinute: normalizeCutoffMinute(settings?.rentalCutoffMinute),
-  };
-}
-
-function toCutoffBucketIndex(targetDate, cutoffHour, cutoffMinute) {
-  const boundary = new Date(targetDate);
-  boundary.setHours(cutoffHour, cutoffMinute, 0, 0);
-  if (targetDate < boundary) {
-    boundary.setDate(boundary.getDate() - 1);
-  }
-
-  return Math.floor(boundary.getTime() / (24 * 60 * 60 * 1000));
-}
-
-function calculateRentalDurationFromRange(startDate, endDate, rentalPolicy) {
-  if (!(startDate instanceof Date) || Number.isNaN(startDate.getTime())) {
-    throw new Error('rentalStartAt is invalid');
-  }
-
-  if (!(endDate instanceof Date) || Number.isNaN(endDate.getTime())) {
-    throw new Error('rentalEndAt is invalid');
-  }
-
-  const diffMs = endDate.getTime() - startDate.getTime();
-  if (diffMs <= 0) {
-    throw new Error('rentalEndAt must be after rentalStartAt');
-  }
-
-  if (rentalPolicy.mode === 'DAILY_CUTOFF') {
-    const startBucket = toCutoffBucketIndex(startDate, rentalPolicy.cutoffHour, rentalPolicy.cutoffMinute);
-    const endBucket = toCutoffBucketIndex(endDate, rentalPolicy.cutoffHour, rentalPolicy.cutoffMinute);
-    return Math.max(1, (endBucket - startBucket) + 1);
-  }
-
-  const dayMs = 24 * 60 * 60 * 1000;
-  return Math.max(1, Math.ceil(diffMs / dayMs));
 }
 
 function toBranchSettingsDto(settings) {
