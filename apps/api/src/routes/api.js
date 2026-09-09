@@ -1261,10 +1261,10 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'POST' && pathname === '/api/rentals') {
-      await ensureAuth();
+      const actor = await ensureAuth();
       const context = await ensureRequestContext();
       const body = createRentalSchema.parse(await readBody(req));
-      const rental = await createRental(body, context);
+      const rental = await createRental(body, { ...context, actorUserId: actor.id });
       sendSuccess(res, 201, rental);
       return true;
     }
@@ -1345,10 +1345,10 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'POST' && pathname === '/api/returns') {
-      await ensureAuth();
+      const actor = await ensureAuth();
       const context = await ensureRequestContext();
       const body = processReturnSchema.parse(await readBody(req));
-      const result = await processReturn(body, context);
+      const result = await processReturn(body, { ...context, actorUserId: actor.id });
       sendSuccess(res, 200, result);
       return true;
     }

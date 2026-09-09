@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import RentalEditModal from '../components/RentalEditModal';
+import RentalPaymentModal from '../components/RentalPaymentModal';
 import { formatJakartaDateLabel, getCurrentJakartaDateKey, toJakartaDateKey } from '../lib/financial';
 import { formatLateDuration, getDailyRate, getLateDurationMs, getPlannedReturnDate } from '../lib/rentalTime';
 
@@ -38,7 +39,15 @@ const renderIdentityCardHoldBadge = (rental) => (
     </span>
 );
 
-const Return = ({ rentals, inventory = [], categories = [], onProcessReturn, onUpdateRental }) => {
+const Return = ({
+    rentals,
+    inventory = [],
+    categories = [],
+    onProcessReturn,
+    onUpdateRental,
+    onRecordRentalPayment,
+    onRecordPayment,
+}) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [selectedRental, setSelectedRental] = useState(null);
@@ -46,12 +55,13 @@ const Return = ({ rentals, inventory = [], categories = [], onProcessReturn, onU
     const [additionalFeeInput, setAdditionalFeeInput] = useState('0');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [applyLateFee, setApplyLateFee] = useState(false);
-    const [settleRemainingPayment, setSettleRemainingPayment] = useState(false);
+    const [paymentRental, setPaymentRental] = useState(null);
     const [editingRental, setEditingRental] = useState(null);
     const additionalFeeValue = Number.isFinite(Number(additionalFeeInput))
         ? Math.max(0, Number(additionalFeeInput))
         : 0;
     const todayDateKey = getCurrentJakartaDateKey();
+    const recordPayment = onRecordRentalPayment || onRecordPayment;
 
     const activeRentals = rentals.filter((r) => r.status === 'Active');
 
@@ -159,18 +169,24 @@ const Return = ({ rentals, inventory = [], categories = [], onProcessReturn, onU
         () => getDailyRate(selectedRental),
         [selectedRental],
     );
+    const selectedLateDays = isLate
+        ? Math.max(1, Math.ceil(selectedLateMs / (24 * 60 * 60 * 1000)))
+        : 0;
+    const defaultLateFee = selectedLateDays * selectedDailyRate;
 
     const handleSelectRental = (rental) => {
         const payment = getPaymentInfo(rental);
         const lateMs = getLateDurationMs(rental);
         const shouldApplyLateFee = lateMs > 0;
-        const defaultLateFee = shouldApplyLateFee ? getDailyRate(rental) : 0;
+        const lateDays = shouldApplyLateFee
+            ? Math.max(1, Math.ceil(lateMs / (24 * 60 * 60 * 1000)))
+            : 0;
+        const dailyRate = getDailyRate(rental);
 
         setSelectedRental(rental);
         setReturnNotes('');
         setApplyLateFee(shouldApplyLateFee);
-        setAdditionalFeeInput(String(defaultLateFee));
-        setSettleRemainingPayment(!payment.isUnpaid);
+        setAdditionalFeeInput(String(lateDays * dailyRate));
     };
 
     const handleToggleLateFee = (checked) => {
@@ -180,26 +196,20 @@ const Return = ({ rentals, inventory = [], categories = [], onProcessReturn, onU
             return;
         }
 
-        if (selectedDailyRate > 0) {
-            setAdditionalFeeInput(String(selectedDailyRate));
+        if (defaultLateFee > 0) {
+            setAdditionalFeeInput(String(defaultLateFee));
         }
     };
 
     const processRentalReturn = async () => {
         if (!selectedRental) return;
 
-        if (selectedPayment.isUnpaid && !settleRemainingPayment) {
-            alert(`Transaksi ini masih punya sisa pembayaran ${formatCurrency(selectedPayment.remainingAmount)}. Pilih opsi lunas terlebih dulu.`);
-            return;
-        }
-
         const confirmLines = [
             `Proses pengembalian untuk transaksi ${selectedRental.id} atas nama ${selectedRental.customer.name}?`,
         ];
 
         if (selectedPayment.isUnpaid) {
-            confirmLines.push(`Sisa pembayaran yang wajib dilunasi: ${formatCurrency(selectedPayment.remainingAmount + additionalFeeValue)}.`);
-            confirmLines.push('Apakah customer sudah melunasi sisa pembayarannya?');
+            confirmLines.push(`Sisa pembayaran ${formatCurrency(selectedPayment.remainingAmount)} tetap tercatat dan dapat dibayar setelah pengembalian.`);
         }
 
         if (!window.confirm(confirmLines.join('\n'))) {
@@ -210,9 +220,9 @@ const Return = ({ rentals, inventory = [], categories = [], onProcessReturn, onU
             setIsSubmitting(true);
             await onProcessReturn({
                 rentalId: selectedRental.id,
-                additionalFee: additionalFeeValue,
+                applyLateFee,
+                lateFeeAmount: applyLateFee ? additionalFeeValue : 0,
                 returnNotes,
-                settleRemainingPayment,
             });
 
             alert('Pengembalian berhasil diproses! Stok barang telah kembali.');
@@ -433,7 +443,7 @@ const Return = ({ rentals, inventory = [], categories = [], onProcessReturn, onU
                                 <div className="space-y-4 border-t border-border pt-4">
                                     {isLate && (
                                         <div className="rounded-md border border-accent bg-white p-3 text-sm text-text-main">
-                                            Terlambat <strong>{lateDurationLabel}</strong>. Default denda 1 hari: <strong>{formatCurrency(selectedDailyRate)}</strong>
+                                            Terlambat <strong>{lateDurationLabel}</strong>. Perhitungan denda: <strong>{selectedLateDays} hari x {formatCurrency(selectedDailyRate)} = {formatCurrency(defaultLateFee)}</strong>
                                         </div>
                                     )}
 
@@ -446,7 +456,7 @@ const Return = ({ rentals, inventory = [], categories = [], onProcessReturn, onU
                                                 onChange={(event) => handleToggleLateFee(event.target.checked)}
                                                 disabled={!isLate}
                                             />
-                                            Terapkan denda keterlambatan 1 hari (bisa diubah manual di kolom nominal)
+                                            Terapkan denda keterlambatan sesuai jumlah hari (nominal bisa disesuaikan)
                                         </label>
                                         <div className="relative">
                                             <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[0.9rem] font-bold text-text-muted">Rp</span>
@@ -460,20 +470,6 @@ const Return = ({ rentals, inventory = [], categories = [], onProcessReturn, onU
                                             />
                                         </div>
                                     </div>
-
-                                    {selectedPayment.isUnpaid && (
-                                        <label className="flex items-start gap-2 rounded-md border border-accent bg-white p-3 text-[0.85rem] text-text-main">
-                                            <input
-                                                type="checkbox"
-                                                className="mt-0.5 accent-accent"
-                                                checked={settleRemainingPayment}
-                                                onChange={(event) => setSettleRemainingPayment(event.target.checked)}
-                                            />
-                                            <span>
-                                                Saya konfirmasi customer sudah melunasi sisa pembayaran sebesar <strong>{formatCurrency(selectedPayment.remainingAmount + additionalFeeValue)}</strong>.
-                                            </span>
-                                        </label>
-                                    )}
 
                                     <div>
                                         <label className="mb-1.5 block text-[0.85rem] text-text-muted">Catatan Pengembalian (Opsional)</label>
@@ -504,6 +500,15 @@ const Return = ({ rentals, inventory = [], categories = [], onProcessReturn, onU
                             >
                                 <i className="fas fa-check-circle"></i> {isSubmitting ? 'Memproses...' : 'Selesaikan Pengembalian'}
                             </button>
+                            {recordPayment && selectedPayment.isUnpaid && (
+                                <button
+                                    type="button"
+                                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-accent bg-white py-2.5 font-semibold text-accent transition-colors hover:bg-[#ecfdf5]"
+                                    onClick={() => setPaymentRental(selectedRental)}
+                                >
+                                    <i className="fas fa-money-bill-wave"></i> Catat Pembayaran
+                                </button>
+                            )}
                             <button
                                 className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-border bg-white py-2.5 font-semibold text-text-muted transition-colors hover:bg-surface-hover hover:text-text-main"
                                 onClick={() => setSelectedRental(null)}
@@ -523,6 +528,17 @@ const Return = ({ rentals, inventory = [], categories = [], onProcessReturn, onU
                     onSubmit={handleUpdateRental}
                 />
             )}
+            <RentalPaymentModal
+                isOpen={Boolean(paymentRental)}
+                rental={paymentRental}
+                onClose={() => setPaymentRental(null)}
+                onSubmit={async (payload) => {
+                    if (!paymentRental || typeof recordPayment !== 'function') {
+                        throw new Error('Aksi pembayaran belum tersedia.');
+                    }
+                    await recordPayment(paymentRental.id, payload);
+                }}
+            />
         </div>
     );
 };

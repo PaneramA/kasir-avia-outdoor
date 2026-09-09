@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import useSWRInfinite from 'swr/infinite';
 import ReceiptModal from '../components/ReceiptModal';
+import RentalPaymentModal from '../components/RentalPaymentModal';
 import RentalEditModal from '../components/RentalEditModal';
 import { openReceiptWhatsApp, printReceipt } from '../lib/receipt';
 import { formatCurrency, getCurrentMonthRangeDateKeys } from '../lib/financial';
@@ -44,6 +45,8 @@ const History = ({
     inventory = [],
     categories = [],
     onUpdateRental,
+    onRecordRentalPayment,
+    onRecordPayment,
     onVerifyRentalDelete,
     onDeleteRentalByAdmin,
 }) => {
@@ -64,6 +67,8 @@ const History = ({
     const [deleteSuccessMessage, setDeleteSuccessMessage] = useState('');
     const [receiptRental, setReceiptRental] = useState(null);
     const [editingRental, setEditingRental] = useState(null);
+    const [paymentRental, setPaymentRental] = useState(null);
+    const recordPayment = onRecordRentalPayment || onRecordPayment;
 
     useEffect(() => {
         const timeoutId = window.setTimeout(() => {
@@ -234,6 +239,15 @@ const History = ({
         const updatedRental = await onUpdateRental(rentalId, payload);
         await mutateHistory();
         return updatedRental;
+    };
+
+    const handleRecordPayment = async (payload) => {
+        if (!paymentRental || typeof recordPayment !== 'function') {
+            throw new Error('Aksi pembayaran belum tersedia.');
+        }
+
+        await recordPayment(paymentRental.id, payload);
+        await mutateHistory();
     };
 
     const handlePrintReceipt = (paperWidthMm = 80) => {
@@ -430,6 +444,15 @@ const History = ({
                                                     <i className="fas fa-pen"></i> Edit
                                                 </button>
                                             )}
+                                            {recordPayment && payment.remainingAmount > 0 && (
+                                                <button
+                                                    type="button"
+                                                    className="inline-flex items-center gap-2 rounded-md border border-accent bg-white px-3 py-1.5 text-[0.75rem] font-semibold text-accent hover:bg-[#ecfdf5]"
+                                                    onClick={() => setPaymentRental(rental)}
+                                                >
+                                                    <i className="fas fa-money-bill-wave"></i> Catat Pembayaran
+                                                </button>
+                                            )}
                                             <button
                                                 type="button"
                                                 className="inline-flex items-center gap-2 rounded-md border border-accent bg-accent px-3 py-1.5 text-[0.75rem] font-semibold text-white hover:bg-accent-hover"
@@ -558,6 +581,15 @@ const History = ({
                                                             onClick={() => openEditModal(rental)}
                                                         >
                                                             <i className="fas fa-pen"></i> Edit
+                                                        </button>
+                                                    )}
+                                                    {recordPayment && payment.remainingAmount > 0 && (
+                                                        <button
+                                                            type="button"
+                                                            className="inline-flex items-center gap-2 rounded-md border border-accent bg-white px-3 py-1.5 text-[0.75rem] font-semibold text-accent hover:bg-[#ecfdf5]"
+                                                            onClick={() => setPaymentRental(rental)}
+                                                        >
+                                                            <i className="fas fa-money-bill-wave"></i> Bayar
                                                         </button>
                                                     )}
                                                     <button
@@ -694,6 +726,13 @@ const History = ({
                 onClose={closeReceiptModal}
                 onPrint={handlePrintReceipt}
                 onShareWhatsApp={handleShareReceiptWhatsApp}
+            />
+
+            <RentalPaymentModal
+                isOpen={Boolean(paymentRental)}
+                rental={paymentRental}
+                onClose={() => setPaymentRental(null)}
+                onSubmit={handleRecordPayment}
             />
 
             {editingRental && (

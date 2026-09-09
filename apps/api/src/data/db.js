@@ -7,6 +7,7 @@ import {
   isActiveStatus,
 } from './accessPolicy.js';
 import {
+  calculateBillableLateDays,
   calculateRentalDurationFromRange,
   deriveRentalAccounting,
   resolveRentalDayPolicy,
@@ -222,8 +223,13 @@ function getRentalPaymentRows(rental) {
 
 function getRentalAccountingState(rental) {
   const charges = Array.isArray(rental.charges) ? rental.charges : [];
+  const storedPayments = Array.isArray(rental.payments) ? rental.payments : [];
   const payments = getRentalPaymentRows(rental);
-  const baseTotal = payments.length > 0 && (!rental.payments || rental.payments.length > 0)
+  const normalizedStatus = String(rental.paymentStatus || '').toUpperCase();
+  const hasLegacyInvoiceTotal = storedPayments.length === 0
+    && charges.length > 0
+    && rental.finalTotal != null;
+  const baseTotal = storedPayments.length > 0 || normalizedStatus === 'BELUM_BAYAR' || hasLegacyInvoiceTotal
     ? rental.total
     : (rental.finalTotal ?? rental.total);
   return {
@@ -1370,16 +1376,6 @@ function getRentalInvoiceAmount(rental) {
   return Math.max(0, Number(rental?.finalTotal ?? rental?.total ?? 0) || 0);
 }
 
-function getRentalCashAmount(rental) {
-  const invoiceAmount = getRentalInvoiceAmount(rental);
-  const paymentStatus = String(rental?.paymentStatus || 'LUNAS').toUpperCase();
-  if (paymentStatus === 'DP') {
-    return Math.min(invoiceAmount, Math.max(0, Number(rental?.paidAmount || 0) || 0));
-  }
-
-  return invoiceAmount;
-}
-
 async function getFinancialRecapSummary({ startDate, endDate } = {}, context) {
   const startAt = parseJakartaDateBoundary(startDate, 'start');
   const endAt = parseJakartaDateBoundary(endDate, 'end');
@@ -1396,7 +1392,11 @@ async function getFinancialRecapSummary({ startDate, endDate } = {}, context) {
     ...(Object.keys(date).length > 0 ? { date } : {}),
   }, context, { includeBranchNull: false });
   const tenantRentalWhere = withTenantBranchScope({ deletedAt: null }, context, { includeBranchNull: false });
-  const [rentals, rentalItems, expenses, tenantRentalDates] = await Promise.all([
+  const paymentPeriodWhere = withTenantBranchScope({
+    ...(Object.keys(date).length > 0 ? { paidAt: date } : {}),
+  }, context, { includeBranchNull: false });
+  const rentalPaymentsWhere = withTenantBranchScope({ rental: where }, context, { includeBranchNull: false });
+  const [rentals, rentalItems, expenses, tenantRentalDates, periodPayments, rentalPayments] = await Promise.all([
     prisma.rental.findMany({
       where,
       select: {
@@ -1430,25 +1430,35 @@ async function getFinancialRecapSummary({ startDate, endDate } = {}, context) {
       where: tenantRentalWhere,
       select: { date: true },
     }),
+    prisma.rentalPayment.findMany({
+      where: paymentPeriodWhere,
+      select: { rentalId: true, amount: true, method: true, paidAt: true },
+    }),
+    prisma.rentalPayment.findMany({
+      where: rentalPaymentsWhere,
+      select: { rentalId: true, amount: true, method: true, paidAt: true },
+    }),
   ]);
 
   const methodBuckets = new Map();
   const monthBuckets = new Map();
+  const paymentsByRental = new Map();
+  for (const payment of rentalPayments) {
+    const rows = paymentsByRental.get(payment.rentalId) || [];
+    rows.push(payment);
+    paymentsByRental.set(payment.rentalId, rows);
+  }
   let invoiceRevenue = 0;
   let cashReceived = 0;
   let receivables = 0;
 
   for (const rental of rentals) {
     const amount = getRentalInvoiceAmount(rental);
-    const cashAmount = getRentalCashAmount(rental);
     invoiceRevenue += amount;
-    cashReceived += cashAmount;
-    receivables += Math.max(0, amount - cashAmount);
-    const method = String(rental.paymentMethod || 'TUNAI').toUpperCase();
-    const methodBucket = methodBuckets.get(method) || { method, count: 0, revenue: 0 };
-    methodBucket.count += 1;
-    methodBucket.revenue += amount;
-    methodBuckets.set(method, methodBucket);
+    const rows = paymentsByRental.get(rental.id);
+    const effectiveRows = rows?.length > 0 ? rows : getRentalPaymentRows(rental);
+    const paidAmount = effectiveRows.reduce((sum, payment) => sum + Math.max(0, Number(payment.amount || 0)), 0);
+    receivables += Math.max(0, amount - Math.min(amount, paidAmount));
 
     const { year, month } = getJakartaDateParts(rental.date);
     const monthKey = `${year}-${String(month).padStart(2, '0')}`;
@@ -1456,6 +1466,31 @@ async function getFinancialRecapSummary({ startDate, endDate } = {}, context) {
     monthBucket.revenue += amount;
     monthBucket.transactions += 1;
     monthBuckets.set(monthKey, monthBucket);
+  }
+
+  for (const payment of periodPayments) {
+    const amount = Math.max(0, Number(payment.amount || 0));
+    cashReceived += amount;
+    const method = String(payment.method || 'TUNAI').toUpperCase();
+    const methodBucket = methodBuckets.get(method) || { method, count: 0, revenue: 0 };
+    methodBucket.count += 1;
+    methodBucket.revenue += amount;
+    methodBuckets.set(method, methodBucket);
+  }
+
+  // Old rentals predate RentalPayment. Treat their denormalized payment fields as
+  // a single legacy payment only when no ledger row exists for that rental.
+  for (const rental of rentals) {
+    if (paymentsByRental.has(rental.id)) continue;
+    const legacyPayment = getRentalPaymentRows(rental)[0];
+    if (!legacyPayment) continue;
+    const amount = Math.max(0, Number(legacyPayment.amount || 0));
+    cashReceived += amount;
+    const method = String(legacyPayment.method || 'TUNAI').toUpperCase();
+    const methodBucket = methodBuckets.get(method) || { method, count: 0, revenue: 0 };
+    methodBucket.count += 1;
+    methodBucket.revenue += amount;
+    methodBuckets.set(method, methodBucket);
   }
 
   const expenseCategoryBuckets = new Map();
@@ -1790,6 +1825,7 @@ export async function listRentalHistoryPage({
 export async function createRental(payload, context) {
   const tenantId = requireTenantId(context);
   const branchId = requireBranchId(context);
+  const actorUserId = String(context?.actorUserId || '').trim() || null;
   const customer = payload?.customer || {};
   const customerName = String(customer.name || '').trim();
   const customerPhone = String(customer.phone || '').trim();
@@ -1973,7 +2009,7 @@ export async function createRental(payload, context) {
     }
 
     const total = normalizedItems.reduce((sum, item) => sum + (item.price * item.qty * duration), 0);
-    return tx.rental.create({
+    const createdRental = await tx.rental.create({
       data: {
         id: payload?.id || createId('TX'),
         customerId: customerRecord.id,
@@ -2001,6 +2037,10 @@ export async function createRental(payload, context) {
         items: true,
       },
     });
+    if (actorUserId) {
+      await tx.auditLog.create({ data: { actorUserId, tenantId, branchId, action: 'RENTAL_CREATED', targetType: 'rental', targetId: createdRental.id, snapshotBefore: { after: toAuditRentalSnapshot(createdRental) } } });
+    }
+    return createdRental;
   });
 
   return toRentalDto(rental);
@@ -2047,26 +2087,26 @@ export async function recordRentalPayment(rentalId, payload, context) {
   const paidAt = payload.paidAt ? new Date(payload.paidAt) : new Date();
 
   const execute = async () => withSerializableTransaction(async (tx) => {
+    const duplicate = await tx.rentalPayment.findFirst({
+      where: { tenantId, idempotencyKey: payload.idempotencyKey },
+    });
+    if (duplicate) {
+      if (duplicate.rentalId !== targetRentalId || duplicate.branchId !== branchId) {
+        throw createHttpError(409, 'Idempotency key already used.');
+      }
+      const duplicateRental = await tx.rental.findFirst({
+        where: { id: targetRentalId, tenantId, branchId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!duplicateRental) throw createHttpError(404, 'Transaksi sewa tidak ditemukan.');
+      return { created: false, ...(await loadPaymentResult(tx, duplicate.rentalId, duplicate.id)) };
+    }
+
     const rental = await tx.rental.findFirst({
       where: { id: targetRentalId, tenantId, branchId, deletedAt: null },
       include: { items: true, payments: true, charges: true, returnRecord: true },
     });
     if (!rental) throw createHttpError(404, 'Transaksi sewa tidak ditemukan.');
-    if (isReturnedRentalStatus(rental.status) || rental.returnRecord) {
-      throw createHttpError(400, 'Rental already returned');
-    }
-
-    const duplicate = await tx.rentalPayment.findFirst({
-      where: { rentalId: targetRentalId, tenantId, branchId, idempotencyKey: payload.idempotencyKey },
-    });
-    if (duplicate) {
-      return { created: false, ...(await loadPaymentResult(tx, duplicate.rentalId, duplicate.id)) };
-    }
-    const keyUsedInBranch = await tx.rentalPayment.findFirst({
-      where: { tenantId, branchId, idempotencyKey: payload.idempotencyKey },
-      select: { id: true },
-    });
-    if (keyUsedInBranch) throw createHttpError(409, 'Idempotency key already used.');
 
     const beforeState = getRentalAccountingState(rental);
     if (payload.amount > beforeState.accounting.remainingAmount) {
@@ -2125,16 +2165,14 @@ export async function recordRentalPayment(rentalId, payload, context) {
     if (error?.code !== 'P2002') throw error;
     const authorizedRental = await prisma.rental.findFirst({
       where: { id: targetRentalId, tenantId, branchId, deletedAt: null },
-      include: { returnRecord: true },
     });
     if (!authorizedRental) throw createHttpError(404, 'Transaksi sewa tidak ditemukan.');
-    if (isReturnedRentalStatus(authorizedRental.status) || authorizedRental.returnRecord) {
-      throw createHttpError(400, 'Rental already returned');
-    }
     const duplicate = await prisma.rentalPayment.findFirst({
-      where: { rentalId: targetRentalId, tenantId, branchId, idempotencyKey: payload.idempotencyKey },
+      where: { tenantId, idempotencyKey: payload.idempotencyKey },
     });
-    if (!duplicate) throw createHttpError(409, 'Idempotency key already used.');
+    if (!duplicate || duplicate.rentalId !== targetRentalId || duplicate.branchId !== branchId) {
+      throw createHttpError(409, 'Idempotency key already used.');
+    }
     return { created: false, ...(await loadPaymentResult(prisma, duplicate.rentalId, duplicate.id)) };
   }
 }
@@ -2401,10 +2439,13 @@ export async function updateRental(rentalId, payload, context) {
         });
 
     const total = normalizedItems.reduce((sum, item) => sum + (item.price * item.qty * duration), 0);
-    const existingAccounting = getRentalAccountingState(rental).accounting;
-    if (total < existingAccounting.paidAmount) {
-      throw createHttpError(409, 'Nilai transaksi sewa tidak boleh lebih kecil dari nominal yang sudah dibayar.');
+    const paidAmount = rental.payments.reduce((sum, row) => sum + row.amount, 0);
+    const chargeAmount = rental.charges.reduce((sum, row) => sum + row.amount, 0);
+    const nextInvoiceTotal = total + chargeAmount;
+    if (nextInvoiceTotal < paidAmount) {
+      throw createHttpError(409, 'Total sewa tidak boleh lebih kecil dari pembayaran yang sudah diterima.');
     }
+    const existingAccounting = deriveRentalAccounting({ baseTotal: total, charges: rental.charges, payments: rental.payments });
     await tx.rentalItem.deleteMany({
       where: { rentalId: rental.id },
     });
@@ -2429,8 +2470,8 @@ export async function updateRental(rentalId, payload, context) {
         plannedReturnDate,
         returnDate: null,
         returnNotes: null,
-        additionalFee: 0,
-        finalTotal: null,
+        additionalFee: chargeAmount,
+        finalTotal: existingAccounting.invoiceTotal,
         items: {
           create: normalizedItems,
         },
@@ -4715,177 +4756,182 @@ export async function deleteCustomerById(customerId, context) {
 export async function processReturn(payload, context) {
   const tenantId = requireTenantId(context);
   const branchId = requireBranchId(context);
+  const actorUserId = String(context?.actorUserId || '').trim() || null;
   const rentalId = String(payload?.rentalId || '').trim();
-  const additionalFee = Number(payload?.additionalFee || 0);
-  const settleRemainingPayment = Boolean(payload?.settleRemainingPayment);
+  const applyLateFee = Boolean(payload?.applyLateFee);
 
   if (!rentalId) {
     throw new Error('rentalId is required');
   }
 
-  if (!Number.isFinite(additionalFee) || additionalFee < 0) {
-    throw new Error('additionalFee must be a number >= 0');
-  }
+  return withSerializableTransaction(async (tx) => {
+    const includeRental = {
+      items: { orderBy: { createdAt: 'asc' } },
+      payments: { orderBy: { paidAt: 'asc' } },
+      charges: { orderBy: { chargedAt: 'asc' } },
+      returnRecord: true,
+    };
 
-  const result = await prisma.$transaction(async (tx) => {
-    const rental = await tx.rental.findUnique({
-      where: { id: rentalId },
-      include: {
-        items: true,
-        returnRecord: true,
-      },
-    });
+    const recoverExistingReturn = async (existingRental) => {
+      const { accounting } = getRentalAccountingState(existingRental);
+      const chargeAmount = existingRental.charges.reduce((sum, charge) => sum + charge.amount, 0);
+      const returnDate = existingRental.returnRecord?.returnDate
+        || existingRental.returnDate
+        || existingRental.updatedAt
+        || new Date();
+      const returnNotes = existingRental.returnRecord?.returnNotes
+        || existingRental.returnNotes
+        || '';
+      const additionalFee = chargeAmount || existingRental.returnRecord?.additionalFee || 0;
+      const alignedRental = await tx.rental.update({
+        where: { id: existingRental.id },
+        data: {
+          status: 'Returned',
+          returnDate,
+          returnNotes,
+          additionalFee,
+          finalTotal: accounting.invoiceTotal,
+          paymentStatus: accounting.paymentStatus,
+          paymentMethod: accounting.latestPaymentMethod,
+          paidAmount: accounting.paidAmount,
+        },
+        include: includeRental,
+      });
 
-    if (!rental) {
-      throw new Error('Rental not found');
-    }
-
-    if (context?.tenantId && rental.tenantId && rental.tenantId !== context.tenantId) {
-      throw new Error('Forbidden');
-    }
-
-    if (context?.branchId && rental.branchId !== context.branchId) {
-      throw new Error('Forbidden');
-    }
-
-    if (rental.deletedAt) {
-      throw new Error('Rental already deleted');
-    }
-
-    if (isReturnedRentalStatus(rental.status)) {
-      if (rental.returnRecord) {
+      if (alignedRental.returnRecord) {
         return {
-          rental: toRentalDto(rental),
-          returnRecord: toReturnDto(rental.returnRecord),
+          rental: toRentalDto(alignedRental),
+          returnRecord: toReturnDto(alignedRental.returnRecord),
+          charge: null,
         };
       }
 
-      const synthesizedReturnDate = rental.returnDate || rental.updatedAt || new Date();
-      const synthesizedAdditionalFee = Number(rental.additionalFee || 0);
-      const synthesizedFinalTotal = Number(
-        rental.finalTotal == null ? rental.total + synthesizedAdditionalFee : rental.finalTotal,
-      );
-      const synthesizedRecord = await tx.returnRecord.create({
+      const returnRecord = await tx.returnRecord.create({
         data: {
           id: createId('RT'),
-          rentalId: rental.id,
-          customerName: rental.customerName,
-          customerPhone: rental.customerPhone,
-          tenantId: rental.tenantId,
-          branchId: rental.branchId,
-          itemsJson: rental.items,
-          returnDate: synthesizedReturnDate,
-          returnNotes: rental.returnNotes || '',
-          additionalFee: synthesizedAdditionalFee,
-          finalTotal: synthesizedFinalTotal,
+          rentalId: alignedRental.id,
+          customerName: alignedRental.customerName,
+          customerPhone: alignedRental.customerPhone,
+          tenantId,
+          branchId,
+          itemsJson: alignedRental.items,
+          returnDate,
+          returnNotes,
+          additionalFee,
+          finalTotal: accounting.invoiceTotal,
         },
       });
-
-      return {
-        rental: toRentalDto(rental),
-        returnRecord: toReturnDto(synthesizedRecord),
-      };
-    }
-
-    // Legacy data guard: return record exists but status is still active.
-    if (rental.returnRecord) {
-      const alignedRental = await tx.rental.update({
-        where: { id: rental.id },
-        data: {
-          status: 'Returned',
-          returnDate: rental.returnRecord.returnDate,
-          returnNotes: rental.returnRecord.returnNotes || '',
-          additionalFee: rental.returnRecord.additionalFee,
-          finalTotal: rental.returnRecord.finalTotal,
-        },
-        include: {
-          items: true,
-          returnRecord: true,
-        },
-      });
-
       return {
         rental: toRentalDto(alignedRental),
-        returnRecord: toReturnDto(alignedRental.returnRecord),
+        returnRecord: toReturnDto(returnRecord),
+        charge: null,
       };
-    }
+    };
 
-    const returnDate = new Date();
-    const returnNotes = payload?.returnNotes || '';
-    const finalTotal = rental.total + additionalFee;
-    const paidAmount = Math.max(0, Number(rental.paidAmount || 0));
-    const remainingAmount = Math.max(0, finalTotal - paidAmount);
-
-    if (remainingAmount > 0 && !settleRemainingPayment) {
-      throw new Error(`Transaksi belum lunas. Sisa pembayaran Rp ${remainingAmount.toLocaleString('id-ID')}`);
-    }
-
-    const updatedCount = await tx.rental.updateMany({
-      where: {
-        id: rental.id,
-        deletedAt: null,
-        NOT: [
-          {
-            status: {
-              equals: 'Returned',
-              mode: 'insensitive',
-            },
-          },
-          {
-            status: {
-              equals: 'Selesai',
-              mode: 'insensitive',
-            },
-          },
-          {
-            status: {
-              equals: 'Completed',
-              mode: 'insensitive',
-            },
-          },
-          {
-            status: {
-              equals: 'Done',
-              mode: 'insensitive',
-            },
-          },
-        ],
-      },
-      data: {
-        status: 'Returned',
-        returnDate,
-        returnNotes,
-        additionalFee,
-        finalTotal,
-        paymentStatus: remainingAmount > 0 ? 'LUNAS' : rental.paymentStatus,
-        paidAmount: remainingAmount > 0 ? finalTotal : rental.paidAmount,
-      },
+    const initialRental = await tx.rental.findUnique({
+      where: { id: rentalId },
+      include: includeRental,
     });
+    if (!initialRental) throw new Error('Rental not found');
+    if (initialRental.tenantId !== tenantId || initialRental.branchId !== branchId) throw new Error('Forbidden');
+    if (initialRental.deletedAt) throw new Error('Rental already deleted');
+    if (isReturnedRentalStatus(initialRental.status) || initialRental.returnRecord) {
+      return recoverExistingReturn(initialRental);
+    }
 
-    if (updatedCount.count === 0) {
+    const returnedAt = new Date();
+    const claimed = await tx.rental.updateMany({
+      where: {
+        id: rentalId,
+        tenantId,
+        branchId,
+        deletedAt: null,
+        returnRecord: { is: null },
+        NOT: [...RETURNED_RENTAL_STATUSES].map((status) => ({
+          status: { equals: status, mode: 'insensitive' },
+        })),
+      },
+      data: { updatedAt: returnedAt },
+    });
+    if (claimed.count === 0) {
+      const latestRental = await tx.rental.findUnique({ where: { id: rentalId }, include: includeRental });
+      if (latestRental && latestRental.tenantId === tenantId && latestRental.branchId === branchId && !latestRental.deletedAt
+        && (isReturnedRentalStatus(latestRental.status) || latestRental.returnRecord)) {
+        return recoverExistingReturn(latestRental);
+      }
       throw new Error('Rental already returned');
     }
 
-    for (const rentalItem of rental.items) {
-      await tx.item.updateMany({
-        where: { id: rentalItem.itemId },
+    // The claim serializes this return against rental edits. Reload every mutable
+    // relation after the claim so stock and charges use the winning snapshot.
+    const rental = await tx.rental.findUnique({
+      where: { id: rentalId },
+      include: includeRental,
+    });
+    if (!rental) throw new Error('Rental not found');
+
+    const tenantSettings = await tx.tenantSettings.findUnique({
+      where: { tenantId },
+      select: { rentalDayCountMode: true, rentalCutoffHour: true, rentalCutoffMinute: true },
+    });
+    const lateDays = calculateBillableLateDays(rental.plannedReturnDate, returnedAt, tenantSettings);
+    const dailyRate = rental.duration > 0 ? Math.round(rental.total / rental.duration) : 0;
+    const calculatedAmount = lateDays * dailyRate;
+    const lateFeeAmount = payload?.lateFeeAmount == null ? calculatedAmount : Number(payload.lateFeeAmount);
+    if (!Number.isFinite(lateFeeAmount) || lateFeeAmount < 0) throw new Error('lateFeeAmount must be a number >= 0');
+
+    let charge = null;
+    const charges = [...rental.charges];
+    if (applyLateFee && lateDays > 0) {
+      charge = await tx.rentalCharge.create({
         data: {
-          stock: {
-            increment: rentalItem.qty,
-          },
+          rentalId: rental.id,
+          tenantId,
+          branchId,
+          type: 'LATE_FEE',
+          description: lateFeeAmount === calculatedAmount
+            ? `Keterlambatan ${lateDays} hari x Rp ${dailyRate.toLocaleString('id-ID')}`
+            : `Keterlambatan ${lateDays} hari (nominal disesuaikan kasir)`,
+          quantity: lateDays,
+          unitAmount: dailyRate,
+          amount: lateFeeAmount,
+          chargedAt: returnedAt,
+          createdByUserId: actorUserId,
         },
       });
+      charges.push(charge);
     }
 
-    const updatedRental = await tx.rental.findUnique({
+    const accounting = deriveRentalAccounting({
+      baseTotal: rental.total,
+      charges,
+      payments: rental.payments,
+    });
+    const additionalFee = charges.reduce((sum, row) => sum + row.amount, 0);
+    const updatedRental = await tx.rental.update({
       where: { id: rental.id },
-      include: {
-        items: true,
+      data: {
+        status: 'Returned',
+        returnDate: returnedAt,
+        returnNotes: payload?.returnNotes || '',
+        additionalFee,
+        finalTotal: accounting.invoiceTotal,
+        paymentStatus: accounting.paymentStatus,
+        paymentMethod: accounting.latestPaymentMethod,
+        paidAmount: accounting.paidAmount,
       },
+      include: includeRental,
     });
 
-    if (!updatedRental) {
-      throw new Error('Rental not found');
+    for (const rentalItem of rental.items) {
+      await tx.item.updateMany({
+        where: {
+          id: rentalItem.itemId,
+          tenantId,
+          OR: [{ branchId }, { branchId: null }],
+        },
+        data: { stock: { increment: rentalItem.qty } },
+      });
     }
 
     const returnRecord = await tx.returnRecord.create({
@@ -4897,22 +4943,19 @@ export async function processReturn(payload, context) {
         tenantId,
         branchId,
         itemsJson: rental.items,
-        returnDate,
-        returnNotes,
+        returnDate: returnedAt,
+        returnNotes: payload?.returnNotes || '',
         additionalFee,
-        finalTotal,
+        finalTotal: accounting.invoiceTotal,
       },
     });
-
     return {
       rental: toRentalDto(updatedRental),
       returnRecord: toReturnDto(returnRecord),
+      charge: charge ? toRentalChargeDto(charge) : null,
     };
   });
-
-  return result;
 }
-
 export async function verifyUserPasswordById(userId, plainPassword, passwordPepper) {
   const targetId = String(userId || '').trim();
   if (!targetId) {

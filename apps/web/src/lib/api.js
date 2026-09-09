@@ -42,14 +42,71 @@ function normalizeRentalStatus(status) {
   return returnedStatuses.has(normalized) ? 'Returned' : 'Active';
 }
 
+function normalizeMoney(value, fallback = 0) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Math.max(0, Math.trunc(amount)) : fallback;
+}
+
+function normalizeRentalPayment(payment) {
+  if (!payment || typeof payment !== 'object') {
+    return payment;
+  }
+
+  return {
+    ...payment,
+    status: String(payment.status || '').trim().toUpperCase(),
+    method: String(payment.method || 'TUNAI').trim().toUpperCase(),
+    paidAmount: normalizeMoney(payment.paidAmount),
+    remainingAmount: normalizeMoney(payment.remainingAmount),
+    totalDue: normalizeMoney(payment.totalDue),
+    records: Array.isArray(payment.records)
+      ? payment.records.map((record) => ({
+        ...record,
+        amount: normalizeMoney(record?.amount),
+        method: String(record?.method || 'TUNAI').trim().toUpperCase(),
+      }))
+      : [],
+  };
+}
+
+function normalizeRentalCharge(charge) {
+  return {
+    ...charge,
+    quantity: normalizeMoney(charge?.quantity, 1),
+    unitAmount: normalizeMoney(charge?.unitAmount),
+    amount: normalizeMoney(charge?.amount),
+  };
+}
+
 function normalizeRentalRecord(record) {
   if (!record || typeof record !== 'object') {
     return record;
   }
 
-  return {
+  const normalized = {
     ...record,
     status: normalizeRentalStatus(record.status),
+  };
+
+  if (record.payment && typeof record.payment === 'object') {
+    normalized.payment = normalizeRentalPayment(record.payment);
+  }
+
+  if (Array.isArray(record.charges)) {
+    normalized.charges = record.charges.map(normalizeRentalCharge);
+  }
+
+  return normalized;
+}
+
+function normalizeRentalResult(result) {
+  if (!result || typeof result !== 'object' || !result.rental) {
+    return result;
+  }
+
+  return {
+    ...result,
+    rental: normalizeRentalRecord(result.rental),
   };
 }
 
@@ -381,7 +438,7 @@ export function createRental(rental) {
   return request('/api/rentals', {
     method: 'POST',
     body: JSON.stringify(rental),
-  }, { auth: true });
+  }, { auth: true }).then(normalizeRentalRecord);
 }
 
 export function updateRental(rentalId, rental) {
@@ -395,7 +452,14 @@ export function processReturn(payload) {
   return request('/api/returns', {
     method: 'POST',
     body: JSON.stringify(payload),
-  }, { auth: true });
+  }, { auth: true }).then(normalizeRentalResult);
+}
+
+export function recordRentalPayment(rentalId, payload) {
+  return request(`/api/rentals/${encodeURIComponent(rentalId)}/payments`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, { auth: true }).then(normalizeRentalResult);
 }
 
 export function verifyRentalDelete(rentalId, password) {

@@ -142,6 +142,11 @@ export function isRentalMutationKeyForScope(key, userId, tenantId, branchId) {
   return isScopedMutationKeyForNamespaces(key, RENTAL_MUTATION_NAMESPACES, userId, tenantId, branchId)
 }
 
+export function isRentalPaymentMutationKeyForScope(key, userId, tenantId, branchId) {
+  return isRentalMutationKeyForScope(key, userId, tenantId, branchId)
+    || isFinancialMutationKeyForScope(key, userId, tenantId, branchId)
+}
+
 export const APP_SWR_OPTIONS = {
   dedupingInterval: 5000,
   errorRetryCount: 2,

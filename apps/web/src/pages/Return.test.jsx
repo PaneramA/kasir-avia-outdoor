@@ -278,7 +278,7 @@ describe('Return page theme', () => {
     expect(screen.getByText('Dewi Anggraini')).toBeInTheDocument();
   });
 
-  it('blocks unpaid return processing until settlement is confirmed', () => {
+  it('allows an unpaid rental to be returned without forcing settlement', async () => {
     const onProcessReturn = vi.fn();
     vi.stubGlobal('alert', vi.fn());
     vi.stubGlobal('confirm', vi.fn(() => true));
@@ -288,8 +288,19 @@ describe('Return page theme', () => {
     fireEvent.click(screen.getByText('Ayu Pratiwi'));
     fireEvent.click(screen.getByRole('button', { name: /selesaikan pengembalian/i }));
 
-    expect(onProcessReturn).not.toHaveBeenCalled();
-    expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('masih punya sisa pembayaran'));
-    expect(window.confirm).not.toHaveBeenCalled();
+    expect(onProcessReturn).toHaveBeenCalledWith({
+      rentalId: 'RTR-001',
+      applyLateFee: true,
+      lateFeeAmount: 300000,
+      returnNotes: '',
+    });
+  });
+
+  it('shows the late-fee breakdown using late days multiplied by the daily rate', () => {
+    render(<Return rentals={[activeOverdueRental]} onProcessReturn={vi.fn()} />);
+
+    fireEvent.click(screen.getByText('Ayu Pratiwi'));
+
+    expect(screen.getByText(/3 hari x Rp 100\.000/i)).toBeInTheDocument();
   });
 });

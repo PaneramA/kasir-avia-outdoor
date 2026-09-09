@@ -65,6 +65,7 @@ vi.mock('./lib/api.js', () => ({
   logout: vi.fn(),
   onboardTenant: vi.fn(),
   processReturn: vi.fn(),
+  recordRentalPayment: vi.fn(),
   removeBranchAccess: vi.fn(),
   removeCategory: vi.fn(),
   removeCustomerRecord: vi.fn(),
@@ -288,7 +289,7 @@ describe('application state orchestration', () => {
     });
     renderApp('/financial');
 
-    expect(await screen.findByText('Omzet sewa')).toBeInTheDocument();
+    expect(await screen.findByText('Nilai tagihan')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /Tambah Pengeluaran/i })).toBeInTheDocument();
   });
 
@@ -304,7 +305,7 @@ describe('application state orchestration', () => {
     });
     renderApp('/financial');
 
-    expect(await screen.findByText('Omzet sewa')).toBeInTheDocument();
+    expect(await screen.findByText('Nilai tagihan')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('button', { name: /Tambah Pengeluaran/i })).not.toBeInTheDocument());
   });
 

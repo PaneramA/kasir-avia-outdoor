@@ -8,7 +8,7 @@ import AdminLayout from './components/AdminLayout'
 import Login from './pages/Login'
 import AdminLogin from './pages/AdminLogin'
 import { APP_ROUTES, resolvePageInfo } from './lib/routes'
-import { APP_CACHE_KEYS, isInventoryMutationKeyForScope, isRentalMutationKeyForScope } from './lib/appCache'
+import { APP_CACHE_KEYS, isInventoryMutationKeyForScope, isRentalMutationKeyForScope, isRentalPaymentMutationKeyForScope } from './lib/appCache'
 import {
   createCategory,
   createItem,
@@ -30,6 +30,7 @@ import {
   verifyRentalDelete,
   deleteRentalByAdmin as deleteRentalByAdminApi,
   processReturn,
+  recordRentalPayment,
   removeCategory,
   removeItem,
   restoreItem,
@@ -561,6 +562,25 @@ function App() {
     [activeBranchId, activeTenantId, currentUserId, getErrorMessage, itemQuery, mutateCache, rentalQuery],
   )
 
+  const handleRecordRentalPayment = useCallback(
+    async (rentalId, payload) => {
+      const result = await recordRentalPayment(rentalId, payload)
+      if (result?.rental?.id) {
+        await rentalQuery.mutate((previousRentals = []) => previousRentals.map((rental) => (
+          rental.id === result.rental.id ? { ...rental, ...result.rental } : rental
+        )), { revalidate: false })
+      }
+
+      void mutateCache(
+        (key) => isRentalPaymentMutationKeyForScope(key, currentUserId, activeTenantId, activeBranchId),
+        undefined,
+        { revalidate: true },
+      )
+      return result
+    },
+    [activeBranchId, activeTenantId, currentUserId, mutateCache, rentalQuery],
+  )
+
   const handleUpdateRental = useCallback(
     async (rentalId, payload) => {
       const updatedRental = await updateRental(rentalId, payload)
@@ -796,6 +816,7 @@ function App() {
                   cart={cart}
                   setCart={setCart}
                   onCheckout={handleCheckout}
+                  onRecordPayment={handleRecordRentalPayment}
                   currentUser={currentUser}
                   tenantId={activeTenantId}
                   branchId={activeBranchId}
@@ -812,6 +833,7 @@ function App() {
                   inventory={inventory}
                   categories={categories}
                   onProcessReturn={handleProcessReturn}
+                  onRecordPayment={handleRecordRentalPayment}
                   onUpdateRental={handleUpdateRental}
                 />
               }
@@ -843,6 +865,7 @@ function App() {
                   inventory={inventory}
                   categories={categories}
                   onUpdateRental={handleUpdateRental}
+                  onRecordPayment={handleRecordRentalPayment}
                   onVerifyRentalDelete={handleVerifyRentalDelete}
                   onDeleteRentalByAdmin={handleDeleteRentalByAdmin}
                 />

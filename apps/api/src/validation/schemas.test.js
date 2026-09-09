@@ -4,6 +4,7 @@ import {
   createRentalSchema,
   createRentalPaymentSchema,
   onboardTenantSchema,
+  processReturnSchema,
   updateItemSchema,
   updateTenantSettingsSchema,
   updatePlanSchema,
@@ -73,6 +74,40 @@ describe('API validation schemas', () => {
     }).success).toBe(false);
   });
 
+  it('accepts explicit late-fee return payloads without settlement fields', () => {
+    expect(processReturnSchema.parse({
+      rentalId: 'rental-1',
+      applyLateFee: true,
+      lateFeeAmount: '110000',
+      returnNotes: 'Dikembalikan lengkap',
+      settleRemainingPayment: true,
+    })).toEqual({
+      rentalId: 'rental-1',
+      applyLateFee: true,
+      lateFeeAmount: 110_000,
+      returnNotes: 'Dikembalikan lengkap',
+    });
+  });
+
+  it('maps the legacy additionalFee alias explicitly to lateFeeAmount', () => {
+    expect(processReturnSchema.parse({
+      rentalId: 'rental-legacy',
+      additionalFee: '75000',
+    })).toEqual({
+      rentalId: 'rental-legacy',
+      applyLateFee: true,
+      lateFeeAmount: 75_000,
+      returnNotes: '',
+    });
+  });
+
+  it('rejects conflicting legacy and current late-fee fields', () => {
+    expect(processReturnSchema.safeParse({
+      rentalId: 'rental-legacy',
+      additionalFee: 75_000,
+      lateFeeAmount: 80_000,
+    }).success).toBe(false);
+  });
   it('defaults new rentals to holding an identity card but accepts not holding it', () => {
     const baseRental = {
       customer: { name: 'Fuad', phone: '0812' },

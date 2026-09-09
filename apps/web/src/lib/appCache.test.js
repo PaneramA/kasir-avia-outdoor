@@ -6,6 +6,7 @@ const {
   APP_SWR_OPTIONS,
   isFinancialMutationKeyForScope,
   isInventoryMutationKeyForScope,
+  isRentalMutationKeyForScope,
 } = appCache
 
 describe('application SWR cache policy', () => {
@@ -122,5 +123,18 @@ describe('application SWR cache policy', () => {
     expect(matches(APP_CACHE_KEYS.expenses('user-a', 'tenant-a', 'branch-b', {}))).toBe(false)
     expect(matches(APP_CACHE_KEYS.dashboard('user-a', 'tenant-a', 'branch-a'))).toBe(false)
     expect(matches('@"app/expenses","user-b","tenant-b","branch-b",#query:"user-a tenant-a branch-a",')).toBe(false)
+  })
+
+  it('matches rental, history, dashboard, and financial views for the active payment scope', () => {
+    const rentalScope = (key) => isRentalMutationKeyForScope(key, 'user-a', 'tenant-a', 'branch-a')
+    const financialScope = (key) => isFinancialMutationKeyForScope(key, 'user-a', 'tenant-a', 'branch-a')
+
+    expect(rentalScope(APP_CACHE_KEYS.rentals('user-a', 'tenant-a', 'branch-a'))).toBe(true)
+    expect(rentalScope(APP_CACHE_KEYS.rentalHistory('user-a', 'tenant-a', 'branch-a', {}))).toBe(true)
+    expect(rentalScope(APP_CACHE_KEYS.dashboard('user-a', 'tenant-a', 'branch-a'))).toBe(true)
+    expect(financialScope(APP_CACHE_KEYS.financialRecap('user-a', 'tenant-a', 'branch-a', {}))).toBe(true)
+
+    expect(rentalScope(APP_CACHE_KEYS.rentals('user-b', 'tenant-a', 'branch-a'))).toBe(false)
+    expect(financialScope(APP_CACHE_KEYS.financialRecap('user-a', 'tenant-b', 'branch-a', {}))).toBe(false)
   })
 })

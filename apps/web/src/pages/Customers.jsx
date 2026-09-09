@@ -59,7 +59,8 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
         totalItems: 0,
         totalPages: 0,
     }
-    const isLoading = customerQuery.isLoading || customerQuery.isValidating
+    const isInitialLoading = customerQuery.isLoading && !customerQuery.data
+    const isRevalidating = customerQuery.isValidating && Boolean(customerQuery.data)
     const queryErrorMessage = customerQuery.error instanceof Error ? customerQuery.error.message : ''
 
     const closeModal = () => {
@@ -221,7 +222,13 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
             )}
 
             <section data-testid="customer-table-panel" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-sidebar-bg">
-                {isLoading ? (
+                {isRevalidating && (
+                    <div data-testid="customer-revalidation-status" role="status" className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 text-xs text-text-muted">
+                        <i className="fas fa-rotate-right animate-spin" aria-hidden="true"></i>
+                        Memperbarui data customer...
+                    </div>
+                )}
+                {isInitialLoading ? (
                     <div className="flex min-h-[220px] flex-1 items-center justify-center text-text-muted">Memuat data customer...</div>
                 ) : (
                     <>
@@ -308,7 +315,7 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
                         type="button"
                         className={secondaryButtonClass}
                         onClick={() => setPage((value) => Math.max(1, value - 1))}
-                        disabled={isLoading || pagination.page <= 1}
+                        disabled={isInitialLoading || pagination.page <= 1}
                     >
                         Sebelumnya
                     </button>
@@ -317,7 +324,7 @@ const Customers = ({ userId = '', tenantId = '', branchId = '' }) => {
                         type="button"
                         className={secondaryButtonClass}
                         onClick={() => setPage((value) => Math.min(pagination.totalPages, value + 1))}
-                        disabled={isLoading || pagination.page >= pagination.totalPages}
+                        disabled={isInitialLoading || pagination.page >= pagination.totalPages}
                     >
                         Berikutnya
                     </button>

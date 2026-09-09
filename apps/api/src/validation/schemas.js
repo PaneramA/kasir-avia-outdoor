@@ -264,10 +264,27 @@ export const updateCustomerSchema = customerSchema;
 
 export const processReturnSchema = z.object({
   rentalId: z.string().trim().min(1),
-  additionalFee: z.coerce.number().int().min(0).default(0),
-  returnNotes: z.string().trim().optional().default(''),
-  settleRemainingPayment: z.coerce.boolean().optional().default(false),
-});
+  applyLateFee: z.boolean().optional().default(false),
+  lateFeeAmount: z.coerce.number().int().min(0).optional(),
+  additionalFee: z.coerce.number().int().min(0).optional(),
+  returnNotes: z.string().trim().max(500).optional().default(''),
+}).superRefine((value, ctx) => {
+  if (value.additionalFee !== undefined
+    && value.lateFeeAmount !== undefined
+    && value.additionalFee !== value.lateFeeAmount) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['lateFeeAmount'],
+      message: 'lateFeeAmount dan additionalFee harus sama jika keduanya dikirim.',
+    });
+  }
+}).transform(({ additionalFee, ...value }) => ({
+  ...value,
+  ...(additionalFee !== undefined && value.lateFeeAmount === undefined
+    ? { lateFeeAmount: additionalFee }
+    : {}),
+  ...(additionalFee !== undefined ? { applyLateFee: true } : {}),
+}));
 
 export const verifyRentalDeleteSchema = z.object({
   password: z.string().min(1).max(128),

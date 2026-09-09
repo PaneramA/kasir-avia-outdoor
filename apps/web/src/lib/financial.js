@@ -270,8 +270,109 @@ export function isDateKeyWithinRange(dateKey, startDate, endDate) {
 }
 
 export function getRentalAmount(rental) {
-  const amount = Number(rental?.finalTotal ?? rental?.total ?? 0)
+  const amount = Number(rental?.payment?.totalDue ?? rental?.finalTotal ?? rental?.total ?? 0)
   return Number.isFinite(amount) ? Math.max(0, amount) : 0
+}
+
+export function getRentalInvoiceAmount(rental) {
+  return getRentalAmount(rental)
+}
+
+function normalizePaymentRecord(record, rental, index) {
+  const amount = Number(record?.amount || 0)
+  const paidAt = record?.paidAt || rental?.date || ''
+  return {
+    id: String(record?.id || `legacy-payment-${rental?.id || 'rental'}-${index}`),
+    amount: Number.isFinite(amount) ? Math.max(0, amount) : 0,
+    method: String(record?.method || rental?.payment?.method || 'TUNAI').trim().toUpperCase() || 'TUNAI',
+    paidAt,
+  }
+}
+
+export function getRentalPaymentRecords(rental) {
+  const records = Array.isArray(rental?.payment?.records) ? rental.payment.records : []
+  if (records.length > 0) {
+    return records.map((record, index) => normalizePaymentRecord(record, rental, index))
+  }
+
+  const paymentStatus = String(rental?.payment?.status || 'LUNAS').trim().toUpperCase()
+  if (paymentStatus === 'BELUM_BAYAR') {
+    return []
+  }
+
+  const invoiceAmount = getRentalAmount(rental)
+  const storedPaidAmount = Number(rental?.payment?.paidAmount || 0)
+  const amount = paymentStatus === 'LUNAS'
+    ? (storedPaidAmount > 0 ? Math.min(invoiceAmount, storedPaidAmount) : invoiceAmount)
+    : Math.min(invoiceAmount, Math.max(0, storedPaidAmount))
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return []
+  }
+
+  return [normalizePaymentRecord({
+    id: `legacy-payment-${rental?.id || 'rental'}`,
+    amount,
+    method: rental?.payment?.method || 'TUNAI',
+    paidAt: rental?.date,
+  }, rental, 0)]
+}
+
+export function normalizePaymentMethodTotals(methods) {
+  if (Array.isArray(methods)) {
+    return methods.map((entry) => ({
+      method: String(entry?.method || 'TUNAI').trim().toUpperCase() || 'TUNAI',
+      count: Math.max(0, Number(entry?.count || 0)),
+      revenue: Math.max(0, Number(entry?.amount ?? entry?.revenue ?? 0) || 0),
+    }))
+  }
+
+  if (!methods || typeof methods !== 'object') {
+    return []
+  }
+
+  return Object.entries(methods).map(([method, amount]) => ({
+    method: String(method).trim().toUpperCase() || 'TUNAI',
+    count: 0,
+    revenue: Math.max(0, Number(amount || 0) || 0),
+  }))
+}
+
+export function getPaymentDateTotals(rentals, { startDate = '', endDate = '' } = {}) {
+  const methodBucket = new Map()
+  let cashReceived = 0
+  let paymentCount = 0
+
+  ;(Array.isArray(rentals) ? rentals : []).forEach((rental) => {
+    getRentalPaymentRecords(rental).forEach((payment) => {
+      const paymentDateKey = toJakartaDateKey(payment.paidAt)
+      if (!isDateKeyWithinRange(paymentDateKey, startDate, endDate)) {
+        return
+      }
+
+      cashReceived += payment.amount
+      paymentCount += 1
+      const current = methodBucket.get(payment.method) || { method: payment.method, count: 0, revenue: 0 }
+      current.count += 1
+      current.revenue += payment.amount
+      methodBucket.set(payment.method, current)
+    })
+  })
+
+  const methods = [...methodBucket.values()].sort((a, b) => {
+    if (b.revenue !== a.revenue) return b.revenue - a.revenue
+    return a.method.localeCompare(b.method)
+  })
+
+  return { cashReceived, paymentCount, methods }
+}
+
+export function getRentalCashAmount(rental, dateRange = {}) {
+  return getPaymentDateTotals([rental], dateRange).cashReceived
+}
+
+export function getRentalReceivableAmount(rental) {
+  const paidAmount = getRentalPaymentRecords(rental).reduce((sum, payment) => sum + payment.amount, 0)
+  return Math.max(0, getRentalAmount(rental) - paidAmount)
 }
 
 export function filterRentalsByTransactionDate(rentals, { startDate = '', endDate = '' } = {}) {
@@ -289,22 +390,16 @@ export function filterRentalsByTransactionDate(rentals, { startDate = '', endDat
 export function getFinancialRecap(rentals, { startDate = '', endDate = '', financialClosingDay } = {}) {
   const filteredRentals = filterRentalsByTransactionDate(rentals, { startDate, endDate })
   const totalRevenue = filteredRentals.reduce((sum, rental) => sum + getRentalAmount(rental), 0)
+  const paymentTotals = getPaymentDateTotals(filteredRentals, { startDate, endDate })
   const totalTransactions = filteredRentals.length
   const averageTransaction = totalTransactions > 0 ? totalRevenue / totalTransactions : 0
 
-  const methodBucket = new Map()
   const itemBucket = new Map()
   const monthBucket = new Map()
 
   filteredRentals.forEach((rental) => {
     const amount = getRentalAmount(rental)
-    const method = String(rental?.payment?.method || 'TUNAI').trim().toUpperCase() || 'TUNAI'
     const monthKey = getFinancialMonthKeyForDate(rental?.date, financialClosingDay)
-
-    const methodCurrent = methodBucket.get(method) || { method, count: 0, revenue: 0 }
-    methodCurrent.count += 1
-    methodCurrent.revenue += amount
-    methodBucket.set(method, methodCurrent)
 
     if (monthKey) {
       const monthCurrent = monthBucket.get(monthKey) || { monthKey, revenue: 0, transactions: 0 }
@@ -334,13 +429,6 @@ export function getFinancialRecap(rentals, { startDate = '', endDate = '', finan
     })
   })
 
-  const methods = [...methodBucket.values()].sort((a, b) => {
-    if (b.count !== a.count) {
-      return b.count - a.count
-    }
-    return b.revenue - a.revenue
-  })
-
   const topItems = [...itemBucket.values()].sort((a, b) => {
     if (b.qty !== a.qty) {
       return b.qty - a.qty
@@ -363,7 +451,14 @@ export function getFinancialRecap(rentals, { startDate = '', endDate = '', finan
     totalRevenue,
     totalTransactions,
     averageTransaction,
-    methods,
+    invoiceRevenue: totalRevenue,
+    cashReceived: paymentTotals.cashReceived,
+    receivables: filteredRentals.reduce(
+      (sum, rental) => sum + Math.max(0, getRentalAmount(rental) - getRentalPaymentRecords(rental).reduce((paid, payment) => paid + payment.amount, 0)),
+      0,
+    ),
+    methods: paymentTotals.methods,
+    paymentMethods: paymentTotals.methods,
     topItems,
     monthlyTrend,
   }

@@ -46,6 +46,7 @@ const summary = {
   totalTransactions: 2,
   averageTransaction: 100000,
   methods: [{ method: 'TUNAI', count: 2, revenue: 200000 }],
+  paymentMethods: [{ method: 'TUNAI', count: 2, amount: 200000, revenue: 200000 }],
   topItems: [{ key: 'Tenda:Tenda Dome', name: 'Tenda Dome', qty: 2, estimatedRevenue: 110000 }],
   monthlyTrend: [{ monthKey: '2026-07', revenue: 200000, transactions: 2 }],
   availableMonths: ['2026-07'],
@@ -99,11 +100,11 @@ describe('FinancialRecap', () => {
   it('shows cash-based finance KPIs and expense tab', async () => {
     renderFinance()
 
-    expect(await screen.findByText('Omzet sewa')).toBeInTheDocument()
-    expect(screen.getByText('Uang diterima')).toBeInTheDocument()
+    expect(await screen.findByText('Nilai tagihan')).toBeInTheDocument()
+    expect(screen.getByText('Kas diterima')).toBeInTheDocument()
     expect(screen.getByText('Piutang')).toBeInTheDocument()
     expect(screen.getAllByText('Pengeluaran').length).toBeGreaterThan(0)
-    expect(screen.getByText('Laba/Rugi')).toBeInTheDocument()
+    expect(screen.getByText('Laba kas bersih')).toBeInTheDocument()
     expect(screen.getByText('Rp 125.000')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: /^Pengeluaran$/i }))
@@ -153,6 +154,7 @@ describe('FinancialRecap', () => {
 
     renderFinance()
 
+    expect(await screen.findByText('Nilai tagihan')).toBeInTheDocument()
     await user.click(await screen.findByRole('button', { name: /^Excel$/i }))
 
     await waitFor(() => expect(xlsxMock.writeFile).toHaveBeenCalled())
@@ -165,5 +167,45 @@ describe('FinancialRecap', () => {
       'Metode Bayar',
       'Catatan',
     ])
+  })
+
+  it('presents invoice, cash, receivables, and payment-date method totals separately', async () => {
+    api.fetchFinancialRecapPage.mockResolvedValue({
+      summary: {
+        ...summary,
+        invoiceRevenue: 100000,
+        totalRevenue: 100000,
+        cashReceived: 40000,
+        receivables: 60000,
+        netProfit: 15000,
+        paymentMethods: [{ method: 'QRIS', count: 1, amount: 40000, revenue: 40000 }],
+        methods: [{ method: 'QRIS', count: 1, amount: 40000, revenue: 40000 }],
+      },
+      items: [{
+        id: 'august-rental',
+        date: '2026-08-20T03:00:00.000Z',
+        customer: { name: 'Naufal' },
+        payment: {
+          method: 'QRIS',
+          status: 'SEBAGIAN',
+          totalDue: 100000,
+          paidAmount: 40000,
+          remainingAmount: 60000,
+          records: [{ id: 'payment-1', amount: 40000, method: 'QRIS', paidAt: '2026-09-02T03:00:00.000Z' }],
+        },
+        total: 100000,
+      }],
+      nextCursor: null,
+    })
+
+    renderFinance()
+
+    expect(await screen.findByText('Nilai tagihan')).toBeInTheDocument()
+    expect(screen.getByText('Kas diterima')).toBeInTheDocument()
+    expect(screen.getByText('Piutang')).toBeInTheDocument()
+    expect(screen.getByText('Laba kas bersih')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /^Transaksi$/i }))
+    expect(await screen.findByText('Tanggal Pembayaran')).toBeInTheDocument()
+    expect(screen.getByText('Rp 40.000')).toBeInTheDocument()
   })
 })

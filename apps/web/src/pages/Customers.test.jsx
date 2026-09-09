@@ -99,6 +99,25 @@ describe('Customers page layout', () => {
     expect(screen.getByRole('button', { name: 'Berikutnya' })).toBeEnabled();
   });
 
+  it('keeps stale rows and page controls available while customer data revalidates', () => {
+    swr.data = createCustomerPage(customerRows, { page: 2 });
+    swr.useSWR.mockImplementation(() => ({
+      data: swr.data,
+      error: null,
+      isLoading: false,
+      isValidating: true,
+      mutate: swr.mutate,
+    }));
+
+    renderCustomers();
+
+    expect(screen.getAllByText('Asfiyana Dewi')).not.toHaveLength(0);
+    expect(screen.getByTestId('customer-revalidation-status')).toHaveTextContent('Memperbarui data customer...');
+    expect(screen.getByRole('button', { name: 'Sebelumnya' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Berikutnya' })).toBeEnabled();
+    expect(screen.getByTestId('customer-pagination-footer')).toBeInTheDocument();
+  });
+
   it('uses fixed 50-row page requests and changes pages through navigation', () => {
     renderCustomers();
 
