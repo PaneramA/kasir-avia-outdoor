@@ -277,10 +277,20 @@ export function fetchCategories() {
   return request('/api/categories', {}, { auth: true });
 }
 
-export function fetchCustomers(query = '') {
-  const keyword = String(query || '').trim();
-  const suffix = keyword ? `?q=${encodeURIComponent(keyword)}` : '';
-  return request(`/api/customers${suffix}`, {}, { auth: true });
+export function fetchCustomers({ query = '', page = 1, limit = 50 } = {}) {
+  const params = new URLSearchParams();
+  if (String(query).trim()) params.set('q', String(query).trim());
+  params.set('page', String(page));
+  params.set('limit', String(limit));
+  return request(`/api/customers?${params.toString()}`, {}, { auth: true }).then((result) => ({
+    items: Array.isArray(result?.items) ? result.items : [],
+    pagination: {
+      page: Number(result?.pagination?.page || page),
+      pageSize: Number(result?.pagination?.pageSize || limit),
+      totalItems: Number(result?.pagination?.totalItems || 0),
+      totalPages: Number(result?.pagination?.totalPages || 0),
+    },
+  }));
 }
 
 export function createCustomerRecord(payload) {

@@ -67,16 +67,21 @@ describe('application SWR cache policy', () => {
     expect(APP_CACHE_KEYS.users('user-a')).toEqual(['app/users', 'user-a'])
   })
 
-  it('isolates customer searches by normalized query and returns null for incomplete scope', () => {
-    expect(APP_CACHE_KEYS.customers('user-a', 'tenant-a', 'branch-a', ' Andi ')).toEqual([
+  it('isolates customer searches and pages by normalized query and returns null for incomplete scope', () => {
+    expect(APP_CACHE_KEYS.customers('user-a', 'tenant-a', 'branch-a', ' Andi ', 1, 50)).toEqual([
       'app/customers',
       'user-a',
       'tenant-a',
       'branch-a',
       'andi',
+      1,
+      50,
     ])
-    expect(APP_CACHE_KEYS.customers('user-a', 'tenant-a', 'branch-a', 'andi')).not.toEqual(
-      APP_CACHE_KEYS.customers('user-a', 'tenant-a', 'branch-a', 'budi'),
+    expect(APP_CACHE_KEYS.customers('user-a', 'tenant-a', 'branch-a', 'andi', 1, 50)).not.toEqual(
+      APP_CACHE_KEYS.customers('user-a', 'tenant-a', 'branch-a', 'budi', 1, 50),
+    )
+    expect(APP_CACHE_KEYS.customers('user-a', 'tenant-a', 'branch-a', 'fuad', 1, 50)).not.toEqual(
+      APP_CACHE_KEYS.customers('user-a', 'tenant-a', 'branch-a', 'fuad', 2, 50),
     )
     expect(APP_CACHE_KEYS.items('', 'tenant-a', 'branch-a')).toBeNull()
     expect(APP_CACHE_KEYS.items('user-a', '', 'branch-a')).toBeNull()

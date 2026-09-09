@@ -98,13 +98,22 @@ describe('web API client state and requests', () => {
     expect(expiredListener).not.toHaveBeenCalled();
   });
 
-  it('encodes search parameters', async () => {
+  it('requests and normalizes customer pages', async () => {
     localStorage.setItem('avia_api_token', 'token-1');
-    fetch.mockResolvedValue(jsonResponse([]));
+    fetch.mockResolvedValue(jsonResponse({
+      items: [{ id: 'customer-1', name: 'Fuad' }],
+      pagination: { page: 3, pageSize: 50, totalItems: 101, totalPages: 3 },
+    }));
     const api = await loadApi();
 
-    await api.fetchCustomers('Fuad & Sewa');
-    expect(fetch.mock.calls[0][0]).toBe('http://localhost:4000/api/customers?q=Fuad%20%26%20Sewa');
+    await expect(api.fetchCustomers({ query: 'Fuad', page: 3, limit: 50 })).resolves.toEqual({
+      items: [{ id: 'customer-1', name: 'Fuad' }],
+      pagination: { page: 3, pageSize: 50, totalItems: 101, totalPages: 3 },
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/customers?q=Fuad&page=3&limit=50'),
+      expect.anything(),
+    );
   });
 
   it('requests archived inventory pages and restores an item', async () => {

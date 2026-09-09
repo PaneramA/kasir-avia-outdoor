@@ -69,12 +69,14 @@ export const APP_CACHE_KEYS = {
   tenantSettings: (userId, tenantId, branchId) => createBranchKey('app/tenant-settings', userId, tenantId, branchId),
   branchSettings: (userId, tenantId, branchId) => createBranchKey('app/branch-settings', userId, tenantId, branchId),
   subscription: (userId, tenantId, branchId) => createBranchKey('app/subscription', userId, tenantId, branchId),
-  customers: (userId, tenantId, branchId, query = '') => createBranchKey(
+  customers: (userId, tenantId, branchId, query = '', page = 1, pageSize = 50) => createBranchKey(
     'app/customers',
     userId,
     tenantId,
     branchId,
     normalizeCacheScopeValue(query).toLowerCase(),
+    Number(page),
+    Number(pageSize),
   ),
   users: (userId) => createIdentityKey('app/users', userId),
   tenantUsers: (userId, tenantId, branchId) => createBranchKey('app/tenant-users', userId, tenantId, branchId),
