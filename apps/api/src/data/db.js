@@ -2185,7 +2185,7 @@ export async function updateRental(rentalId, payload, context) {
   }
 
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await withSerializableTransaction(async (tx) => {
     const rental = await tx.rental.findUnique({
       where: { id: targetRentalId },
       include: {

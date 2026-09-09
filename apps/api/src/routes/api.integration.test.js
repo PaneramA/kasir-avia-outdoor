@@ -2133,3 +2133,134 @@ describe('rental payment regressions', () => {
     }
   }, 90_000);
 });
+
+describe('rental payment concurrency', () => {
+  it('keeps paid ledger total at or below the invoice during concurrent edit and payment', async () => {
+    const suffix = `${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
+    let tenantId = '';
+    let userId = '';
+    try {
+      const plan = await prisma.plan.findUnique({ where: { code: 'growth' } });
+      const tenant = await prisma.tenant.create({
+        data: {
+          name: `Payment Concurrency ${suffix}`,
+          slug: `payment-concurrency-${suffix}`,
+          subscription: { create: { planId: plan.id, status: 'active' } },
+          branches: { create: [{ code: 'primary', name: 'Primary' }] },
+        },
+        include: { branches: true },
+      });
+      tenantId = tenant.id;
+      const branchId = tenant.branches[0].id;
+      const user = await prisma.user.create({
+        data: {
+          username: `payment-concurrency-${suffix}`,
+          passwordHash: 'not-used',
+          role: 'kasir',
+          memberships: { create: { tenantId, role: 'owner', status: 'active' } },
+        },
+      });
+      userId = user.id;
+      const token = createAccessToken({ sub: user.id, username: user.username, role: user.role }, env);
+      const category = await prisma.category.create({ data: { tenantId, name: `Concurrency ${suffix}` } });
+      const [item, cheaperItem] = await Promise.all([
+        prisma.item.create({ data: { tenantId, branchId, categoryId: category.id, name: `Concurrency Item ${suffix}`, stock: 5, price: 100_000 } }),
+        prisma.item.create({ data: { tenantId, branchId, categoryId: category.id, name: `Concurrency Cheaper ${suffix}`, stock: 5, price: 50_000 } }),
+      ]);
+      const rental = await prisma.rental.create({
+        data: {
+          id: `CONC-${suffix}`,
+          tenantId,
+          branchId,
+          customerName: 'Concurrency Customer',
+          customerPhone: `0812999${suffix.slice(-5)}`,
+          guarantee: 'KTP',
+          identityCardHeld: true,
+          duration: 1,
+          total: 100_000,
+          paymentStatus: 'BELUM_BAYAR',
+          paymentMethod: 'TUNAI',
+          paidAmount: 0,
+          status: 'Active',
+          date: new Date(),
+          items: { create: [{ itemId: item.id, itemName: item.name, categoryName: category.name, price: item.price, qty: 1 }] },
+        },
+      });
+
+      const originalTransaction = prisma.$transaction.bind(prisma);
+      let releaseEdit;
+      let resolveEditReady;
+      let resolvePaymentWrite;
+      const editReady = new Promise((resolve) => { resolveEditReady = resolve; });
+      const paymentWrite = new Promise((resolve) => { resolvePaymentWrite = resolve; });
+      const editCanContinue = new Promise((resolve) => { releaseEdit = resolve; });
+      const transactionSpy = vi.spyOn(prisma, '$transaction').mockImplementation(async (operation, options) => {
+        if (typeof operation !== 'function') return originalTransaction(operation, options);
+        return originalTransaction(async (tx) => {
+          const rentalDelegate = new Proxy(tx.rental, {
+            get(target, property) {
+              if (property === 'update') {
+                return async (args) => {
+                  if (args?.where?.id === rental.id && args?.data?.total === 50_000) {
+                    resolveEditReady();
+                    await editCanContinue;
+                  }
+                  if (args?.where?.id === rental.id && args?.data?.paidAmount === 80_000) resolvePaymentWrite();
+                  return target.update(args);
+                };
+              }
+              const value = Reflect.get(target, property);
+              return typeof value === 'function' ? value.bind(target) : value;
+            },
+          });
+          const transactionProxy = new Proxy(tx, {
+            get(target, property) {
+              if (property === 'rental') return rentalDelegate;
+              const value = Reflect.get(target, property);
+              return typeof value === 'function' ? value.bind(target) : value;
+            },
+          });
+          return operation(transactionProxy);
+        }, options);
+      });
+      let results;
+      try {
+        const editPromise = callApi('PATCH', `/api/rentals/${rental.id}`, {
+          token,
+          tenantId,
+          branchId,
+          body: {
+            editReason: 'Concurrent invoice reduction',
+            customer: { name: 'Concurrent Edit', phone: rental.customerPhone, guarantee: 'KTP' },
+            items: [{ id: cheaperItem.id, qty: 1 }],
+            duration: 1,
+          },
+        });
+        await waitForBarrier(editReady, 'edit validation before write');
+        const paymentPromise = callApi('POST', `/api/rentals/${rental.id}/payments`, {
+          token,
+          tenantId,
+          branchId,
+          body: { amount: 80_000, method: 'QRIS', idempotencyKey: `concurrency-${suffix}` },
+        });
+        await waitForBarrier(paymentWrite, 'payment aggregate write');
+        releaseEdit();
+        results = await Promise.all([editPromise, paymentPromise]);
+      } finally {
+        transactionSpy.mockRestore();
+      }
+
+      expect(results.map((result) => result.status).sort()).toEqual([200, 409]);
+      const finalRental = await prisma.rental.findUnique({ where: { id: rental.id } });
+      const payments = await prisma.rentalPayment.findMany({ where: { rentalId: rental.id } });
+      expect(payments.reduce((sum, payment) => sum + payment.amount, 0)).toBeLessThanOrEqual(finalRental.total);
+      expect(finalRental.paidAmount).toBeLessThanOrEqual(finalRental.total);
+    } finally {
+      if (tenantId) {
+        const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+        if (tenant) await deleteTenantForPlatformAdmin(tenant.id, tenant.name);
+      }
+      if (userId) await prisma.user.deleteMany({ where: { id: userId } });
+    }
+  }, 90_000);
+});
