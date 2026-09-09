@@ -8,6 +8,7 @@ import {
 } from './accessPolicy.js';
 import {
   calculateRentalDurationFromRange,
+  deriveRentalAccounting,
   resolveRentalDayPolicy,
 } from './rentalAccounting.js';
 
@@ -170,16 +171,39 @@ function toItemDto(item) {
   };
 }
 
+function toRentalPaymentDto(payment) {
+  return {
+    id: payment.id,
+    amount: payment.amount,
+    method: payment.method,
+    paidAt: payment.paidAt.toISOString(),
+    note: payment.note || '',
+    idempotencyKey: payment.idempotencyKey,
+    createdAt: payment.createdAt.toISOString(),
+  };
+}
+
+function toRentalChargeDto(charge) {
+  return {
+    id: charge.id,
+    type: charge.type,
+    description: charge.description,
+    quantity: charge.quantity,
+    unitAmount: charge.unitAmount,
+    amount: charge.amount,
+    chargedAt: charge.chargedAt.toISOString(),
+    createdAt: charge.createdAt.toISOString(),
+  };
+}
+
 function toRentalDto(rental) {
-  const totalDue = Number(
-    rental.finalTotal == null ? rental.total : rental.finalTotal,
-  );
-  const paymentStatus = String(rental.paymentStatus || 'LUNAS').toUpperCase();
-  const rawPaidAmount = Math.max(0, Number(rental.paidAmount || 0));
-  const normalizedPaidAmount = paymentStatus === 'LUNAS'
-    ? (rawPaidAmount > 0 ? Math.min(rawPaidAmount, totalDue) : totalDue)
-    : Math.min(rawPaidAmount, totalDue);
-  const remainingAmount = Math.max(0, totalDue - normalizedPaidAmount);
+  const payments = Array.isArray(rental.payments) ? rental.payments : [];
+  const charges = Array.isArray(rental.charges) ? rental.charges : [];
+  const accounting = deriveRentalAccounting({
+    baseTotal: rental.total,
+    charges,
+    payments,
+  });
 
   return {
     id: rental.id,
@@ -203,12 +227,14 @@ function toRentalDto(rental) {
     duration: rental.duration,
     total: rental.total,
     payment: {
-      status: paymentStatus,
-      method: rental.paymentMethod || 'TUNAI',
-      paidAmount: normalizedPaidAmount,
-      remainingAmount,
-      totalDue,
+      status: accounting.paymentStatus,
+      method: accounting.latestPaymentMethod,
+      paidAmount: accounting.paidAmount,
+      remainingAmount: accounting.remainingAmount,
+      totalDue: accounting.invoiceTotal,
+      records: payments.map(toRentalPaymentDto),
     },
+    charges: charges.map(toRentalChargeDto),
     status: rental.status,
     date: rental.date.toISOString(),
     plannedReturnDate: rental.plannedReturnDate ? rental.plannedReturnDate.toISOString() : undefined,
@@ -1748,9 +1774,6 @@ export async function createRental(payload, context) {
   const startAtInput = parseIsoDate(payload?.rentalStartAt, 'rentalStartAt');
   const endAtInput = parseIsoDate(payload?.rentalEndAt, 'rentalEndAt');
   const legacyDurationInput = Number(payload?.duration);
-  const rawPaymentStatus = String(payload?.payment?.status || 'LUNAS').trim().toUpperCase();
-  const rawPaymentMethod = String(payload?.payment?.method || 'TUNAI').trim().toUpperCase();
-  const rawPaidAmount = payload?.payment?.paidAmount;
 
   if (!customerName) {
     throw new Error('Customer name is required');
@@ -1766,21 +1789,6 @@ export async function createRental(payload, context) {
 
   await assertTenantCanCreateRental(tenantId);
 
-  if (!PAYMENT_STATUSES.has(rawPaymentStatus)) {
-    throw new Error('Payment status is invalid');
-  }
-
-  if (!PAYMENT_METHODS.has(rawPaymentMethod)) {
-    throw new Error('Payment method is invalid');
-  }
-
-  let paidAmountInput = null;
-  if (typeof rawPaidAmount !== 'undefined' && rawPaidAmount !== null && rawPaidAmount !== '') {
-    paidAmountInput = Number(rawPaidAmount);
-    if (!Number.isFinite(paidAmountInput) || paidAmountInput < 0) {
-      throw new Error('Paid amount must be a number >= 0');
-    }
-  }
 
   const rental = await prisma.$transaction(async (tx) => {
     const tenantSettings = await tx.tenantSettings.upsert({
@@ -1934,22 +1942,6 @@ export async function createRental(payload, context) {
     }
 
     const total = normalizedItems.reduce((sum, item) => sum + (item.price * item.qty * duration), 0);
-    let paymentStatus = rawPaymentStatus;
-    let paidAmount = paymentStatus === 'LUNAS'
-      ? total
-      : Number.isFinite(paidAmountInput) ? Number(paidAmountInput) : 0;
-
-    if (paymentStatus === 'DP') {
-      if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
-        throw new Error('Paid amount is required when payment status is DP');
-      }
-
-      if (paidAmount >= total) {
-        paymentStatus = 'LUNAS';
-        paidAmount = total;
-      }
-    }
-
     return tx.rental.create({
       data: {
         id: payload?.id || createId('TX'),
@@ -1964,9 +1956,9 @@ export async function createRental(payload, context) {
         identityCardHeld,
         duration,
         total,
-        paymentStatus,
-        paymentMethod: rawPaymentMethod,
-        paidAmount,
+        paymentStatus: 'BELUM_BAYAR',
+        paymentMethod: 'TUNAI',
+        paidAmount: 0,
         status: 'Active',
         date: rentalStartAt,
         plannedReturnDate,
@@ -1983,6 +1975,122 @@ export async function createRental(payload, context) {
   return toRentalDto(rental);
 }
 
+function createHttpError(statusCode, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+async function withSerializableTransaction(operation) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await prisma.$transaction(operation, { isolationLevel: 'Serializable' });
+    } catch (error) {
+      lastError = error;
+      if (error?.code !== 'P2034' || attempt === 2) throw error;
+    }
+  }
+  throw lastError;
+}
+
+async function loadPaymentResult(tx, rentalId, paymentId) {
+  const rental = await tx.rental.findUnique({
+    where: { id: rentalId },
+    include: {
+      items: { orderBy: { createdAt: 'asc' } },
+      payments: { orderBy: { paidAt: 'asc' } },
+      charges: { orderBy: { chargedAt: 'asc' } },
+    },
+  });
+  const payment = rental?.payments.find((entry) => entry.id === paymentId);
+  if (!rental || !payment) throw createHttpError(404, 'Transaksi sewa tidak ditemukan.');
+  return { rental: toRentalDto(rental), payment: toRentalPaymentDto(payment) };
+}
+
+export async function recordRentalPayment(rentalId, payload, context) {
+  const tenantId = requireTenantId(context);
+  const branchId = requireBranchId(context);
+  const actorUserId = String(context?.actorUserId || '').trim() || null;
+  const targetRentalId = String(rentalId || '').trim();
+  const paidAt = payload.paidAt ? new Date(payload.paidAt) : new Date();
+
+  const execute = async () => withSerializableTransaction(async (tx) => {
+    const duplicate = await tx.rentalPayment.findUnique({
+      where: { tenantId_idempotencyKey: { tenantId, idempotencyKey: payload.idempotencyKey } },
+    });
+    if (duplicate) {
+      return { created: false, ...(await loadPaymentResult(tx, duplicate.rentalId, duplicate.id)) };
+    }
+
+    const rental = await tx.rental.findFirst({
+      where: { id: targetRentalId, tenantId, branchId, deletedAt: null },
+      include: { items: true, payments: true, charges: true, returnRecord: true },
+    });
+    if (!rental) throw createHttpError(404, 'Transaksi sewa tidak ditemukan.');
+    if (isReturnedRentalStatus(rental.status) || rental.returnRecord) {
+      throw createHttpError(400, 'Rental already returned');
+    }
+
+    const accounting = deriveRentalAccounting({ baseTotal: rental.total, charges: rental.charges, payments: rental.payments });
+    if (payload.amount > accounting.remainingAmount) {
+      throw createHttpError(409, 'Nominal pembayaran melebihi sisa tagihan.');
+    }
+
+    const payment = await tx.rentalPayment.create({
+      data: {
+        rentalId: rental.id,
+        tenantId,
+        branchId,
+        amount: payload.amount,
+        method: payload.method,
+        paidAt,
+        note: payload.note,
+        idempotencyKey: payload.idempotencyKey,
+        createdByUserId: actorUserId,
+      },
+    });
+    const nextAccounting = deriveRentalAccounting({
+      baseTotal: rental.total,
+      charges: rental.charges,
+      payments: [...rental.payments, payment],
+    });
+    await tx.rental.update({
+      where: { id: rental.id },
+      data: {
+        paymentStatus: nextAccounting.paymentStatus,
+        paymentMethod: nextAccounting.latestPaymentMethod,
+        paidAmount: nextAccounting.paidAmount,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorUserId,
+        tenantId,
+        branchId,
+        action: 'RENTAL_PAYMENT_CREATED',
+        targetType: 'rental',
+        targetId: rental.id,
+        snapshotBefore: {
+          payment: { id: payment.id, amount: payment.amount, method: payment.method, paidAt: payment.paidAt.toISOString() },
+          accounting: nextAccounting,
+        },
+      },
+    });
+    return { created: true, ...(await loadPaymentResult(tx, rental.id, payment.id)) };
+  });
+
+  try {
+    return await execute();
+  } catch (error) {
+    if (error?.code !== 'P2002') throw error;
+    const duplicate = await prisma.rentalPayment.findUnique({
+      where: { tenantId_idempotencyKey: { tenantId, idempotencyKey: payload.idempotencyKey } },
+    });
+    if (!duplicate) throw error;
+    return { created: false, ...(await loadPaymentResult(prisma, duplicate.rentalId, duplicate.id)) };
+  }
+}
 export async function updateRental(rentalId, payload, context) {
   const tenantId = requireTenantId(context);
   const branchId = requireBranchId(context);
@@ -2004,9 +2112,6 @@ export async function updateRental(rentalId, payload, context) {
   const startAtInput = parseIsoDate(payload?.rentalStartAt, 'rentalStartAt');
   const endAtInput = parseIsoDate(payload?.rentalEndAt, 'rentalEndAt');
   const legacyDurationInput = Number(payload?.duration);
-  const rawPaymentStatus = String(payload?.payment?.status || 'LUNAS').trim().toUpperCase();
-  const rawPaymentMethod = String(payload?.payment?.method || 'TUNAI').trim().toUpperCase();
-  const rawPaidAmount = payload?.payment?.paidAmount;
 
   if (!targetRentalId) {
     throw new Error('Rental not found');
@@ -2032,21 +2137,6 @@ export async function updateRental(rentalId, payload, context) {
     throw new Error('Rental items are required');
   }
 
-  if (!PAYMENT_STATUSES.has(rawPaymentStatus)) {
-    throw new Error('Payment status is invalid');
-  }
-
-  if (!PAYMENT_METHODS.has(rawPaymentMethod)) {
-    throw new Error('Payment method is invalid');
-  }
-
-  let paidAmountInput = null;
-  if (typeof rawPaidAmount !== 'undefined' && rawPaidAmount !== null && rawPaidAmount !== '') {
-    paidAmountInput = Number(rawPaidAmount);
-    if (!Number.isFinite(paidAmountInput) || paidAmountInput < 0) {
-      throw new Error('Paid amount must be a number >= 0');
-    }
-  }
 
   const result = await prisma.$transaction(async (tx) => {
     const rental = await tx.rental.findUnique({
@@ -2262,22 +2352,6 @@ export async function updateRental(rentalId, payload, context) {
         });
 
     const total = normalizedItems.reduce((sum, item) => sum + (item.price * item.qty * duration), 0);
-    let paymentStatus = rawPaymentStatus;
-    let paidAmount = paymentStatus === 'LUNAS'
-      ? total
-      : Number.isFinite(paidAmountInput) ? Number(paidAmountInput) : 0;
-
-    if (paymentStatus === 'DP') {
-      if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
-        throw new Error('Paid amount is required when payment status is DP');
-      }
-
-      if (paidAmount >= total) {
-        paymentStatus = 'LUNAS';
-        paidAmount = total;
-      }
-    }
-
     await tx.rentalItem.deleteMany({
       where: { rentalId: rental.id },
     });
@@ -2312,6 +2386,8 @@ export async function updateRental(rentalId, payload, context) {
         items: {
           orderBy: { createdAt: 'asc' },
         },
+        payments: { orderBy: { paidAt: 'asc' } },
+        charges: { orderBy: { chargedAt: 'asc' } },
       },
     });
 

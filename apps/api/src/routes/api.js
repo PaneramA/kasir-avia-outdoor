@@ -9,6 +9,7 @@ import {
   upsertCustomer,
   createItem,
   createRental,
+  recordRentalPayment,
   onboardTenantForPlatformAdmin,
   createTenantUserForUser,
   createUser,
@@ -85,6 +86,7 @@ import {
   createUserSchema,
   createTenantUserSchema,
   createRentalSchema,
+  createRentalPaymentSchema,
   updateRentalSchema,
   expenseSchema,
   loginSchema,
@@ -1267,6 +1269,19 @@ export async function apiRoute(req, res, env) {
       return true;
     }
 
+    const paymentRouteMatch = pathname.match(/^\/api\/rentals\/([^/]+)\/payments$/);
+    if (req.method === 'POST' && paymentRouteMatch) {
+      const actor = await ensureAuth();
+      const context = await ensureRequestContext();
+      const rentalId = decodeURIComponent(paymentRouteMatch[1]);
+      const body = createRentalPaymentSchema.parse(await readBody(req));
+      const result = await recordRentalPayment(rentalId, body, { ...context, actorUserId: actor.id });
+      sendSuccess(res, result.created ? 201 : 200, {
+        rental: result.rental,
+        payment: result.payment,
+      });
+      return true;
+    }
     if (req.method === 'PATCH' && pathname.startsWith('/api/rentals/')) {
       const actor = await ensureAuth();
       const context = await ensureRequestContext();

@@ -239,7 +239,6 @@ export const createRentalSchema = z.object({
   duration: z.coerce.number().int().min(1).optional(),
   rentalStartAt: z.string().datetime().optional(),
   rentalEndAt: z.string().datetime().optional(),
-  payment: rentalPaymentSchema.optional(),
   id: z.string().trim().min(1).optional(),
 });
 
@@ -251,9 +250,15 @@ export const updateRentalSchema = z.object({
   duration: z.coerce.number().int().min(1).optional(),
   rentalStartAt: z.string().datetime().optional(),
   rentalEndAt: z.string().datetime().optional(),
-  payment: rentalPaymentSchema.optional(),
 });
 
+export const createRentalPaymentSchema = z.object({
+  amount: z.coerce.number().int().positive(),
+  method: z.enum(['TUNAI', 'QRIS', 'BANK']),
+  paidAt: z.string().datetime().optional(),
+  note: z.string().trim().max(300).optional().default(''),
+  idempotencyKey: z.string().trim().min(8).max(120),
+});
 export const createCustomerSchema = customerSchema;
 export const updateCustomerSchema = customerSchema;
 

@@ -1960,3 +1960,72 @@ describe('customer pagination', () => {
     }
   }, 60_000);
 });
+
+describe('rental payment API', () => {
+  it('records bounded payments idempotently and rejects invalid or unavailable rentals', async () => {
+    const suffix = `${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
+    let tenantId = '';
+    let otherTenantId = '';
+    let userId = '';
+    try {
+      const plan = await prisma.plan.findUnique({ where: { code: 'growth' } });
+      const tenant = await prisma.tenant.create({
+        data: { name: `Rental Payment ${suffix}`, slug: `rental-payment-${suffix}`, subscription: { create: { planId: plan.id, status: 'active' } }, branches: { create: { code: 'primary', name: 'Primary' } } },
+        include: { branches: true },
+      });
+      tenantId = tenant.id;
+      const branchId = tenant.branches[0].id;
+      const otherTenant = await prisma.tenant.create({
+        data: { name: `Rental Payment Other ${suffix}`, slug: `rental-payment-other-${suffix}`, subscription: { create: { planId: plan.id, status: 'active' } }, branches: { create: { code: 'other', name: 'Other' } } },
+        include: { branches: true },
+      });
+      otherTenantId = otherTenant.id;
+      const otherBranchId = otherTenant.branches[0].id;
+      const user = await prisma.user.create({
+        data: { username: `rental-payment-${suffix}`, passwordHash: 'not-used', role: 'kasir', memberships: { create: [{ tenantId, role: 'owner', status: 'active' }, { tenantId: otherTenantId, role: 'owner', status: 'active' }] } },
+      });
+      userId = user.id;
+      const token = createAccessToken({ sub: user.id, username: user.username, role: user.role }, env);
+      const category = await prisma.category.create({ data: { tenantId, name: `Rental Payment ${suffix}` } });
+      const item = await prisma.item.create({ data: { tenantId, branchId, categoryId: category.id, name: `Rental Payment Item ${suffix}`, stock: 10, price: 100_000 } });
+      const createUnpaidRental = async (phone) => {
+        const result = await callApi('POST', '/api/rentals', { token, tenantId, branchId, body: { customer: { name: `Payment ${phone}`, phone, guarantee: 'KTP' }, items: [{ id: item.id, qty: 1 }], duration: 1 } });
+        expect(result.status).toBe(201);
+        return result.body.data.id;
+      };
+      const rentalId = await createUnpaidRental('081200000001');
+      const paymentBody = { amount: 40_000, method: 'QRIS', idempotencyKey: `payment:${suffix}:1` };
+      const partial = await callApi('POST', `/api/rentals/${rentalId}/payments`, { token, tenantId, branchId, body: paymentBody });
+      expect(partial.status).toBe(201);
+      expect(partial.body.data.rental.payment).toMatchObject({ status: 'SEBAGIAN', paidAmount: 40_000, remainingAmount: 60_000, totalDue: 100_000, records: [expect.objectContaining({ amount: 40_000, method: 'QRIS' })] });
+      expect(partial.body.data.rental.charges).toEqual([]);
+      const repeated = await callApi('POST', `/api/rentals/${rentalId}/payments`, { token, tenantId, branchId, body: paymentBody });
+      expect(repeated.status).toBe(200);
+      expect(await prisma.rentalPayment.count({ where: { rentalId } })).toBe(1);
+      for (const [amount, method] of [[0, 'QRIS'], [-1, 'QRIS'], [10_000, 'KARTU']]) {
+        const invalid = await callApi('POST', `/api/rentals/${rentalId}/payments`, { token, tenantId, branchId, body: { amount, method, idempotencyKey: `payment:${suffix}:${amount}:${method}` } });
+        expect(invalid.status).toBe(400);
+      }
+      const crossTenant = await callApi('POST', `/api/rentals/${rentalId}/payments`, { token, tenantId: otherTenantId, branchId: otherBranchId, body: { amount: 10_000, method: 'BANK', idempotencyKey: `payment:${suffix}:cross` } });
+      expect(crossTenant.status).toBe(404);
+      const deletedRentalId = await createUnpaidRental('081200000002');
+      await prisma.rental.update({ where: { id: deletedRentalId }, data: { deletedAt: new Date() } });
+      expect((await callApi('POST', `/api/rentals/${deletedRentalId}/payments`, { token, tenantId, branchId, body: { amount: 10_000, method: 'TUNAI', idempotencyKey: `payment:${suffix}:deleted` } })).status).toBe(404);
+      const returnedRentalId = await createUnpaidRental('081200000003');
+      await prisma.rental.update({ where: { id: returnedRentalId }, data: { status: 'Returned', returnDate: new Date() } });
+      expect((await callApi('POST', `/api/rentals/${returnedRentalId}/payments`, { token, tenantId, branchId, body: { amount: 10_000, method: 'TUNAI', idempotencyKey: `payment:${suffix}:returned` } })).status).toBe(400);
+      const raceRentalId = await createUnpaidRental('081200000004');
+      const race = await Promise.all(['a', 'b'].map((key) => callApi('POST', `/api/rentals/${raceRentalId}/payments`, { token, tenantId, branchId, body: { amount: 70_000, method: 'BANK', idempotencyKey: `payment:${suffix}:race-${key}` } })));
+      expect(race.map((result) => result.status).sort()).toEqual([201, 409]);
+      const racePayments = await prisma.rentalPayment.findMany({ where: { rentalId: raceRentalId } });
+      expect(racePayments.reduce((sum, payment) => sum + payment.amount, 0)).toBeLessThanOrEqual(100_000);
+    } finally {
+      for (const id of [tenantId, otherTenantId]) {
+        if (!id) continue;
+        const tenant = await prisma.tenant.findUnique({ where: { id } });
+        if (tenant) await deleteTenantForPlatformAdmin(tenant.id, tenant.name);
+      }
+      if (userId) await prisma.user.deleteMany({ where: { id: userId } });
+    }
+  }, 90_000);
+});

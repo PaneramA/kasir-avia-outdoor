@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createPlanSchema,
   createRentalSchema,
+  createRentalPaymentSchema,
   onboardTenantSchema,
   updateItemSchema,
   updateTenantSettingsSchema,
@@ -47,16 +48,29 @@ describe('API validation schemas', () => {
     expect(result.error.issues.map((issue) => issue.path[0])).toEqual(['endsAt', 'graceEndsAt']);
   });
 
-  it('coerces rental numbers and supplies payment defaults', () => {
+  it('coerces rental numbers without accepting CRUD payment fields', () => {
     const parsed = createRentalSchema.parse({
       customer: { name: 'Fuad', phone: '0812' },
       items: [{ id: 'item-1', qty: '2' }],
       duration: '3',
-      payment: {},
+      payment: { status: 'LUNAS', method: 'TUNAI' },
     });
     expect(parsed.items[0]).toMatchObject({ qty: 2, notes: '' });
     expect(parsed.duration).toBe(3);
-    expect(parsed.payment).toMatchObject({ status: 'LUNAS', method: 'TUNAI' });
+    expect(parsed.payment).toBeUndefined();
+  });
+
+  it('validates independent rental payment payloads', () => {
+    expect(createRentalPaymentSchema.parse({
+      amount: '40000',
+      method: 'QRIS',
+      idempotencyKey: 'payment-key-1',
+    })).toMatchObject({ amount: 40_000, method: 'QRIS', note: '' });
+    expect(createRentalPaymentSchema.safeParse({
+      amount: 0,
+      method: 'KARTU',
+      idempotencyKey: 'short',
+    }).success).toBe(false);
   });
 
   it('defaults new rentals to holding an identity card but accepts not holding it', () => {
