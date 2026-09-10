@@ -1,0 +1,109 @@
+.return-calendar-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.return-calendar-scroll {
+  min-height: 0;
+}
+
+.return-calendar-frame {
+  position: relative;
+  min-width: 720px;
+  height: 100%;
+  min-height: 560px;
+}
+
+.return-calendar-frame.is-loading {
+  opacity: 0.62;
+}
+
+.return-calendar-loading {
+  position: absolute;
+  z-index: 5;
+  top: 0.75rem;
+  right: 0.75rem;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.return-calendar-event {
+  overflow: hidden;
+  padding: 0.2rem 0.35rem;
+  border-left: 3px solid currentColor;
+  color: inherit;
+  line-height: 1.2;
+}
+
+.return-event--overdue {
+  --fc-event-bg-color: #b42318;
+  --fc-event-border-color: #b42318;
+  --fc-event-text-color: #ffffff;
+}
+
+.return-event--dueToday {
+  --fc-event-bg-color: #b7791f;
+  --fc-event-border-color: #b7791f;
+  --fc-event-text-color: #ffffff;
+}
+
+.return-event--upcoming {
+  --fc-event-bg-color: #146c43;
+  --fc-event-border-color: #146c43;
+  --fc-event-text-color: #ffffff;
+}
+
+.return-event--unknown {
+  --fc-event-bg-color: #5c6b64;
+  --fc-event-border-color: #5c6b64;
+  --fc-event-text-color: #ffffff;
+}
+
+.fc {
+  --fc-border-color: var(--border);
+  --fc-page-bg-color: var(--card-bg);
+  --fc-neutral-bg-color: var(--secondary);
+  --fc-today-bg-color: var(--surface-hover);
+  --fc-button-bg-color: var(--accent);
+  --fc-button-border-color: var(--accent);
+  --fc-button-hover-bg-color: var(--accent-hover);
+  --fc-button-hover-border-color: var(--accent-hover);
+  --fc-button-active-bg-color: var(--accent-hover);
+  --fc-button-active-border-color: var(--accent-hover);
+  --fc-small-font-size: 0.75rem;
+  color: var(--text-main);
+  font-family: inherit;
+}
+
+.fc .fc-toolbar-title {
+  font-size: 1.05rem;
+}
+
+.fc .fc-button {
+  border-radius: 4px;
+  box-shadow: none;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.fc .fc-daygrid-day-number,
+.fc .fc-col-header-cell-cushion {
+  color: var(--text-main);
+  text-decoration: none;
+}
+
+.fc .fc-list-event:hover td {
+  background: var(--surface-hover);
+}
+
+@media (max-width: 768px) {
+  .return-calendar-frame {
+    min-width: 640px;
+    min-height: 500px;
+  }
+}

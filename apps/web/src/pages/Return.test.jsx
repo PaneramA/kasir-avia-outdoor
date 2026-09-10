@@ -202,7 +202,7 @@ describe('Return page theme', () => {
     expect(screen.queryByText('Bima Santoso')).not.toBeInTheDocument();
   });
 
-  it('uses independent desktop scroll regions for the return list and detail panel', () => {
+  it('keeps the page fixed and assigns scrolling to the calendar region', () => {
     render(
       <Return
         rentals={[activeOverdueRental, dueTodayRental, upcomingRental]}
@@ -211,10 +211,8 @@ describe('Return page theme', () => {
     );
 
     expect(screen.getByTestId('return-page-shell').className).toContain('lg:h-[calc(100vh-8rem)]');
-    expect(screen.getByTestId('return-list-panel').className).toContain('min-h-0');
-    expect(screen.getByTestId('return-list-scroll').className).toContain('overflow-y-auto');
-    expect(screen.getByTestId('return-detail-panel').className).toContain('min-h-0');
-    expect(screen.getByTestId('return-detail-scroll').className).toContain('overflow-y-auto');
+    expect(screen.getByTestId('return-calendar-shell').className).toContain('min-h-0');
+    expect(document.querySelector('.return-calendar-scroll').className).toContain('overflow-auto');
   });
 
   it('keeps the return action area anchored inside the detail panel', () => {
@@ -244,7 +242,7 @@ describe('Return page theme', () => {
     expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
   });
 
-  it('orders active rentals by overdue, due today, then upcoming', () => {
+  it('renders all active rentals as calendar events', () => {
     render(
       <Return
         rentals={[upcomingRental, dueTodayRental, activeOverdueRental]}
@@ -252,15 +250,9 @@ describe('Return page theme', () => {
       />,
     );
 
-    const rows = screen.getAllByRole('button').filter((button) => (
-      button.textContent.includes('RTR-')
-    ));
-
-    expect(rows.map((row) => row.textContent)).toEqual([
-      expect.stringContaining('Ayu Pratiwi'),
-      expect.stringContaining('Bima Santoso'),
-      expect.stringContaining('Citra Lestari'),
-    ]);
+    expect(screen.getByTestId('return-rental-heading-RTR-001')).toBeInTheDocument();
+    expect(screen.getByTestId('return-rental-heading-RTR-002')).toBeInTheDocument();
+    expect(screen.getByTestId('return-rental-heading-RTR-003')).toBeInTheDocument();
   });
 
   it('does not crash when an active rental has no item list', () => {

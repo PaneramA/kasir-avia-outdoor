@@ -400,8 +400,9 @@ describe('application state orchestration', () => {
     fetchRentals.mockResolvedValue([{
       id: 'RET-1',
       status: 'Active',
-      date: '2026-07-01T08:00:00.000Z',
-      rentalEndAt: '2026-07-02T08:00:00.000Z',
+      date: '2026-09-01T08:00:00.000Z',
+      plannedReturnDate: '2026-09-02T08:00:00.000Z',
+      rentalEndAt: '2026-09-02T08:00:00.000Z',
       duration: 1,
       total: 100000,
       customer: { name: 'Budi', phone: '08123456789' },
@@ -423,7 +424,8 @@ describe('application state orchestration', () => {
     await waitFor(() => {
       expect(screen.queryByDisplayValue('25000')).not.toBeInTheDocument();
     });
-    expect(screen.getByText(/Pilih transaksi di sebelah kiri/i)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByTestId('return-calendar-shell')).toBeInTheDocument();
   });
 
   it('loads each operational resource once for the resolved branch after a switch', async () => {
