@@ -434,6 +434,19 @@ export function fetchRentals() {
   ));
 }
 
+export function fetchRentalCalendar({ startDate, endDate, search = '', status = '' } = {}) {
+  const params = new URLSearchParams();
+  if (startDate) params.set('startDate', startDate);
+  if (endDate) params.set('endDate', endDate);
+  if (search) params.set('search', search);
+  if (status) params.set('status', status);
+
+  const query = params.toString();
+  return request(`/api/rentals/calendar${query ? `?${query}` : ''}`, {}, { auth: true }).then((rentals) => (
+    Array.isArray(rentals) ? rentals.map(normalizeRentalRecord) : []
+  ));
+}
+
 export function createRental(rental) {
   return request('/api/rentals', {
     method: 'POST',

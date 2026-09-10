@@ -832,6 +832,9 @@ function App() {
                   rentals={rentals}
                   inventory={inventory}
                   categories={categories}
+                  userId={currentUserId}
+                  tenantId={activeTenantId}
+                  branchId={activeBranchId}
                   onProcessReturn={handleProcessReturn}
                   onRecordPayment={handleRecordRentalPayment}
                   onUpdateRental={handleUpdateRental}
