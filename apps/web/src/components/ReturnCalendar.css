@@ -34,10 +34,23 @@
 
 .return-calendar-event {
   overflow: hidden;
-  padding: 0.2rem 0.35rem;
+  padding: 0.28rem 0.4rem;
   border-left: 3px solid currentColor;
+  border-radius: 3px;
   color: inherit;
+  cursor: pointer;
   line-height: 1.2;
+  transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease;
+}
+
+.return-calendar-event:hover,
+.return-calendar-event:focus-visible {
+  position: relative;
+  z-index: 1;
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow: 0 2px 5px rgb(15 23 42 / 18%);
+  outline: none;
 }
 
 .return-event--overdue {
@@ -61,6 +74,24 @@
 .return-event--unknown {
   --fc-event-bg-color: #5c6b64;
   --fc-event-border-color: #5c6b64;
+  --fc-event-text-color: #ffffff;
+}
+
+.return-event--payment-unpaid {
+  --fc-event-bg-color: #dc2626;
+  --fc-event-border-color: #dc2626;
+  --fc-event-text-color: #ffffff;
+}
+
+.return-event--payment-partial {
+  --fc-event-bg-color: #d97706;
+  --fc-event-border-color: #d97706;
+  --fc-event-text-color: #ffffff;
+}
+
+.return-event--payment-paid {
+  --fc-event-bg-color: #16804f;
+  --fc-event-border-color: #16804f;
   --fc-event-text-color: #ffffff;
 }
 

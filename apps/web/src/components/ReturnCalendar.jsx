@@ -14,13 +14,6 @@ const VIEW_OPTIONS = [
   { value: 'timeGridDay', label: 'Hari' },
 ];
 
-const STATUS_LABELS = {
-  overdue: 'Terlambat',
-  dueToday: 'Hari ini',
-  upcoming: 'Akan datang',
-  unknown: 'Tanpa tanggal',
-};
-
 function getRangeEndDate(dateValue) {
   const end = new Date(dateValue);
   end.setMilliseconds(end.getMilliseconds() - 1);
@@ -29,14 +22,14 @@ function getRangeEndDate(dateValue) {
 
 function renderEventContent(eventInfo, onEventClick) {
   const { event } = eventInfo;
-  const { customerName, itemCount, isUnpaid, identityCardHeld, dueStatus } = event.extendedProps;
-  const statusLabel = STATUS_LABELS[dueStatus] || STATUS_LABELS.unknown;
+  const { customerName, paymentStatus } = event.extendedProps;
 
   return (
     <div
       data-testid={'return-rental-heading-' + event.id}
       className="return-calendar-event"
-      title={customerName + ' - ' + statusLabel}
+      title={customerName + ' - ' + paymentStatus}
+      aria-label={customerName + ' - ' + paymentStatus}
       role="button"
       tabIndex={0}
       onClick={() => onEventClick?.(event.extendedProps.rental || null)}
@@ -48,11 +41,6 @@ function renderEventContent(eventInfo, onEventClick) {
       }}
     >
       <div className="truncate font-semibold">{customerName}</div>
-      <div className="truncate text-[0.7rem] opacity-85">
-        {itemCount} item{itemCount === 1 ? '' : ' '} {isUnpaid ? '• Belum lunas' : '• Lunas'}
-      </div>
-      <div className="truncate text-[0.68rem] opacity-75">{event.id}</div>
-      {!identityCardHeld && <div className="truncate text-[0.68rem] opacity-85">Kartu tidak ditahan</div>}
     </div>
   );
 }
@@ -140,7 +128,7 @@ export default function ReturnCalendar({
             eventContent={(eventInfo) => renderEventContent(eventInfo, onEventClick)}
             eventClick={handleEventClick}
             datesSet={handleDatesSet}
-            dayMaxEvents
+            dayMaxEvents={false}
             nowIndicator
             noEventsText="Tidak ada jadwal pengembalian"
             eventDisplay="block"

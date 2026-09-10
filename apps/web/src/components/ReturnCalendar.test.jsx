@@ -24,7 +24,11 @@ describe('ReturnCalendar', () => {
     expect(screen.getByRole('button', { name: 'Minggu' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hari' })).toBeInTheDocument();
     expect(screen.getByText('Bambang')).toBeInTheDocument();
-    expect(screen.getByText(/Kartu tidak ditahan/)).toBeInTheDocument();
+    const eventHeading = screen.getByTestId('return-rental-heading-rental-1');
+    expect(eventHeading).toHaveTextContent('Bambang');
+    expect(eventHeading).not.toHaveTextContent('item');
+    expect(eventHeading).not.toHaveTextContent('Kartu tidak ditahan');
+    expect(eventHeading.closest('.fc-event')).toHaveClass('return-event--payment-unpaid');
   });
 
   it('notifies the parent when a view is selected', () => {

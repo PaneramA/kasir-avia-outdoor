@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import RentalEditModal from './RentalEditModal';
 import RentalPaymentModal from './RentalPaymentModal';
 import { formatJakartaDateLabel } from '../lib/financial';
@@ -94,8 +95,8 @@ export default function ReturnDetailModal({
     return null;
   }
 
-  return (
-    <div role="dialog" aria-modal="true" aria-labelledby="return-detail-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3 sm:p-6">
+  const modal = (
+    <div role="dialog" aria-modal="true" aria-labelledby="return-detail-title" className="return-detail-overlay fixed inset-0 z-[10000] flex items-center justify-center bg-black/45 p-3 sm:p-6">
       <div className="flex max-h-[calc(100vh-1.5rem)] w-full max-w-4xl flex-col overflow-hidden rounded-md border border-border bg-card-bg sm:max-h-[calc(100vh-3rem)]">
         <div className="flex items-start justify-between gap-4 border-b border-border px-4 py-4 sm:px-6">
           <div>
@@ -203,4 +204,6 @@ export default function ReturnDetailModal({
       />
     </div>
   );
+
+  return typeof document === 'undefined' ? modal : createPortal(modal, document.body);
 }

@@ -173,9 +173,11 @@ describe('Return page theme', () => {
   it('shows the identity card hold badge beside the customer name', () => {
     render(<Return rentals={[activeOverdueRental]} onProcessReturn={vi.fn()} />);
 
-    const heading = screen.getByTestId('return-rental-heading-RTR-001');
-    expect(within(heading).getByText('Ayu Pratiwi')).toBeInTheDocument();
-    expect(within(heading).getByText('Kartu tidak ditahan')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Ayu Pratiwi'));
+
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Ayu Pratiwi')).toBeInTheDocument();
+    expect(within(dialog).getByText('Kartu tidak ditahan')).toBeInTheDocument();
   });
 
   it('filters active rentals by due status and unpaid payment state', () => {
@@ -224,6 +226,16 @@ describe('Return page theme', () => {
     expect(actionArea.className).toContain('border-t');
     expect(actionArea.className).toContain('bg-white');
     expect(screen.getByRole('button', { name: /selesaikan pengembalian/i })).toBeInTheDocument();
+  });
+
+  it('mounts the return detail modal above the calendar layer', () => {
+    render(<Return rentals={[activeOverdueRental]} onProcessReturn={vi.fn()} />);
+
+    fireEvent.click(screen.getByText('Ayu Pratiwi'));
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveClass('return-detail-overlay');
+    expect(dialog.parentElement).toBe(document.body);
   });
 
   it('shows an edit shortcut in the selected return detail panel', () => {

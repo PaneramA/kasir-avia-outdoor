@@ -413,7 +413,7 @@ describe('application state orchestration', () => {
     renderApp('/return');
 
     expect(await screen.findByRole('heading', { name: 'Pengembalian' })).toBeInTheDocument();
-    fireEvent.click(await screen.findByText('RET-1'));
+    fireEvent.click(await screen.findByText('Budi'));
     fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '25000' } });
     expect(screen.getByDisplayValue('25000')).toBeInTheDocument();
 

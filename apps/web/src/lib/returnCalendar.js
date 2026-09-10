@@ -79,12 +79,18 @@ export function toReturnCalendarEvent(rental, now = new Date()) {
     return null;
   }
 
+  const paymentTone = payment.status === 'LUNAS' || payment.remainingAmount <= 0
+    ? 'paid'
+    : payment.status === 'DP'
+      ? 'partial'
+      : 'unpaid';
+
   return {
     id: String(rental.id),
     title: String(rental?.customer?.name || 'Customer tanpa nama'),
     start: dueDate.toISOString(),
     allDay: false,
-    classNames: ['return-event--' + dueStatus],
+    classNames: ['return-event--' + dueStatus, 'return-event--payment-' + paymentTone],
     extendedProps: {
       rental,
       rentalId: String(rental.id),
