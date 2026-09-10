@@ -2109,13 +2109,39 @@ describe('unpaid rental lifecycle', () => {
         prisma.item.create({ data: { tenantId, branchId, categoryId: category.id, name: `Lifecycle Item ${suffix}`, stock: 3, price: 100_000 } }),
         prisma.item.create({ data: { tenantId, branchId, categoryId: category.id, name: `Lifecycle Cheaper ${suffix}`, stock: 3, price: 90_000 } }),
       ]);
+      const initialPaid = await callApi('POST', '/api/rentals', {
+        token,
+        tenantId,
+        branchId,
+        body: {
+          customer: { name: 'Initial Payment Customer', phone: '081255500000', guarantee: 'KTP' },
+          items: [{ id: item.id, qty: 1 }],
+          duration: 1,
+          initialPayment: {
+            status: 'DP',
+            method: 'QRIS',
+            amount: 40_000,
+            note: 'DP saat serah terima',
+            idempotencyKey: `initial-payment-${suffix}`,
+          },
+        },
+      });
+      expect(initialPaid.status, JSON.stringify(initialPaid.body)).toBe(201);
+      expect(initialPaid.body.data.payment).toMatchObject({
+        status: 'SEBAGIAN',
+        method: 'QRIS',
+        paidAmount: 40_000,
+        remainingAmount: 60_000,
+      });
+      expect(await prisma.rentalPayment.count({ where: { rentalId: initialPaid.body.data.id } })).toBe(1);
+      expect((await prisma.item.findUnique({ where: { id: item.id } })).stock).toBe(2);
       const created = await callApi('POST', '/api/rentals', { token, tenantId, branchId, body: { customer: { name: 'Lifecycle Customer', phone: '081255500001', guarantee: 'KTP' }, items: [{ id: item.id, qty: 1 }], duration: 1 } });
       expect(created.status).toBe(201);
       const createdRental = created.body.data;
       expect(createdRental.status).toBe('Active');
       expect(createdRental.payment).toMatchObject({ status: 'BELUM_BAYAR', paidAmount: 0, remainingAmount: createdRental.total });
       expect(await prisma.rentalPayment.count({ where: { rentalId: createdRental.id } })).toBe(0);
-      expect((await prisma.item.findUnique({ where: { id: item.id } })).stock).toBe(2);
+      expect((await prisma.item.findUnique({ where: { id: item.id } })).stock).toBe(1);
       const paidRental = await callApi('POST', '/api/rentals', { token, tenantId, branchId, body: { customer: { name: 'Paid Edit Customer', phone: '081255500002', guarantee: 'KTP' }, items: [{ id: item.id, qty: 1 }], duration: 1 } });
       expect(paidRental.status).toBe(201);
       expect((await callApi('POST', `/api/rentals/${paidRental.body.data.id}/payments`, { token, tenantId, branchId, body: { amount: 100_000, method: 'TUNAI', idempotencyKey: `lifecycle-payment-${suffix}` } })).status).toBe(201);
@@ -2135,7 +2161,7 @@ describe('unpaid rental lifecycle', () => {
         expect(returned.body.data.rental.status).toBe('Returned');
         expect(returned.body.data.rental.payment).toMatchObject({ status: 'BELUM_BAYAR', paidAmount: 0 });
         expect(returned.body.data.rental.charges[0]).toMatchObject({ type: 'LATE_FEE', quantity: 2, amount: 200_000 });
-        expect((await prisma.item.findUnique({ where: { id: item.id } })).stock).toBe(2);
+      expect((await prisma.item.findUnique({ where: { id: item.id } })).stock).toBe(1);
         expect(await prisma.rentalCharge.findFirst({ where: { rentalId: createdRental.id } })).toMatchObject({ type: 'LATE_FEE', createdByUserId: userId });
       } finally {
         vi.useRealTimers();

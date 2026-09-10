@@ -123,6 +123,13 @@ const ReceiptModal = ({
                     </div>
                 </div>
 
+                {receiptModel.returnNotes && (
+                    <div className="mt-3 rounded-md border border-[#e0b44c] bg-[#fff9e8] p-3">
+                        <p className="text-xs font-bold uppercase tracking-wide text-[#8a6500]">Catatan pengembalian</p>
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-text-main">{receiptModel.returnNotes}</p>
+                    </div>
+                )}
+
                 {receiptProfile.legalFooterLines.length > 0 && (
                     <div className="mt-3 rounded-md border border-border bg-bg-main p-3">
                         {receiptProfile.legalFooterLines.map((line) => (

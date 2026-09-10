@@ -4,6 +4,7 @@ import { fetchCustomers } from '../lib/api';
 import { APP_CACHE_KEYS } from '../lib/appCache';
 import RentalDateRangePicker from '../components/RentalDateRangePicker';
 import ReceiptModal from '../components/ReceiptModal';
+import RentalInitialPaymentModal from '../components/RentalInitialPaymentModal';
 import { openReceiptWhatsApp, printReceipt } from '../lib/receipt';
 import {
     calculateRentalDurationDays,
@@ -108,6 +109,7 @@ const Rental = ({
     const [receiptRental, setReceiptRental] = useState(null);
     const [isFinalReviewOpen, setIsFinalReviewOpen] = useState(false);
     const [isFinalReviewChecked, setIsFinalReviewChecked] = useState(false);
+    const [isInitialPaymentOpen, setIsInitialPaymentOpen] = useState(false);
     const focusTimeoutRef = useRef(null);
     const hasRestoredDraftRef = useRef(false);
     const checkoutInFlightRef = useRef(false);
@@ -798,7 +800,15 @@ const Rental = ({
         setIsFinalReviewOpen(true);
     };
 
-    const handleConfirmCheckout = async () => {
+    const handleOpenInitialPayment = () => {
+        if (isSubmitting || !isFinalReviewChecked) {
+            return;
+        }
+
+        setIsInitialPaymentOpen(true);
+    };
+
+    const handleConfirmCheckout = async (initialPayment) => {
         if (isSubmitting || checkoutInFlightRef.current) {
             return;
         }
@@ -821,6 +831,7 @@ const Rental = ({
             duration: effectiveDuration,
             rentalStartAt: rentalStartAt ? rentalStartAt.toISOString() : undefined,
             rentalEndAt: rentalEndAt ? rentalEndAt.toISOString() : undefined,
+            initialPayment,
         };
 
         try {
@@ -845,6 +856,7 @@ const Rental = ({
             setMobileStep(1);
             setIsFinalReviewChecked(false);
             setIsFinalReviewOpen(false);
+            setIsInitialPaymentOpen(false);
             setReceiptRental(createdRental || null);
             alert('Transaksi berhasil disimpan!');
             scheduleFocusField('name');
@@ -864,6 +876,15 @@ const Rental = ({
 
         setIsFinalReviewChecked(false);
         setIsFinalReviewOpen(false);
+        setIsInitialPaymentOpen(false);
+    };
+
+    const handleCloseInitialPayment = () => {
+        if (isSubmitting) {
+            return;
+        }
+
+        setIsInitialPaymentOpen(false);
     };
 
     const handleCloseReceipt = () => {
@@ -1378,7 +1399,7 @@ const Rental = ({
                                     {renderRentalDateRange('mobile')}
 
                                     <div className="mb-4 rounded-md border border-[#d7ded9] bg-white p-3 text-sm text-text-muted">
-                                        Pembayaran dicatat setelah sewa aktif. Transaksi ini dimulai dengan status <strong className="text-text-main">BELUM_BAYAR</strong>.
+                                        Pilihan pembayaran akan dikonfirmasi setelah review. Kasir bisa memilih lunas, DP, atau bayar nanti.
                                     </div>
 
                                     <div className="rounded-md border border-[#146c43] bg-white p-4 sm:p-5">
@@ -1423,7 +1444,7 @@ const Rental = ({
                                 {renderRentalDateRange('desktop')}
 
                                 <div className="rounded-md border border-[#d7ded9] bg-white p-3 text-sm text-text-muted">
-                                    Pembayaran dicatat setelah sewa aktif. Transaksi ini dimulai dengan status <strong className="text-text-main">BELUM_BAYAR</strong>.
+                                    Pilihan pembayaran akan dikonfirmasi setelah review. Kasir bisa memilih lunas, DP, atau bayar nanti.
                                 </div>
                             </div>
 
@@ -1507,7 +1528,7 @@ const Rental = ({
                             <div className="rounded-md border border-[#146c43] bg-white p-3">
                                 <div className="flex items-center justify-between text-sm text-text-muted">
                                     <span>Status Pembayaran</span>
-                                    <span className="font-semibold text-text-main">BELUM_BAYAR</span>
+                                    <span className="font-semibold text-text-main">Dipilih setelah review</span>
                                 </div>
                                 <div className="mt-1 flex items-center justify-between text-sm text-text-muted">
                                     <span>Terbayar</span>
@@ -1557,16 +1578,23 @@ const Rental = ({
                             <button
                                 type="button"
                                 className={`${RENTAL_PRIMARY_BUTTON_CLASS} disabled:opacity-60`}
-                                onClick={handleConfirmCheckout}
+                                onClick={handleOpenInitialPayment}
                                 disabled={isSubmitting || !isFinalReviewChecked}
                             >
-                                {isSubmitting ? 'Menyimpan...' : 'Konfirmasi Sewa'}
+                                {isSubmitting ? 'Menyimpan...' : 'Lanjut ke Pembayaran'}
                             </button>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
+
+            <RentalInitialPaymentModal
+                isOpen={isInitialPaymentOpen}
+                rental={{ total: totalAmount, customer }}
+                onClose={handleCloseInitialPayment}
+                onSubmit={handleConfirmCheckout}
+            />
 
             <ReceiptModal
                 isOpen={Boolean(receiptRental)}

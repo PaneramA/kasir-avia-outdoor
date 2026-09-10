@@ -151,6 +151,7 @@ export function buildReceiptWhatsAppText(rental, options = {}) {
         `Pembayaran: ${paymentStatus} (${paymentMethod})`,
         `Terbayar: ${formatCurrency(receiptModel.paidAmount)}`,
         `Sisa: ${formatCurrency(receiptModel.remainingAmount)}`,
+        ...(receiptModel.returnNotes ? ['', `Catatan pengembalian: ${receiptModel.returnNotes}`] : []),
         ...profile.legalFooterLines,
         'Terima kasih.',
     ].join('\n');
@@ -275,6 +276,7 @@ export function buildReceiptPrintHtml(rental, options = {}) {
   <p class="muted">Pembayaran: ${escapeHtml(paymentStatus)} (${escapeHtml(paymentMethod)})</p>
   <p class="muted">Terbayar: ${escapeHtml(formatCurrency(receiptModel.paidAmount))}</p>
   <p class="muted">Sisa: ${escapeHtml(formatCurrency(receiptModel.remainingAmount))}</p>
+  ${receiptModel.returnNotes ? `<p class="muted">Catatan pengembalian: ${escapeHtml(receiptModel.returnNotes)}</p>` : ''}
   <div class="divider"></div>
   ${profile.legalFooterLines.map((line) => `<p class="footer">${escapeHtml(line)}</p>`).join('')}
   <p class="footer">Terima kasih sudah sewa di ${escapeHtml(storeName)}</p>

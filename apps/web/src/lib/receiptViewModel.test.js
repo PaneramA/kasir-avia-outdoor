@@ -16,6 +16,7 @@ const rentalWithCharge = {
       amount: 110_000,
     },
   ],
+  returnNotes: 'Tenda dikembalikan lengkap, ada sedikit tanah.',
   payment: {
     status: 'SEBAGIAN',
     method: 'QRIS',
@@ -43,6 +44,7 @@ describe('buildReceiptViewModel', () => {
       label: 'Keterlambatan 2 hari x Rp 55.000',
       amount: 110_000,
     });
+    expect(model.returnNotes).toBe('Tenda dikembalikan lengkap, ada sedikit tanah.');
   });
 
   it('falls back to the legacy additional fee when no ledger charges exist', () => {

@@ -170,7 +170,8 @@ describe('Rental page item picker', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /lanjut ke review/i })[0]);
 
     fireEvent.click(screen.getByRole('checkbox', { name: /saya sudah cek data penyewa/i }));
-    fireEvent.click(screen.getByRole('button', { name: /konfirmasi sewa/i }));
+    fireEvent.click(screen.getByRole('button', { name: /lanjut ke pembayaran/i }));
+    fireEvent.click(screen.getByRole('button', { name: /simpan pembayaran & buat sewa/i }));
 
     await waitFor(() => expect(onCheckout).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -179,7 +180,7 @@ describe('Rental page item picker', () => {
     ));
   });
 
-  it('confirms an active rental without embedding payment details in the checkout payload', async () => {
+  it('confirms an active rental with the selected initial payment details', async () => {
     const onCheckout = vi.fn().mockResolvedValue({
       id: 'RENTAL-001',
       status: 'Active',
@@ -198,11 +199,18 @@ describe('Rental page item picker', () => {
     fireEvent.click(within(screen.getByTestId('rental-inventory-row-item-1')).getByRole('button', { name: /tambah tenda dome 4p/i }));
     fireEvent.click(screen.getAllByRole('button', { name: /lanjut ke review/i })[0]);
     fireEvent.click(screen.getByRole('checkbox', { name: /saya sudah cek data penyewa/i }));
-    fireEvent.click(screen.getByRole('button', { name: /konfirmasi sewa/i }));
+    fireEvent.click(screen.getByRole('button', { name: /lanjut ke pembayaran/i }));
+    fireEvent.click(screen.getByRole('button', { name: /simpan pembayaran & buat sewa/i }));
 
     await waitFor(() => expect(onCheckout).toHaveBeenCalled());
-    expect(onCheckout.mock.calls[0][0]).not.toHaveProperty('payment');
-    expect(onCheckout.mock.calls[0][0]).toMatchObject({ identityCardHeld: true });
+    expect(onCheckout.mock.calls[0][0]).toMatchObject({
+      identityCardHeld: true,
+      initialPayment: {
+        status: 'LUNAS',
+        method: 'TUNAI',
+        amount: 55000,
+      },
+    });
   });
 
   it('updates rental duration from the combined range picker', () => {

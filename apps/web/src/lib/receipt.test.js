@@ -34,6 +34,7 @@ const rentalWithCharge = {
       amount: 110_000,
     },
   ],
+  returnNotes: 'Tenda dikembalikan lengkap, ada sedikit tanah.',
   payment: {
     status: 'SEBAGIAN',
     method: 'QRIS',
@@ -81,6 +82,7 @@ describe('receipt generation', () => {
     expect(text).toContain('*TOTAL: Rp 220.000*');
     expect(text).toContain('Terbayar: Rp 50.000');
     expect(text).toContain('Sisa: Rp 170.000');
+    expect(text).toContain('Catatan pengembalian: Tenda dikembalikan lengkap, ada sedikit tanah.');
     expect(text.indexOf('Subtotal Sewa')).toBeLessThan(text.indexOf('Keterlambatan 2 hari'));
     expect(text.indexOf('Keterlambatan 2 hari')).toBeLessThan(text.indexOf('*TOTAL'));
   });
@@ -106,6 +108,8 @@ describe('receipt generation', () => {
     expect(html).toContain('TOTAL: Rp 220.000');
     expect(html).toContain('Terbayar: Rp 50.000');
     expect(html).toContain('Sisa: Rp 170.000');
+    expect(html).toContain('Catatan pengembalian:');
+    expect(html).toContain('Tenda dikembalikan lengkap, ada sedikit tanah.');
   });
 
   it('opens WhatsApp with an Indonesian international phone number', () => {

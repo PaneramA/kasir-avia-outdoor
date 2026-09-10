@@ -30,6 +30,7 @@ export function buildReceiptViewModel(rental = {}) {
     const baseSubtotal = toNumber(rental.total);
     const invoiceTotal = baseSubtotal + chargeRows.reduce((sum, row) => sum + row.amount, 0);
     const paidAmount = toNumber(rental.payment?.paidAmount);
+    const returnNotes = String(rental.returnNotes || rental.returnRecord?.returnNotes || '').trim();
 
     return {
         itemRows,
@@ -40,5 +41,6 @@ export function buildReceiptViewModel(rental = {}) {
         paidAmount,
         remainingAmount: Math.max(0, invoiceTotal - paidAmount),
         paymentMethod: rental.payment?.method || 'TUNAI',
+        returnNotes,
     };
 }

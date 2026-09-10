@@ -61,6 +61,34 @@ describe('API validation schemas', () => {
     expect(parsed.payment).toBeUndefined();
   });
 
+  it('accepts an explicit initial rental payment or pay-later choice', () => {
+    const baseRental = {
+      customer: { name: 'Fuad', phone: '0812' },
+      items: [{ id: 'item-1', qty: 1 }],
+      duration: 1,
+    };
+
+    expect(createRentalSchema.parse({
+      ...baseRental,
+      initialPayment: {
+        status: 'DP',
+        method: 'QRIS',
+        amount: '50000',
+        idempotencyKey: 'initial-payment-1',
+      },
+    }).initialPayment).toMatchObject({
+      status: 'DP',
+      method: 'QRIS',
+      amount: 50_000,
+      idempotencyKey: 'initial-payment-1',
+    });
+
+    expect(createRentalSchema.parse({
+      ...baseRental,
+      initialPayment: { status: 'BELUM_BAYAR' },
+    }).initialPayment).toMatchObject({ status: 'BELUM_BAYAR', method: 'TUNAI' });
+  });
+
   it('validates independent rental payment payloads', () => {
     expect(createRentalPaymentSchema.parse({
       amount: '40000',

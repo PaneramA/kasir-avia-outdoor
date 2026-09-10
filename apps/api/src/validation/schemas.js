@@ -21,6 +21,39 @@ const rentalPaymentSchema = z.object({
   paidAmount: z.coerce.number().int().min(0).optional(),
 });
 
+const initialRentalPaymentSchema = z.object({
+  status: z.enum(['BELUM_BAYAR', 'DP', 'LUNAS']).default('BELUM_BAYAR'),
+  method: z.enum(['QRIS', 'BANK', 'TUNAI']).default('TUNAI'),
+  amount: z.coerce.number().int().min(0).default(0),
+  paidAt: z.string().datetime().optional(),
+  note: z.string().trim().max(300).optional().default(''),
+  idempotencyKey: z.string().trim().min(8).max(120).optional(),
+}).superRefine((value, context) => {
+  if (value.status === 'BELUM_BAYAR' && value.amount > 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['amount'],
+      message: 'Pembayaran nanti tidak boleh memiliki nominal pembayaran.',
+    });
+  }
+
+  if (value.status !== 'BELUM_BAYAR' && value.amount <= 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['amount'],
+      message: 'Nominal pembayaran wajib lebih dari nol.',
+    });
+  }
+
+  if (value.status !== 'BELUM_BAYAR' && !value.idempotencyKey) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['idempotencyKey'],
+      message: 'Idempotency key pembayaran wajib diisi.',
+    });
+  }
+});
+
 const expensePaymentMethodSchema = z.enum(['QRIS', 'BANK', 'TUNAI', 'LAINNYA']);
 
 export const loginSchema = z.object({
@@ -240,6 +273,7 @@ export const createRentalSchema = z.object({
   rentalStartAt: z.string().datetime().optional(),
   rentalEndAt: z.string().datetime().optional(),
   id: z.string().trim().min(1).optional(),
+  initialPayment: initialRentalPaymentSchema.optional(),
 });
 
 export const updateRentalSchema = z.object({

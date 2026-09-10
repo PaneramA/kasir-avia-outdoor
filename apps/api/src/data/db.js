@@ -2009,6 +2009,42 @@ export async function createRental(payload, context) {
     }
 
     const total = normalizedItems.reduce((sum, item) => sum + (item.price * item.qty * duration), 0);
+    const initialPayment = payload?.initialPayment || {
+      status: 'BELUM_BAYAR',
+      method: 'TUNAI',
+      amount: 0,
+      note: '',
+    };
+    const initialPaymentStatus = String(initialPayment.status || 'BELUM_BAYAR').trim().toUpperCase();
+    const initialPaymentMethod = String(initialPayment.method || 'TUNAI').trim().toUpperCase();
+    const initialPaymentAmount = Math.max(0, Math.trunc(Number(initialPayment.amount || 0)));
+    const hasInitialPayment = initialPaymentStatus !== 'BELUM_BAYAR';
+
+    if (!hasInitialPayment && initialPaymentAmount > 0) {
+      throw new Error('Pembayaran nanti tidak boleh memiliki nominal pembayaran.');
+    }
+
+    if (hasInitialPayment && initialPaymentAmount <= 0) {
+      throw new Error('Nominal pembayaran wajib lebih dari nol.');
+    }
+
+    if (hasInitialPayment && initialPaymentAmount > total) {
+      throw new Error('Nominal pembayaran melebihi total sewa.');
+    }
+
+    if (initialPaymentStatus === 'DP' && initialPaymentAmount >= total) {
+      throw new Error('Nominal DP harus lebih kecil dari total sewa.');
+    }
+
+    if (initialPaymentStatus === 'LUNAS' && initialPaymentAmount !== total) {
+      throw new Error('Nominal pembayaran lunas harus sama dengan total sewa.');
+    }
+
+    const initialPaymentAt = initialPayment.paidAt ? new Date(initialPayment.paidAt) : new Date();
+    if (hasInitialPayment && Number.isNaN(initialPaymentAt.getTime())) {
+      throw new Error('Tanggal pembayaran awal tidak valid.');
+    }
+
     const createdRental = await tx.rental.create({
       data: {
         id: payload?.id || createId('TX'),
@@ -2023,9 +2059,9 @@ export async function createRental(payload, context) {
         identityCardHeld,
         duration,
         total,
-        paymentStatus: 'BELUM_BAYAR',
-        paymentMethod: 'TUNAI',
-        paidAmount: 0,
+        paymentStatus: hasInitialPayment ? (initialPaymentStatus === 'LUNAS' ? 'LUNAS' : 'SEBAGIAN') : 'BELUM_BAYAR',
+        paymentMethod: initialPaymentMethod,
+        paidAmount: initialPaymentAmount,
         status: 'Active',
         date: rentalStartAt,
         plannedReturnDate,
@@ -2037,10 +2073,54 @@ export async function createRental(payload, context) {
         items: true,
       },
     });
-    if (actorUserId) {
-      await tx.auditLog.create({ data: { actorUserId, tenantId, branchId, action: 'RENTAL_CREATED', targetType: 'rental', targetId: createdRental.id, snapshotBefore: { after: toAuditRentalSnapshot(createdRental) } } });
+
+    if (hasInitialPayment) {
+      const payment = await tx.rentalPayment.create({
+        data: {
+          rentalId: createdRental.id,
+          tenantId,
+          branchId,
+          amount: initialPaymentAmount,
+          method: initialPaymentMethod,
+          paidAt: initialPaymentAt,
+          note: String(initialPayment.note || '').trim(),
+          idempotencyKey: initialPayment.idempotencyKey,
+          createdByUserId: actorUserId,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorUserId,
+          tenantId,
+          branchId,
+          action: 'RENTAL_PAYMENT_CREATED',
+          targetType: 'rental',
+          targetId: createdRental.id,
+          snapshotBefore: {
+            before: { paymentStatus: 'BELUM_BAYAR', paidAmount: 0, remainingAmount: total },
+            after: {
+              paymentStatus: createdRental.paymentStatus,
+              paidAmount: initialPaymentAmount,
+              remainingAmount: total - initialPaymentAmount,
+              createdPayment: { id: payment.id, amount: payment.amount, method: payment.method },
+            },
+          },
+        },
+      });
     }
-    return createdRental;
+
+    const rentalWithRelations = await tx.rental.findUnique({
+      where: { id: createdRental.id },
+      include: {
+        items: true,
+        payments: { orderBy: { paidAt: 'asc' } },
+        charges: { orderBy: { chargedAt: 'asc' } },
+      },
+    });
+    if (actorUserId) {
+      await tx.auditLog.create({ data: { actorUserId, tenantId, branchId, action: 'RENTAL_CREATED', targetType: 'rental', targetId: createdRental.id, snapshotBefore: { after: toAuditRentalSnapshot(rentalWithRelations) } } });
+    }
+    return rentalWithRelations;
   });
 
   return toRentalDto(rental);
