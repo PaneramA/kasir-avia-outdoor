@@ -104,7 +104,6 @@ const Rental = ({
     const [customerErrors, setCustomerErrors] = useState(INITIAL_CUSTOMER_ERRORS);
     const [itemsError, setItemsError] = useState('');
     const [durationError, setDurationError] = useState('');
-    const [paymentError, setPaymentError] = useState('');
     const [mobileStepHint, setMobileStepHint] = useState('');
     const [receiptRental, setReceiptRental] = useState(null);
     const [isFinalReviewOpen, setIsFinalReviewOpen] = useState(false);
@@ -307,7 +306,6 @@ const Rental = ({
         setMobileStep(Number.isFinite(draftPayload.mobileStep) ? Math.min(3, Math.max(1, draftPayload.mobileStep)) : 1);
         setItemsError('');
         setDurationError('');
-        setPaymentError('');
         setMobileStepHint('Draft berhasil dimuat. Lanjutkan proses sewa.');
         setCart(restoredItems);
 
@@ -481,10 +479,6 @@ const Rental = ({
     const calculatedDuration = calculateRentalDurationDays(rentalStartAt, rentalEndAt, rentalDayPolicy);
     const effectiveDuration = calculatedDuration > 0 ? calculatedDuration : 0;
     const calculateTotal = () => cart.reduce((sum, item) => sum + (item.price * item.qty * effectiveDuration), 0);
-    const parsePaidAmount = () => {
-        const parsed = Number.parseInt(String(payment.paidAmount || '0').replace(/\D/g, ''), 10);
-        return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
-    };
     const totalAmount = calculateTotal();
     const computedPaidAmount = 0;
     const remainingAmount = totalAmount;
@@ -658,22 +652,6 @@ const Rental = ({
         return true;
     };
 
-    const validatePaymentStep = ({ focusOnError = false } = {}) => {
-        if (payment.status === 'DP') {
-            const paidAmount = parsePaidAmount();
-            if (paidAmount <= 0) {
-                setPaymentError('Nominal DP wajib diisi jika status pembayaran DP.');
-                if (focusOnError) {
-                    scheduleFocusField('paymentAmount');
-                }
-                return false;
-            }
-        }
-
-        setPaymentError('');
-        return true;
-    };
-
     const goToNextMobileStep = () => {
         if (mobileStep === 1 && !validateCustomerStep({ focusOnError: true })) {
             setMobileStepHint('Lengkapi data penyewa dulu sebelum lanjut.');
@@ -687,11 +665,6 @@ const Rental = ({
 
         if (mobileStep === 3 && !validateDurationStep({ focusOnError: true })) {
             setMobileStepHint('Cek lagi durasi sewa yang dimasukkan.');
-            return;
-        }
-
-        if (mobileStep === 3 && !validatePaymentStep({ focusOnError: true })) {
-            setMobileStepHint('Lengkapi detail pembayaran sebelum lanjut.');
             return;
         }
 
@@ -850,7 +823,6 @@ const Rental = ({
             setInventorySearch('');
             setCategoryFilter('all');
             setDurationError('');
-            setPaymentError('');
             setItemsError('');
             setMobileStepHint('');
             setMobileStep(1);
@@ -995,38 +967,6 @@ const Rental = ({
 
         if (durationError) {
             setDurationError('');
-        }
-    };
-
-    const handlePaymentStatusChange = (value) => {
-        const status = value === 'DP' ? 'DP' : 'LUNAS';
-        setPayment((previous) => ({
-            ...previous,
-            status,
-            paidAmount: status === 'LUNAS' ? '' : previous.paidAmount,
-        }));
-        setMobileStepHint('');
-        if (paymentError) {
-            setPaymentError('');
-        }
-    };
-
-    const handlePaymentMethodChange = (value) => {
-        const normalizedMethod = ['QRIS', 'BANK', 'TUNAI'].includes(value) ? value : 'TUNAI';
-        setPayment((previous) => ({
-            ...previous,
-            method: normalizedMethod,
-        }));
-    };
-
-    const handlePaymentAmountChange = (value) => {
-        const sanitized = value.replace(/\D/g, '');
-        setPayment((previous) => ({
-            ...previous,
-            paidAmount: sanitized,
-        }));
-        if (paymentError) {
-            setPaymentError('');
         }
     };
 

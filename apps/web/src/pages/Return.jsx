@@ -175,7 +175,6 @@ const Return = ({
     const defaultLateFee = selectedLateDays * selectedDailyRate;
 
     const handleSelectRental = (rental) => {
-        const payment = getPaymentInfo(rental);
         const lateMs = getLateDurationMs(rental);
         const shouldApplyLateFee = lateMs > 0;
         const lateDays = shouldApplyLateFee

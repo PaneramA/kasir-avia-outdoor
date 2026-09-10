@@ -18,6 +18,7 @@
     "test:tenant-access": "node --env-file=.env scripts/tenant-access-smoke.mjs",
     "test:load": "node --env-file=.env scripts/api-load-smoke.mjs",
     "prisma:generate": "prisma generate",
+    "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:push": "prisma db push",
     "prisma:migrate": "prisma migrate dev",
     "seed": "node --env-file=.env prisma/seed.js"
