@@ -7,6 +7,7 @@ import {
   getFinancialMonthRangeDateKeys,
   getFinancialRecap,
   getMonthRangeDateKeys,
+  getPaymentDateTotals,
   toJakartaDateKey,
 } from './financial.js';
 
@@ -77,5 +78,44 @@ describe('financial calculations', () => {
     expect(recap.methods.map((entry) => entry.method)).toEqual(['QRIS', 'TUNAI']);
     expect(recap.topItems[0]).toMatchObject({ name: 'Tenda', qty: 3, estimatedRevenue: 150_000 });
     expect(recap.monthlyTrend[0]).toMatchObject({ monthKey: '2026-07', transactions: 2 });
+  });
+
+  it('reports cash and payment methods by payment date while keeping invoice and receivables on the rental period', () => {
+    const rentals = [{
+      id: 'august-rental',
+      date: '2026-08-20T03:00:00Z',
+      finalTotal: 100_000,
+      payment: {
+        status: 'SEBAGIAN',
+        totalDue: 100_000,
+        paidAmount: 40_000,
+        remainingAmount: 60_000,
+        records: [{
+          id: 'payment-1',
+          amount: 40_000,
+          method: 'QRIS',
+          paidAt: '2026-09-02T03:00:00Z',
+        }],
+      },
+      items: [],
+    }];
+
+    const august = getFinancialRecap(rentals, {
+      startDate: '2026-08-01',
+      endDate: '2026-08-31',
+    });
+    const septemberPayments = getPaymentDateTotals(rentals, {
+      startDate: '2026-09-01',
+      endDate: '2026-09-30',
+    });
+
+    expect(august.invoiceRevenue).toBe(100_000);
+    expect(august.cashReceived).toBe(0);
+    expect(august.receivables).toBe(60_000);
+    expect(august.methods).toEqual([]);
+    expect(septemberPayments).toMatchObject({
+      cashReceived: 40_000,
+      methods: [{ method: 'QRIS', count: 1, revenue: 40_000 }],
+    });
   });
 });

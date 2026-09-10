@@ -6,6 +6,7 @@ const {
   APP_SWR_OPTIONS,
   isFinancialMutationKeyForScope,
   isInventoryMutationKeyForScope,
+  isRentalMutationKeyForScope,
 } = appCache
 
 describe('application SWR cache policy', () => {
@@ -67,16 +68,21 @@ describe('application SWR cache policy', () => {
     expect(APP_CACHE_KEYS.users('user-a')).toEqual(['app/users', 'user-a'])
   })
 
-  it('isolates customer searches by normalized query and returns null for incomplete scope', () => {
-    expect(APP_CACHE_KEYS.customers('user-a', 'tenant-a', 'branch-a', ' Andi ')).toEqual([
+  it('isolates customer searches and pages by normalized query and returns null for incomplete scope', () => {
+    expect(APP_CACHE_KEYS.customers('user-a', 'tenant-a', 'branch-a', ' Andi ', 1, 50)).toEqual([
       'app/customers',
       'user-a',
       'tenant-a',
       'branch-a',
       'andi',
+      1,
+      50,
     ])
-    expect(APP_CACHE_KEYS.customers('user-a', 'tenant-a', 'branch-a', 'andi')).not.toEqual(
-      APP_CACHE_KEYS.customers('user-a', 'tenant-a', 'branch-a', 'budi'),
+    expect(APP_CACHE_KEYS.customers('user-a', 'tenant-a', 'branch-a', 'andi', 1, 50)).not.toEqual(
+      APP_CACHE_KEYS.customers('user-a', 'tenant-a', 'branch-a', 'budi', 1, 50),
+    )
+    expect(APP_CACHE_KEYS.customers('user-a', 'tenant-a', 'branch-a', 'fuad', 1, 50)).not.toEqual(
+      APP_CACHE_KEYS.customers('user-a', 'tenant-a', 'branch-a', 'fuad', 2, 50),
     )
     expect(APP_CACHE_KEYS.items('', 'tenant-a', 'branch-a')).toBeNull()
     expect(APP_CACHE_KEYS.items('user-a', '', 'branch-a')).toBeNull()
@@ -117,5 +123,18 @@ describe('application SWR cache policy', () => {
     expect(matches(APP_CACHE_KEYS.expenses('user-a', 'tenant-a', 'branch-b', {}))).toBe(false)
     expect(matches(APP_CACHE_KEYS.dashboard('user-a', 'tenant-a', 'branch-a'))).toBe(false)
     expect(matches('@"app/expenses","user-b","tenant-b","branch-b",#query:"user-a tenant-a branch-a",')).toBe(false)
+  })
+
+  it('matches rental, history, dashboard, and financial views for the active payment scope', () => {
+    const rentalScope = (key) => isRentalMutationKeyForScope(key, 'user-a', 'tenant-a', 'branch-a')
+    const financialScope = (key) => isFinancialMutationKeyForScope(key, 'user-a', 'tenant-a', 'branch-a')
+
+    expect(rentalScope(APP_CACHE_KEYS.rentals('user-a', 'tenant-a', 'branch-a'))).toBe(true)
+    expect(rentalScope(APP_CACHE_KEYS.rentalHistory('user-a', 'tenant-a', 'branch-a', {}))).toBe(true)
+    expect(rentalScope(APP_CACHE_KEYS.dashboard('user-a', 'tenant-a', 'branch-a'))).toBe(true)
+    expect(financialScope(APP_CACHE_KEYS.financialRecap('user-a', 'tenant-a', 'branch-a', {}))).toBe(true)
+
+    expect(rentalScope(APP_CACHE_KEYS.rentals('user-b', 'tenant-a', 'branch-a'))).toBe(false)
+    expect(financialScope(APP_CACHE_KEYS.financialRecap('user-a', 'tenant-b', 'branch-a', {}))).toBe(false)
   })
 })

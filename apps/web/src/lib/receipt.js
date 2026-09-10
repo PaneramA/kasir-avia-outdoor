@@ -1,4 +1,5 @@
 import { APP_BRAND, resolveAppBrandName } from './brand';
+import { buildReceiptViewModel } from './receiptViewModel';
 
 const DEFAULT_STORE_NAME = APP_BRAND.name;
 
@@ -115,19 +116,18 @@ export function buildReceiptWhatsAppText(rental, options = {}) {
     const profile = resolveReceiptProfile(options);
     const storeName = profile.storeName;
     const cashierName = String(options.cashierName || '').trim();
-    const items = Array.isArray(rental?.items) ? rental.items : [];
+    const receiptModel = buildReceiptViewModel(rental || {});
     const duration = toNumber(rental?.duration);
     const dueDate = getReceiptDueDate(rental);
-    const total = getReceiptTotal(rental);
-    const paymentStatus = String(rental?.payment?.status || 'LUNAS').toUpperCase();
-    const paymentMethod = String(rental?.payment?.method || 'TUNAI').toUpperCase();
-    const paidAmount = toNumber(rental?.payment?.paidAmount ?? total);
-    const remainingAmount = toNumber(rental?.payment?.remainingAmount ?? Math.max(0, total - paidAmount));
+    const paymentStatus = String(receiptModel.paymentStatus).toUpperCase();
+    const paymentMethod = String(receiptModel.paymentMethod).toUpperCase();
 
-    const itemLines = items.map((item) => {
-        const itemSubtotal = toNumber(item?.price) * toNumber(item?.qty) * duration;
-        return `- ${item.name} x${item.qty} @${toNumber(item?.price).toLocaleString('id-ID')}/hari = ${itemSubtotal.toLocaleString('id-ID')}`;
-    });
+    const itemLines = receiptModel.itemRows.map((item) => (
+        `- ${item.label} x${item.quantity} @${item.unitAmount.toLocaleString('id-ID')}/hari = ${item.amount.toLocaleString('id-ID')}`
+    ));
+    const chargeLines = receiptModel.chargeRows.map((charge) => (
+        `${charge.label}: ${formatCurrency(charge.amount)}`
+    ));
 
     return [
         `*${storeName} - Receipt Sewa*`,
@@ -145,10 +145,13 @@ export function buildReceiptWhatsAppText(rental, options = {}) {
         'Item:',
         ...itemLines,
         '',
-        `*TOTAL: ${formatCurrency(total)}*`,
+        `Subtotal Sewa: ${formatCurrency(receiptModel.baseSubtotal)}`,
+        ...chargeLines,
+        `*TOTAL: ${formatCurrency(receiptModel.invoiceTotal)}*`,
         `Pembayaran: ${paymentStatus} (${paymentMethod})`,
-        `Terbayar: ${formatCurrency(paidAmount)}`,
-        `Sisa: ${formatCurrency(remainingAmount)}`,
+        `Terbayar: ${formatCurrency(receiptModel.paidAmount)}`,
+        `Sisa: ${formatCurrency(receiptModel.remainingAmount)}`,
+        ...(receiptModel.returnNotes ? ['', `Catatan pengembalian: ${receiptModel.returnNotes}`] : []),
         ...profile.legalFooterLines,
         'Terima kasih.',
     ].join('\n');
@@ -172,28 +175,23 @@ export function buildReceiptPrintHtml(rental, options = {}) {
     const cashierName = String(options.cashierName || '').trim();
     const paperWidthMm = Number(options.paperWidthMm) === 58 ? 58 : 80;
     const bodyWidthMm = paperWidthMm - 6;
-    const items = Array.isArray(rental?.items) ? rental.items : [];
+    const receiptModel = buildReceiptViewModel(rental || {});
     const dueDate = getReceiptDueDate(rental);
     const duration = toNumber(rental?.duration);
-    const total = getReceiptTotal(rental);
-    const paymentStatus = String(rental?.payment?.status || 'LUNAS').toUpperCase();
-    const paymentMethod = String(rental?.payment?.method || 'TUNAI').toUpperCase();
-    const paidAmount = toNumber(rental?.payment?.paidAmount ?? total);
-    const remainingAmount = toNumber(rental?.payment?.remainingAmount ?? Math.max(0, total - paidAmount));
+    const paymentStatus = String(receiptModel.paymentStatus).toUpperCase();
+    const paymentMethod = String(receiptModel.paymentMethod).toUpperCase();
 
-    const rows = items.map((item) => {
-        const qty = toNumber(item?.qty);
-        const price = toNumber(item?.price);
-        const subtotal = qty * price * duration;
-        return `
+    const rows = receiptModel.itemRows.map((item) => `
             <tr>
-                <td>${escapeHtml(item?.name || '-')}</td>
-                <td style="text-align:center;">${qty}</td>
-                <td style="text-align:right;">${formatCurrency(price)}</td>
-                <td style="text-align:right;">${formatCurrency(subtotal)}</td>
+                <td>${escapeHtml(item.label || '-')}</td>
+                <td style="text-align:center;">${item.quantity}</td>
+                <td style="text-align:right;">${escapeHtml(formatCurrency(item.unitAmount))}</td>
+                <td style="text-align:right;">${escapeHtml(formatCurrency(item.amount))}</td>
             </tr>
-        `;
-    }).join('');
+        `).join('');
+    const chargeRows = receiptModel.chargeRows.map((charge) => (
+        `<p class="summary-line">${escapeHtml(charge.label)}: ${escapeHtml(formatCurrency(charge.amount))}</p>`
+    )).join('');
 
     return `
 <!doctype html>
@@ -236,7 +234,8 @@ export function buildReceiptPrintHtml(rental, options = {}) {
     th, td { border-bottom: 1px dashed #bbb; padding: 3px 2px; font-size: 10px; vertical-align: top; }
     th { text-align: left; font-size: 9px; color: #444; }
     .summary { margin-top: 8px; font-size: 11px; }
-    .summary strong { font-size: 13px; }
+    .summary-line { margin: 2px 0; word-break: break-word; }
+    .summary-total { font-size: 13px; margin-top: 4px; }
     .footer { margin-top: 10px; font-size: 10px; text-align: center; }
   </style>
 </head>
@@ -269,10 +268,15 @@ export function buildReceiptPrintHtml(rental, options = {}) {
     </table>
   </div>
 
-  <p class="summary"><strong>Total: ${escapeHtml(formatCurrency(total))}</strong></p>
+  <div class="summary">
+    <p class="summary-line">Subtotal Sewa: ${escapeHtml(formatCurrency(receiptModel.baseSubtotal))}</p>
+    ${chargeRows}
+    <p class="summary-line summary-total"><strong>TOTAL: ${escapeHtml(formatCurrency(receiptModel.invoiceTotal))}</strong></p>
+  </div>
   <p class="muted">Pembayaran: ${escapeHtml(paymentStatus)} (${escapeHtml(paymentMethod)})</p>
-  <p class="muted">Terbayar: ${escapeHtml(formatCurrency(paidAmount))}</p>
-  <p class="muted">Sisa: ${escapeHtml(formatCurrency(remainingAmount))}</p>
+  <p class="muted">Terbayar: ${escapeHtml(formatCurrency(receiptModel.paidAmount))}</p>
+  <p class="muted">Sisa: ${escapeHtml(formatCurrency(receiptModel.remainingAmount))}</p>
+  ${receiptModel.returnNotes ? `<p class="muted">Catatan pengembalian: ${escapeHtml(receiptModel.returnNotes)}</p>` : ''}
   <div class="divider"></div>
   ${profile.legalFooterLines.map((line) => `<p class="footer">${escapeHtml(line)}</p>`).join('')}
   <p class="footer">Terima kasih sudah sewa di ${escapeHtml(storeName)}</p>

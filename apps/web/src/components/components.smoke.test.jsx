@@ -135,6 +135,28 @@ describe('shared component smoke and interaction tests', () => {
     expect(screen.getByText('INV-TEST')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Share WA' })).toBeInTheDocument();
   });
+  it('renders receipt charges and payment balance in the preview', () => {
+    render(
+      <ReceiptModal
+        isOpen
+        rental={{
+          ...rental,
+          total: 110_000,
+          items: [{ id: 'i1', name: 'Tenda', qty: 1, price: 110_000 }],
+          charges: [{ id: 'charge-1', description: 'Keterlambatan 2 hari x Rp 55.000', amount: 110_000 }],
+          payment: { status: 'SEBAGIAN', method: 'QRIS', paidAmount: 50_000, remainingAmount: 170_000 },
+        }}
+        onClose={vi.fn()}
+        onPrint={vi.fn()}
+        onShareWhatsApp={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Subtotal Sewa')).toBeInTheDocument();
+    expect(screen.getByText('Keterlambatan 2 hari x Rp 55.000')).toBeInTheDocument();
+    expect(screen.getByText('Rp 220.000')).toBeInTheDocument();
+    expect(screen.getByText('Sisa: Rp 170.000')).toBeInTheDocument();
+  });
 
   it('renders the operational sidebar with entitlement-aware navigation', () => {
     withRouter(<Sidebar

@@ -8,6 +8,11 @@ import {
   getCurrentFinancialMonthRangeDateKeys,
   getFinancialClosingDay,
   getFinancialMonthRangeDateKeys,
+  getRentalCashAmount,
+  getRentalInvoiceAmount,
+  getRentalPaymentRecords,
+  getRentalReceivableAmount,
+  normalizePaymentMethodTotals,
   toJakartaDateKey,
 } from '../lib/financial'
 import {
@@ -31,6 +36,7 @@ const EMPTY_RECAP = {
   totalTransactions: 0,
   averageTransaction: 0,
   methods: [],
+  paymentMethods: [],
   topItems: [],
   monthlyTrend: [],
   expenseCategories: [],
@@ -75,7 +81,7 @@ async function exportExcel(recap, expenses) {
   const workbook = XLSX.utils.book_new()
   const sheets = [
     ['Ringkasan', buildSummaryRows(recap), [{ wch: 26 }, { wch: 28 }]],
-    ['Transaksi', buildTransactionRows(recap), [{ wch: 22 }, { wch: 28 }, { wch: 22 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }]],
+    ['Transaksi', buildTransactionRows(recap), [{ wch: 22 }, { wch: 22 }, { wch: 28 }, { wch: 22 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }]],
     ['Pengeluaran', buildExpenseRows(expenses), [{ wch: 22 }, { wch: 22 }, { wch: 34 }, { wch: 16 }, { wch: 14 }, { wch: 36 }]],
     ['Kategori Pengeluaran', buildExpenseCategoryRows(recap), [{ wch: 26 }, { wch: 16 }, { wch: 14 }]],
     ['Barang Terlaris', buildTopItemRows(recap), [{ wch: 30 }, { wch: 14 }, { wch: 18 }]],
@@ -91,36 +97,18 @@ async function exportExcel(recap, expenses) {
   XLSX.writeFile(workbook, `laporan-keuangan-${recap.startDate || 'all'}_${recap.endDate || 'all'}.xlsx`)
 }
 
-function getRentalInvoiceAmount(rental) {
-  return Number(rental?.payment?.totalDue ?? rental?.finalTotal ?? rental?.total ?? 0) || 0
-}
-
-function getRentalCashAmount(rental) {
-  const invoiceAmount = getRentalInvoiceAmount(rental)
-  const paymentStatus = String(rental?.payment?.status || 'LUNAS').toUpperCase()
-  if (paymentStatus === 'DP') {
-    return Math.min(invoiceAmount, Math.max(0, Number(rental?.payment?.paidAmount || 0) || 0))
-  }
-  return invoiceAmount
-}
-
-function getRentalReceivableAmount(rental) {
-  const fallback = Math.max(0, getRentalInvoiceAmount(rental) - getRentalCashAmount(rental))
-  return Number(rental?.payment?.remainingAmount ?? fallback) || 0
-}
-
 function buildSummaryRows(recap) {
   return [
     [`Laporan Keuangan ${APP_BRAND.name}`],
     ['Periode', `${recap.startDate || '-'} s/d ${recap.endDate || '-'}`],
     ['Tanggal Tutup Buku', recap.financialClosingDay || 31],
-    ['Basis Laporan', 'Cash-based sederhana'],
+    ['Basis Laporan', 'Nilai tagihan berdasarkan tanggal sewa; kas berdasarkan tanggal pembayaran'],
     [],
-    ['Omzet Sewa', Math.round(recap.invoiceRevenue)],
-    ['Uang Diterima', Math.round(recap.cashReceived)],
+    ['Nilai Tagihan', Math.round(recap.invoiceRevenue)],
+    ['Kas Diterima', Math.round(recap.cashReceived)],
     ['Piutang', Math.round(recap.receivables)],
     ['Pengeluaran', Math.round(recap.totalExpenses)],
-    ['Laba/Rugi', Math.round(recap.netProfit)],
+    ['Laba Kas Bersih', Math.round(recap.netProfit)],
     ['Margin', `${Math.round(Number(recap.profitMargin || 0) * 10000) / 100}%`],
     ['Jumlah Transaksi', recap.totalTransactions],
     ['Rata-rata Transaksi', Math.round(recap.averageTransaction)],
@@ -129,7 +117,8 @@ function buildSummaryRows(recap) {
 
 function buildTransactionRows(recap) {
   const rows = [[
-    'Tanggal',
+    'Tanggal Sewa',
+    'Tanggal Pembayaran',
     'Transaksi',
     'Pelanggan',
     'Metode Bayar',
@@ -142,12 +131,13 @@ function buildTransactionRows(recap) {
   recap.filteredRentals.forEach((rental) => {
     rows.push([
       formatJakartaDateLabel(rental.date, true),
+      getRentalPaymentRecords(rental).map((payment) => formatJakartaDateLabel(payment.paidAt, true)).join('; ') || '-',
       rental.id,
       rental?.customer?.name || '-',
       rental?.payment?.method || 'TUNAI',
       rental?.payment?.status || 'LUNAS',
       Math.round(getRentalInvoiceAmount(rental)),
-      Math.round(getRentalCashAmount(rental)),
+      Math.round(getRentalCashAmount(rental, { startDate: recap.startDate, endDate: recap.endDate })),
       Math.round(getRentalReceivableAmount(rental)),
     ])
   })
@@ -195,8 +185,8 @@ function buildTopItemRows(recap) {
 }
 
 function buildPaymentMethodRows(recap) {
-  const rows = [['Metode Bayar', 'Jumlah Transaksi', 'Pendapatan']]
-  recap.methods.forEach((method) => {
+  const rows = [['Metode Pembayaran', 'Jumlah Pembayaran', 'Kas Diterima']]
+  normalizePaymentMethodTotals(recap.paymentMethods ?? recap.methods).forEach((method) => {
     rows.push([
       method.method || '-',
       Number(method.count || 0),
@@ -328,6 +318,8 @@ const FinancialRecap = ({
     return {
       ...EMPTY_RECAP,
       ...summary,
+      methods: normalizePaymentMethodTotals(summary.paymentMethods ?? summary.methods),
+      paymentMethods: normalizePaymentMethodTotals(summary.paymentMethods ?? summary.methods),
       totalRevenue: Number(summary.totalRevenue ?? invoiceRevenue),
       invoiceRevenue,
       cashReceived,
@@ -564,11 +556,11 @@ const FinancialRecap = ({
       )}
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <SummaryCard label="Omzet sewa" value={formatCurrency(recap.invoiceRevenue)} accent />
-        <SummaryCard label="Uang diterima" value={formatCurrency(recap.cashReceived)} />
+        <SummaryCard label="Nilai tagihan" value={formatCurrency(recap.invoiceRevenue)} accent />
+        <SummaryCard label="Kas diterima" value={formatCurrency(recap.cashReceived)} />
         <SummaryCard label="Piutang" value={formatCurrency(recap.receivables)} />
         <SummaryCard label="Pengeluaran" value={formatCurrency(recap.totalExpenses)} tone="expense" />
-        <SummaryCard label="Laba/Rugi" value={formatCurrency(recap.netProfit)} tone={recap.netProfit < 0 ? 'danger' : 'profit'} />
+        <SummaryCard label="Laba kas bersih" value={formatCurrency(recap.netProfit)} tone={recap.netProfit < 0 ? 'danger' : 'profit'} />
       </section>
 
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-white">
@@ -619,6 +611,7 @@ const FinancialRecap = ({
           {activeView === 'transactions' && (
             <TransactionView
               rentals={recap.filteredRentals}
+              period={{ startDate: recap.startDate, endDate: recap.endDate }}
               isLoading={isRecapLoading}
               hasMore={hasMoreTransactions}
               isLoadingMore={isLoadingMoreTransactions}
@@ -760,13 +753,13 @@ function SummaryView({ recap, bestMethod, bestItem, maxRevenue, expenseCategorie
       </div>
 
       <div className="rounded-md border border-border bg-bg-main p-4">
-        <h4 className="mb-3 text-[1rem] font-bold text-text-main">Metode Bayar</h4>
+        <h4 className="mb-3 text-[1rem] font-bold text-text-main">Kas Menurut Metode Pembayaran</h4>
         {recap.methods.length === 0 ? <p className="text-sm text-text-muted">Belum ada data metode pembayaran.</p> : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             {recap.methods.map((method) => (
               <div key={method.method} className="rounded-md border border-border bg-white p-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{method.method}</p>
-                <p className="mt-1 text-lg font-bold text-text-main">{method.count} transaksi</p>
+                <p className="mt-1 text-lg font-bold text-text-main">{method.count} pembayaran</p>
                 <p className="text-sm font-semibold text-accent">{formatCurrency(method.revenue)}</p>
               </div>
             ))}
@@ -799,7 +792,7 @@ function SummaryView({ recap, bestMethod, bestItem, maxRevenue, expenseCategorie
   )
 }
 
-function TransactionView({ rentals, isLoading, hasMore, isLoadingMore, onLoadMore }) {
+function TransactionView({ rentals, period, isLoading, hasMore, isLoadingMore, onLoadMore }) {
   if (isLoading) {
     return <div className="flex min-h-[220px] items-center justify-center text-text-muted">Memuat transaksi...</div>
   }
@@ -814,7 +807,8 @@ function TransactionView({ rentals, isLoading, hasMore, isLoadingMore, onLoadMor
         <table className="w-full min-w-[900px] border-collapse">
           <thead className="sticky top-0 z-10 bg-white">
             <tr>
-              <TableHead>Tanggal</TableHead>
+              <TableHead>Tanggal Sewa</TableHead>
+              <TableHead>Tanggal Pembayaran</TableHead>
               <TableHead>Pelanggan</TableHead>
               <TableHead>Metode</TableHead>
               <TableHead>Status</TableHead>
@@ -827,11 +821,12 @@ function TransactionView({ rentals, isLoading, hasMore, isLoadingMore, onLoadMor
             {rentals.map((rental) => (
               <tr key={rental.id} className="hover:bg-surface-hover">
                 <TableCell muted>{formatJakartaDateLabel(rental.date, true)}</TableCell>
+                <TableCell muted>{getRentalPaymentRecords(rental).map((payment) => formatJakartaDateLabel(payment.paidAt, true)).join('; ') || '-'}</TableCell>
                 <TableCell>{rental?.customer?.name || '-'}</TableCell>
                 <TableCell muted>{rental?.payment?.method || 'TUNAI'}</TableCell>
                 <TableCell muted>{rental?.payment?.status || 'LUNAS'}</TableCell>
                 <TableCell align="right" strong>{formatCurrency(getRentalInvoiceAmount(rental))}</TableCell>
-                <TableCell align="right" strong>{formatCurrency(getRentalCashAmount(rental))}</TableCell>
+                <TableCell align="right" strong>{formatCurrency(getRentalCashAmount(rental, period))}</TableCell>
                 <TableCell align="right" muted>{formatCurrency(getRentalReceivableAmount(rental))}</TableCell>
               </tr>
             ))}

@@ -9,6 +9,7 @@ import {
   upsertCustomer,
   createItem,
   createRental,
+  recordRentalPayment,
   onboardTenantForPlatformAdmin,
   createTenantUserForUser,
   createUser,
@@ -85,6 +86,7 @@ import {
   createUserSchema,
   createTenantUserSchema,
   createRentalSchema,
+  createRentalPaymentSchema,
   updateRentalSchema,
   expenseSchema,
   loginSchema,
@@ -1022,7 +1024,9 @@ export async function apiRoute(req, res, env) {
       await ensureAuth();
       const context = await ensureRequestContext();
       const query = (searchParams.get('q') || '').trim();
-      sendSuccess(res, 200, await listCustomers({ query }, context));
+      const page = Math.max(1, Number.parseInt(searchParams.get('page') || '1', 10) || 1);
+      const limit = Math.min(50, Math.max(1, Number.parseInt(searchParams.get('limit') || '50', 10) || 50));
+      sendSuccess(res, 200, await listCustomers({ query, page, limit }, context));
       return true;
     }
 
@@ -1257,14 +1261,27 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'POST' && pathname === '/api/rentals') {
-      await ensureAuth();
+      const actor = await ensureAuth();
       const context = await ensureRequestContext();
       const body = createRentalSchema.parse(await readBody(req));
-      const rental = await createRental(body, context);
+      const rental = await createRental(body, { ...context, actorUserId: actor.id });
       sendSuccess(res, 201, rental);
       return true;
     }
 
+    const paymentRouteMatch = pathname.match(/^\/api\/rentals\/([^/]+)\/payments$/);
+    if (req.method === 'POST' && paymentRouteMatch) {
+      const actor = await ensureAuth();
+      const context = await ensureRequestContext();
+      const rentalId = decodeURIComponent(paymentRouteMatch[1]);
+      const body = createRentalPaymentSchema.parse(await readBody(req));
+      const result = await recordRentalPayment(rentalId, body, { ...context, actorUserId: actor.id });
+      sendSuccess(res, result.created ? 201 : 200, {
+        rental: result.rental,
+        payment: result.payment,
+      });
+      return true;
+    }
     if (req.method === 'PATCH' && pathname.startsWith('/api/rentals/')) {
       const actor = await ensureAuth();
       const context = await ensureRequestContext();
@@ -1328,10 +1345,10 @@ export async function apiRoute(req, res, env) {
     }
 
     if (req.method === 'POST' && pathname === '/api/returns') {
-      await ensureAuth();
+      const actor = await ensureAuth();
       const context = await ensureRequestContext();
       const body = processReturnSchema.parse(await readBody(req));
-      const result = await processReturn(body, context);
+      const result = await processReturn(body, { ...context, actorUserId: actor.id });
       sendSuccess(res, 200, result);
       return true;
     }

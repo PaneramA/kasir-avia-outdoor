@@ -5,8 +5,8 @@ import {
     formatDate,
     formatDateTime,
     getReceiptDueDate,
-    getReceiptTotal,
 } from '../lib/receipt';
+import { buildReceiptViewModel } from '../lib/receiptViewModel';
 
 const ReceiptModal = ({
     isOpen,
@@ -19,15 +19,12 @@ const ReceiptModal = ({
         return null;
     }
 
-    const items = Array.isArray(rental.items) ? rental.items : [];
     const receiptProfile = resolveReceiptProfile();
+    const receiptModel = buildReceiptViewModel(rental);
     const dueDate = getReceiptDueDate(rental);
     const duration = Number(rental.duration) || 0;
-    const total = getReceiptTotal(rental);
-    const paymentStatus = String(rental?.payment?.status || 'LUNAS').toUpperCase();
-    const paymentMethod = String(rental?.payment?.method || 'TUNAI').toUpperCase();
-    const paidAmount = Number(rental?.payment?.paidAmount ?? total) || 0;
-    const remainingAmount = Number(rental?.payment?.remainingAmount ?? Math.max(0, total - paidAmount)) || 0;
+    const paymentStatus = String(receiptModel.paymentStatus).toUpperCase();
+    const paymentMethod = String(receiptModel.paymentMethod).toUpperCase();
 
     return (
         <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/70 p-3 sm:p-4">
@@ -68,8 +65,8 @@ const ReceiptModal = ({
                         <p className="text-sm text-text-main">Durasi: {duration} hari</p>
                         <p className="text-sm text-text-main">Jatuh tempo: {dueDate ? formatDate(dueDate) : '-'}</p>
                         <p className="text-sm text-text-main">Pembayaran: {paymentStatus} • {paymentMethod}</p>
-                        <p className="text-sm text-text-main">Terbayar: {formatCurrency(paidAmount)}</p>
-                        <p className="text-sm text-text-main">Sisa: {formatCurrency(remainingAmount)}</p>
+                        <p className="text-sm text-text-main">Terbayar: {formatCurrency(receiptModel.paidAmount)}</p>
+                        <p className="text-sm text-text-main">Sisa: {formatCurrency(receiptModel.remainingAmount)}</p>
                         <p className="mt-2 text-xs text-text-muted">Status: {rental.status || '-'}</p>
                     </div>
                 </div>
@@ -85,25 +82,53 @@ const ReceiptModal = ({
                             </tr>
                         </thead>
                         <tbody>
-                            {items.map((item, idx) => {
-                                const subtotal = (Number(item.price) || 0) * (Number(item.qty) || 0) * duration;
-                                return (
-                                    <tr key={`${rental.id}-${item.id || idx}`}>
-                                        <td className="border-b border-border/40 p-3 text-sm text-text-main">{item.name}</td>
-                                        <td className="border-b border-border/40 p-3 text-right text-sm text-text-main">{item.qty}</td>
-                                        <td className="border-b border-border/40 p-3 text-right text-sm text-text-main">{formatCurrency(item.price)}</td>
-                                        <td className="border-b border-border/40 p-3 text-right text-sm font-semibold text-text-main">{formatCurrency(subtotal)}</td>
-                                    </tr>
-                                );
-                            })}
+                            {receiptModel.itemRows.map((item, idx) => (
+                                <tr key={`${rental.id}-${item.id || idx}`}>
+                                    <td className="border-b border-border/40 p-3 text-sm text-text-main">{item.label}</td>
+                                    <td className="border-b border-border/40 p-3 text-right text-sm text-text-main">{item.quantity}</td>
+                                    <td className="border-b border-border/40 p-3 text-right text-sm text-text-main">{formatCurrency(item.unitAmount)}</td>
+                                    <td className="border-b border-border/40 p-3 text-right text-sm font-semibold text-text-main">{formatCurrency(item.amount)}</td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between rounded-md border border-accent bg-card-bg p-3">
-                    <span className="text-sm font-semibold text-text-main">Total</span>
-                    <span className="text-[1.1rem] font-bold text-accent">{formatCurrency(total)}</span>
+                <div className="mt-4 rounded-md border border-accent bg-card-bg p-3">
+                    <div className="flex items-center justify-between gap-3 text-sm text-text-main">
+                        <span className="font-semibold">Subtotal Sewa</span>
+                        <span>{formatCurrency(receiptModel.baseSubtotal)}</span>
+                    </div>
+                    {receiptModel.chargeRows.map((charge, idx) => (
+                        <div key={charge.id || `${charge.label}-${idx}`} className="mt-2 flex items-center justify-between gap-3 text-sm text-text-main">
+                            <span>{charge.label}</span>
+                            <span className="font-semibold">{formatCurrency(charge.amount)}</span>
+                        </div>
+                    ))}
+                    <div className="mt-3 border-t border-border pt-3">
+                        <div className="flex items-center justify-between gap-3">
+                            <span className="text-sm font-semibold text-text-main">TOTAL</span>
+                            <span className="text-[1.1rem] font-bold text-accent">{formatCurrency(receiptModel.invoiceTotal)}</span>
+                        </div>
+                        <div className="mt-2 grid gap-1 text-sm text-text-main">
+                            <div className="flex items-center justify-between gap-3">
+                                <span>Terbayar</span>
+                                <span>{formatCurrency(receiptModel.paidAmount)}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                                <span>Sisa</span>
+                                <span>{formatCurrency(receiptModel.remainingAmount)}</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                {receiptModel.returnNotes && (
+                    <div className="mt-3 rounded-md border border-[#e0b44c] bg-[#fff9e8] p-3">
+                        <p className="text-xs font-bold uppercase tracking-wide text-[#8a6500]">Catatan pengembalian</p>
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-text-main">{receiptModel.returnNotes}</p>
+                    </div>
+                )}
 
                 {receiptProfile.legalFooterLines.length > 0 && (
                     <div className="mt-3 rounded-md border border-border bg-bg-main p-3">

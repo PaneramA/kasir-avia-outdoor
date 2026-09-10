@@ -170,13 +170,47 @@ describe('Rental page item picker', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /lanjut ke review/i })[0]);
 
     fireEvent.click(screen.getByRole('checkbox', { name: /saya sudah cek data penyewa/i }));
-    fireEvent.click(screen.getByRole('button', { name: /konfirmasi sewa/i }));
+    fireEvent.click(screen.getByRole('button', { name: /lanjut ke pembayaran/i }));
+    fireEvent.click(screen.getByRole('button', { name: /simpan pembayaran & buat sewa/i }));
 
     await waitFor(() => expect(onCheckout).toHaveBeenCalledWith(
       expect.objectContaining({
         identityCardHeld: false,
       }),
     ));
+  });
+
+  it('confirms an active rental with the selected initial payment details', async () => {
+    const onCheckout = vi.fn().mockResolvedValue({
+      id: 'RENTAL-001',
+      status: 'Active',
+      total: 55000,
+      payment: { status: 'BELUM_BAYAR', paidAmount: 0, remainingAmount: 55000 },
+      customer: { name: 'Naufal Ramadhani' },
+    });
+    renderRental({ onCheckout });
+
+    fireEvent.change(screen.getAllByLabelText(/nama customer/i)[0], {
+      target: { value: 'Naufal Ramadhani' },
+    });
+    fireEvent.change(screen.getAllByPlaceholderText('0812...')[0], {
+      target: { value: '081234567890' },
+    });
+    fireEvent.click(within(screen.getByTestId('rental-inventory-row-item-1')).getByRole('button', { name: /tambah tenda dome 4p/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /lanjut ke review/i })[0]);
+    fireEvent.click(screen.getByRole('checkbox', { name: /saya sudah cek data penyewa/i }));
+    fireEvent.click(screen.getByRole('button', { name: /lanjut ke pembayaran/i }));
+    fireEvent.click(screen.getByRole('button', { name: /simpan pembayaran & buat sewa/i }));
+
+    await waitFor(() => expect(onCheckout).toHaveBeenCalled());
+    expect(onCheckout.mock.calls[0][0]).toMatchObject({
+      identityCardHeld: true,
+      initialPayment: {
+        status: 'LUNAS',
+        method: 'TUNAI',
+        amount: 55000,
+      },
+    });
   });
 
   it('updates rental duration from the combined range picker', () => {
@@ -210,16 +244,19 @@ describe('Rental page item picker', () => {
   });
 
   it('uses Nama Customer as the only customer lookup field and autofills an existing customer', async () => {
-    fetchCustomers.mockResolvedValue([
-      {
-        id: 'customer-1',
-        name: 'Ayu Pratiwi',
-        phone: '08123456789',
-        address: 'Jl. Merapi No. 7',
-        guarantee: 'SIM',
-        idNumber: '123456789',
-      },
-    ]);
+    fetchCustomers.mockResolvedValue({
+      items: [
+        {
+          id: 'customer-1',
+          name: 'Ayu Pratiwi',
+          phone: '08123456789',
+          address: 'Jl. Merapi No. 7',
+          guarantee: 'SIM',
+          idNumber: '123456789',
+        },
+      ],
+      pagination: { page: 1, pageSize: 20, totalItems: 1, totalPages: 1 },
+    });
 
     renderRental();
 
@@ -228,7 +265,11 @@ describe('Rental page item picker', () => {
     const nameInputs = screen.getAllByLabelText(/nama customer/i);
     fireEvent.change(nameInputs[0], { target: { value: 'Ayu' } });
 
-    await waitFor(() => expect(fetchCustomers).toHaveBeenCalledWith('ayu'));
+    await waitFor(() => expect(fetchCustomers).toHaveBeenCalledWith({
+      query: 'ayu',
+      page: 1,
+      limit: 20,
+    }));
     const matchingCustomers = await screen.findAllByRole('button', { name: /ayu pratiwi/i });
     fireEvent.click(matchingCustomers[0]);
 
@@ -239,23 +280,30 @@ describe('Rental page item picker', () => {
   });
 
   it('hides stale customer suggestions immediately when the customer name search is cleared', async () => {
-    fetchCustomers.mockResolvedValue([
-      {
-        id: 'customer-1',
-        name: 'Ayu Pratiwi',
-        phone: '08123456789',
-        address: 'Jl. Merapi No. 7',
-        guarantee: 'SIM',
-        idNumber: '123456789',
-      },
-    ]);
+    fetchCustomers.mockResolvedValue({
+      items: [
+        {
+          id: 'customer-1',
+          name: 'Ayu Pratiwi',
+          phone: '08123456789',
+          address: 'Jl. Merapi No. 7',
+          guarantee: 'SIM',
+          idNumber: '123456789',
+        },
+      ],
+      pagination: { page: 1, pageSize: 20, totalItems: 1, totalPages: 1 },
+    });
 
     renderRental();
 
     const nameInputs = screen.getAllByLabelText(/nama customer/i);
     fireEvent.change(nameInputs[0], { target: { value: 'Ayu' } });
 
-    await waitFor(() => expect(fetchCustomers).toHaveBeenCalledWith('ayu'));
+    await waitFor(() => expect(fetchCustomers).toHaveBeenCalledWith({
+      query: 'ayu',
+      page: 1,
+      limit: 20,
+    }));
     expect(await screen.findAllByRole('button', { name: /ayu pratiwi/i })).toHaveLength(2);
 
     fireEvent.change(nameInputs[0], { target: { value: '' } });

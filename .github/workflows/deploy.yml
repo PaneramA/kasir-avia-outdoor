@@ -60,7 +60,7 @@ jobs:
       - name: Install Linux-native build bindings
         run: npm i --no-save @rollup/rollup-linux-x64-gnu @tailwindcss/oxide-linux-x64-gnu lightningcss-linux-x64-gnu
       - run: npm run prisma:generate --workspace @avia/api
-      - run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+      - run: npm run prisma:migrate:deploy --workspace @avia/api -- --schema prisma/schema.prisma
       - run: npx vitest run --maxWorkers=1
       - run: npm run lint
       - run: npm run build

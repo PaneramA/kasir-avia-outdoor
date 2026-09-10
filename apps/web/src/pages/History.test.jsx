@@ -47,6 +47,18 @@ const historyRental = {
   },
 };
 
+const unpaidHistoryRental = {
+  ...historyRental,
+  id: 'TX-UNPAID-001',
+  payment: {
+    status: 'BELUM_BAYAR',
+    method: 'TUNAI',
+    paidAmount: 0,
+    remainingAmount: 55000,
+    totalDue: 55000,
+  },
+};
+
 function renderHistory(props = {}) {
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
@@ -93,5 +105,20 @@ describe('History identity card status', () => {
     await waitFor(() => expect(fetchRentalHistoryPage).toHaveBeenCalled());
 
     expect(await screen.findAllByRole('button', { name: /edit/i })).not.toHaveLength(0);
+  });
+
+  it('shows a separate payment action for an unpaid rental when the callback is available', async () => {
+    fetchRentalHistoryPage.mockResolvedValue({
+      items: [unpaidHistoryRental],
+      nextCursor: null,
+      summary: { totalTransactions: 1, activeTransactions: 1, returnedTransactions: 0, totalRevenue: 0 },
+    });
+    renderHistory({ onRecordRentalPayment: vi.fn() });
+
+    await waitFor(() => expect(fetchRentalHistoryPage).toHaveBeenCalled());
+
+    expect(await screen.findAllByRole('button', { name: /catat pembayaran/i })).not.toHaveLength(0);
+    expect(screen.getAllByText(/BELUM_BAYAR/i)).not.toHaveLength(0);
+    expect(screen.getAllByText(/Sisa Rp 55,000/i)).not.toHaveLength(0);
   });
 });

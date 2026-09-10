@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   createPlanSchema,
   createRentalSchema,
+  createRentalPaymentSchema,
   onboardTenantSchema,
+  processReturnSchema,
   updateItemSchema,
   updateTenantSettingsSchema,
   updatePlanSchema,
@@ -47,18 +49,93 @@ describe('API validation schemas', () => {
     expect(result.error.issues.map((issue) => issue.path[0])).toEqual(['endsAt', 'graceEndsAt']);
   });
 
-  it('coerces rental numbers and supplies payment defaults', () => {
+  it('coerces rental numbers without accepting CRUD payment fields', () => {
     const parsed = createRentalSchema.parse({
       customer: { name: 'Fuad', phone: '0812' },
       items: [{ id: 'item-1', qty: '2' }],
       duration: '3',
-      payment: {},
+      payment: { status: 'LUNAS', method: 'TUNAI' },
     });
     expect(parsed.items[0]).toMatchObject({ qty: 2, notes: '' });
     expect(parsed.duration).toBe(3);
-    expect(parsed.payment).toMatchObject({ status: 'LUNAS', method: 'TUNAI' });
+    expect(parsed.payment).toBeUndefined();
   });
 
+  it('accepts an explicit initial rental payment or pay-later choice', () => {
+    const baseRental = {
+      customer: { name: 'Fuad', phone: '0812' },
+      items: [{ id: 'item-1', qty: 1 }],
+      duration: 1,
+    };
+
+    expect(createRentalSchema.parse({
+      ...baseRental,
+      initialPayment: {
+        status: 'DP',
+        method: 'QRIS',
+        amount: '50000',
+        idempotencyKey: 'initial-payment-1',
+      },
+    }).initialPayment).toMatchObject({
+      status: 'DP',
+      method: 'QRIS',
+      amount: 50_000,
+      idempotencyKey: 'initial-payment-1',
+    });
+
+    expect(createRentalSchema.parse({
+      ...baseRental,
+      initialPayment: { status: 'BELUM_BAYAR' },
+    }).initialPayment).toMatchObject({ status: 'BELUM_BAYAR', method: 'TUNAI' });
+  });
+
+  it('validates independent rental payment payloads', () => {
+    expect(createRentalPaymentSchema.parse({
+      amount: '40000',
+      method: 'QRIS',
+      idempotencyKey: 'payment-key-1',
+    })).toMatchObject({ amount: 40_000, method: 'QRIS', note: '' });
+    expect(createRentalPaymentSchema.safeParse({
+      amount: 0,
+      method: 'KARTU',
+      idempotencyKey: 'short',
+    }).success).toBe(false);
+  });
+
+  it('accepts explicit late-fee return payloads without settlement fields', () => {
+    expect(processReturnSchema.parse({
+      rentalId: 'rental-1',
+      applyLateFee: true,
+      lateFeeAmount: '110000',
+      returnNotes: 'Dikembalikan lengkap',
+      settleRemainingPayment: true,
+    })).toEqual({
+      rentalId: 'rental-1',
+      applyLateFee: true,
+      lateFeeAmount: 110_000,
+      returnNotes: 'Dikembalikan lengkap',
+    });
+  });
+
+  it('maps the legacy additionalFee alias explicitly to lateFeeAmount', () => {
+    expect(processReturnSchema.parse({
+      rentalId: 'rental-legacy',
+      additionalFee: '75000',
+    })).toEqual({
+      rentalId: 'rental-legacy',
+      applyLateFee: true,
+      lateFeeAmount: 75_000,
+      returnNotes: '',
+    });
+  });
+
+  it('rejects conflicting legacy and current late-fee fields', () => {
+    expect(processReturnSchema.safeParse({
+      rentalId: 'rental-legacy',
+      additionalFee: 75_000,
+      lateFeeAmount: 80_000,
+    }).success).toBe(false);
+  });
   it('defaults new rentals to holding an identity card but accepts not holding it', () => {
     const baseRental = {
       customer: { name: 'Fuad', phone: '0812' },

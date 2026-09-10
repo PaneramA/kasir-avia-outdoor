@@ -98,13 +98,22 @@ describe('web API client state and requests', () => {
     expect(expiredListener).not.toHaveBeenCalled();
   });
 
-  it('encodes search parameters', async () => {
+  it('requests and normalizes customer pages', async () => {
     localStorage.setItem('avia_api_token', 'token-1');
-    fetch.mockResolvedValue(jsonResponse([]));
+    fetch.mockResolvedValue(jsonResponse({
+      items: [{ id: 'customer-1', name: 'Fuad' }],
+      pagination: { page: 3, pageSize: 50, totalItems: 101, totalPages: 3 },
+    }));
     const api = await loadApi();
 
-    await api.fetchCustomers('Fuad & Sewa');
-    expect(fetch.mock.calls[0][0]).toBe('http://localhost:4000/api/customers?q=Fuad%20%26%20Sewa');
+    await expect(api.fetchCustomers({ query: 'Fuad', page: 3, limit: 50 })).resolves.toEqual({
+      items: [{ id: 'customer-1', name: 'Fuad' }],
+      pagination: { page: 3, pageSize: 50, totalItems: 101, totalPages: 3 },
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/customers?q=Fuad&page=3&limit=50'),
+      expect.anything(),
+    );
   });
 
   it('requests archived inventory pages and restores an item', async () => {
@@ -138,6 +147,62 @@ describe('web API client state and requests', () => {
       { id: 'r1', status: 'Returned' },
       { id: 'r2', status: 'Active' },
     ]);
+  });
+
+  it('records a rental payment and normalizes the ledger-backed rental response', async () => {
+    localStorage.setItem('avia_api_token', 'token-1');
+    fetch.mockResolvedValue(jsonResponse({
+      rental: {
+        id: 'rental-1',
+        status: 'active',
+        payment: {
+          status: 'sebagian',
+          method: 'qris',
+          paidAmount: '40000',
+          remainingAmount: '60000',
+          totalDue: '100000',
+          records: [{ amount: '40000', method: 'qris' }],
+        },
+        charges: [{ amount: '0', quantity: '1', unitAmount: '0' }],
+      },
+      payment: { id: 'payment-1', amount: 40000, method: 'QRIS' },
+    }));
+    const api = await loadApi();
+    api.setActiveTenantContext({ tenantId: 'tenant-1', branchId: 'branch-1' });
+
+    await expect(api.recordRentalPayment('rental-1', {
+      amount: 40000,
+      method: 'QRIS',
+      paidAt: '2026-09-09T10:00:00.000Z',
+      note: 'DP',
+      idempotencyKey: 'payment:rental-1:1',
+    })).resolves.toMatchObject({
+      rental: {
+        id: 'rental-1',
+        status: 'Active',
+        payment: {
+          status: 'SEBAGIAN',
+          method: 'QRIS',
+          paidAmount: 40000,
+          remainingAmount: 60000,
+          totalDue: 100000,
+        },
+      },
+      payment: { id: 'payment-1', amount: 40000, method: 'QRIS' },
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:4000/api/rentals/rental-1/payments',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          amount: 40000,
+          method: 'QRIS',
+          paidAt: '2026-09-09T10:00:00.000Z',
+          note: 'DP',
+          idempotencyKey: 'payment:rental-1:1',
+        }),
+      }),
+    );
   });
 
   it('updates rentals through the active tenant context', async () => {

@@ -4,6 +4,7 @@ import { fetchCustomers } from '../lib/api';
 import { APP_CACHE_KEYS } from '../lib/appCache';
 import RentalDateRangePicker from '../components/RentalDateRangePicker';
 import ReceiptModal from '../components/ReceiptModal';
+import RentalInitialPaymentModal from '../components/RentalInitialPaymentModal';
 import { openReceiptWhatsApp, printReceipt } from '../lib/receipt';
 import {
     calculateRentalDurationDays,
@@ -103,11 +104,11 @@ const Rental = ({
     const [customerErrors, setCustomerErrors] = useState(INITIAL_CUSTOMER_ERRORS);
     const [itemsError, setItemsError] = useState('');
     const [durationError, setDurationError] = useState('');
-    const [paymentError, setPaymentError] = useState('');
     const [mobileStepHint, setMobileStepHint] = useState('');
     const [receiptRental, setReceiptRental] = useState(null);
     const [isFinalReviewOpen, setIsFinalReviewOpen] = useState(false);
     const [isFinalReviewChecked, setIsFinalReviewChecked] = useState(false);
+    const [isInitialPaymentOpen, setIsInitialPaymentOpen] = useState(false);
     const focusTimeoutRef = useRef(null);
     const hasRestoredDraftRef = useRef(false);
     const checkoutInFlightRef = useRef(false);
@@ -178,12 +179,14 @@ const Rental = ({
 
     const customerSuggestionQuery = useSWR(
         currentUser?.id && tenantId && branchId && debouncedCustomerSearch.length >= 2
-            ? APP_CACHE_KEYS.customers(currentUser.id, tenantId, branchId, debouncedCustomerSearch)
+            ? APP_CACHE_KEYS.customers(currentUser.id, tenantId, branchId, debouncedCustomerSearch, 1, 20)
             : null,
-        ([, , , , keyword]) => fetchCustomers(keyword),
+        ([, , , , keyword, page, limit]) => fetchCustomers({ query: keyword, page, limit }),
     );
     const customerSuggestions = useMemo(
-        () => (hasFreshCustomerLookup && Array.isArray(customerSuggestionQuery.data) ? customerSuggestionQuery.data : []),
+        () => (hasFreshCustomerLookup && Array.isArray(customerSuggestionQuery.data?.items)
+            ? customerSuggestionQuery.data.items
+            : []),
         [customerSuggestionQuery.data, hasFreshCustomerLookup],
     );
     const isSearchingCustomer = hasFreshCustomerLookup && customerSuggestionQuery.isLoading;
@@ -303,7 +306,6 @@ const Rental = ({
         setMobileStep(Number.isFinite(draftPayload.mobileStep) ? Math.min(3, Math.max(1, draftPayload.mobileStep)) : 1);
         setItemsError('');
         setDurationError('');
-        setPaymentError('');
         setMobileStepHint('Draft berhasil dimuat. Lanjutkan proses sewa.');
         setCart(restoredItems);
 
@@ -477,15 +479,9 @@ const Rental = ({
     const calculatedDuration = calculateRentalDurationDays(rentalStartAt, rentalEndAt, rentalDayPolicy);
     const effectiveDuration = calculatedDuration > 0 ? calculatedDuration : 0;
     const calculateTotal = () => cart.reduce((sum, item) => sum + (item.price * item.qty * effectiveDuration), 0);
-    const parsePaidAmount = () => {
-        const parsed = Number.parseInt(String(payment.paidAmount || '0').replace(/\D/g, ''), 10);
-        return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
-    };
     const totalAmount = calculateTotal();
-    const computedPaidAmount = payment.status === 'LUNAS'
-        ? totalAmount
-        : Math.min(parsePaidAmount(), totalAmount);
-    const remainingAmount = Math.max(0, totalAmount - computedPaidAmount);
+    const computedPaidAmount = 0;
+    const remainingAmount = totalAmount;
     const cartQuantity = cart.reduce((sum, item) => sum + item.qty, 0);
     const isCustomerStepComplete = Boolean(
         customer.name.trim()
@@ -656,22 +652,6 @@ const Rental = ({
         return true;
     };
 
-    const validatePaymentStep = ({ focusOnError = false } = {}) => {
-        if (payment.status === 'DP') {
-            const paidAmount = parsePaidAmount();
-            if (paidAmount <= 0) {
-                setPaymentError('Nominal DP wajib diisi jika status pembayaran DP.');
-                if (focusOnError) {
-                    scheduleFocusField('paymentAmount');
-                }
-                return false;
-            }
-        }
-
-        setPaymentError('');
-        return true;
-    };
-
     const goToNextMobileStep = () => {
         if (mobileStep === 1 && !validateCustomerStep({ focusOnError: true })) {
             setMobileStepHint('Lengkapi data penyewa dulu sebelum lanjut.');
@@ -685,11 +665,6 @@ const Rental = ({
 
         if (mobileStep === 3 && !validateDurationStep({ focusOnError: true })) {
             setMobileStepHint('Cek lagi durasi sewa yang dimasukkan.');
-            return;
-        }
-
-        if (mobileStep === 3 && !validatePaymentStep({ focusOnError: true })) {
-            setMobileStepHint('Lengkapi detail pembayaran sebelum lanjut.');
             return;
         }
 
@@ -763,7 +738,6 @@ const Rental = ({
         const isCustomerValid = validateCustomerStep({ focusOnError: true });
         const isItemsValid = validateItemsStep({ focusOnError: true });
         const isDurationValid = validateDurationStep({ focusOnError: true });
-        const isPaymentValid = validatePaymentStep({ focusOnError: true });
 
         if (!isCustomerValid) {
             setMobileStep(1);
@@ -786,13 +760,6 @@ const Rental = ({
             return false;
         }
 
-        if (!isPaymentValid) {
-            setMobileStep(3);
-            setMobileStepHint('Periksa detail pembayaran sebelum menyimpan transaksi.');
-            alert('Detail pembayaran belum valid.');
-            return false;
-        }
-
         return true;
     };
 
@@ -806,7 +773,15 @@ const Rental = ({
         setIsFinalReviewOpen(true);
     };
 
-    const handleConfirmCheckout = async () => {
+    const handleOpenInitialPayment = () => {
+        if (isSubmitting || !isFinalReviewChecked) {
+            return;
+        }
+
+        setIsInitialPaymentOpen(true);
+    };
+
+    const handleConfirmCheckout = async (initialPayment) => {
         if (isSubmitting || checkoutInFlightRef.current) {
             return;
         }
@@ -829,11 +804,7 @@ const Rental = ({
             duration: effectiveDuration,
             rentalStartAt: rentalStartAt ? rentalStartAt.toISOString() : undefined,
             rentalEndAt: rentalEndAt ? rentalEndAt.toISOString() : undefined,
-            payment: {
-                status: payment.status,
-                method: payment.method,
-                ...(payment.status === 'DP' ? { paidAmount: parsePaidAmount() } : {}),
-            },
+            initialPayment,
         };
 
         try {
@@ -852,12 +823,12 @@ const Rental = ({
             setInventorySearch('');
             setCategoryFilter('all');
             setDurationError('');
-            setPaymentError('');
             setItemsError('');
             setMobileStepHint('');
             setMobileStep(1);
             setIsFinalReviewChecked(false);
             setIsFinalReviewOpen(false);
+            setIsInitialPaymentOpen(false);
             setReceiptRental(createdRental || null);
             alert('Transaksi berhasil disimpan!');
             scheduleFocusField('name');
@@ -877,6 +848,15 @@ const Rental = ({
 
         setIsFinalReviewChecked(false);
         setIsFinalReviewOpen(false);
+        setIsInitialPaymentOpen(false);
+    };
+
+    const handleCloseInitialPayment = () => {
+        if (isSubmitting) {
+            return;
+        }
+
+        setIsInitialPaymentOpen(false);
     };
 
     const handleCloseReceipt = () => {
@@ -987,38 +967,6 @@ const Rental = ({
 
         if (durationError) {
             setDurationError('');
-        }
-    };
-
-    const handlePaymentStatusChange = (value) => {
-        const status = value === 'DP' ? 'DP' : 'LUNAS';
-        setPayment((previous) => ({
-            ...previous,
-            status,
-            paidAmount: status === 'LUNAS' ? '' : previous.paidAmount,
-        }));
-        setMobileStepHint('');
-        if (paymentError) {
-            setPaymentError('');
-        }
-    };
-
-    const handlePaymentMethodChange = (value) => {
-        const normalizedMethod = ['QRIS', 'BANK', 'TUNAI'].includes(value) ? value : 'TUNAI';
-        setPayment((previous) => ({
-            ...previous,
-            method: normalizedMethod,
-        }));
-    };
-
-    const handlePaymentAmountChange = (value) => {
-        const sanitized = value.replace(/\D/g, '');
-        setPayment((previous) => ({
-            ...previous,
-            paidAmount: sanitized,
-        }));
-        if (paymentError) {
-            setPaymentError('');
         }
     };
 
@@ -1390,47 +1338,9 @@ const Rental = ({
 
                                     {renderRentalDateRange('mobile')}
 
-                                    <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                        <div>
-                                            <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Status Pembayaran</label>
-                                            <select
-                                                className={`${RENTAL_FIELD_CLASS} p-3 text-sm`}
-                                                value={payment.status}
-                                                onChange={(e) => handlePaymentStatusChange(e.target.value)}
-                                            >
-                                                <option value="LUNAS">LUNAS</option>
-                                                <option value="DP">DP</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Metode</label>
-                                            <select
-                                                className={`${RENTAL_FIELD_CLASS} p-3 text-sm`}
-                                                value={payment.method}
-                                                onChange={(e) => handlePaymentMethodChange(e.target.value)}
-                                            >
-                                                <option value="TUNAI">TUNAI</option>
-                                                <option value="QRIS">QRIS</option>
-                                                <option value="BANK">BANK</option>
-                                            </select>
-                                        </div>
+                                    <div className="mb-4 rounded-md border border-[#d7ded9] bg-white p-3 text-sm text-text-muted">
+                                        Pilihan pembayaran akan dikonfirmasi setelah review. Kasir bisa memilih lunas, DP, atau bayar nanti.
                                     </div>
-
-                                    {payment.status === 'DP' && (
-                                        <div className="mb-4">
-                                            <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Nominal DP</label>
-                                            <input
-                                                className={`${RENTAL_FIELD_CLASS} p-3 ${paymentError ? 'border-[#c0392b]' : ''}`}
-                                                type="text"
-                                                inputMode="numeric"
-                                                data-rental-field="mobile-paymentAmount"
-                                                value={payment.paidAmount}
-                                                onChange={(e) => handlePaymentAmountChange(e.target.value)}
-                                                placeholder="Contoh: 150000"
-                                            />
-                                            {paymentError && <p className="mt-1 text-xs text-[#e74c3c]">{paymentError}</p>}
-                                        </div>
-                                    )}
 
                                     <div className="rounded-md border border-[#146c43] bg-white p-4 sm:p-5">
                                         <div className="mb-1 flex items-center justify-between gap-3">
@@ -1473,47 +1383,9 @@ const Rental = ({
 
                                 {renderRentalDateRange('desktop')}
 
-                                <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                    <div>
-                                        <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Status Pembayaran</label>
-                                        <select
-                                            className={`${RENTAL_FIELD_CLASS} text-sm`}
-                                            value={payment.status}
-                                            onChange={(e) => handlePaymentStatusChange(e.target.value)}
-                                        >
-                                            <option value="LUNAS">LUNAS</option>
-                                            <option value="DP">DP</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Metode</label>
-                                        <select
-                                            className={`${RENTAL_FIELD_CLASS} text-sm`}
-                                            value={payment.method}
-                                            onChange={(e) => handlePaymentMethodChange(e.target.value)}
-                                        >
-                                            <option value="TUNAI">TUNAI</option>
-                                            <option value="QRIS">QRIS</option>
-                                            <option value="BANK">BANK</option>
-                                        </select>
-                                    </div>
+                                <div className="rounded-md border border-[#d7ded9] bg-white p-3 text-sm text-text-muted">
+                                    Pilihan pembayaran akan dikonfirmasi setelah review. Kasir bisa memilih lunas, DP, atau bayar nanti.
                                 </div>
-
-                                {payment.status === 'DP' && (
-                                    <div className="mb-4">
-                                        <label className="mb-1.5 block text-[0.85rem] text-text-muted font-semibold">Nominal DP</label>
-                                        <input
-                                            className={`${RENTAL_FIELD_CLASS} ${paymentError ? 'border-[#c0392b]' : ''}`}
-                                            type="text"
-                                            inputMode="numeric"
-                                            data-rental-field="desktop-paymentAmount"
-                                            value={payment.paidAmount}
-                                            onChange={(e) => handlePaymentAmountChange(e.target.value)}
-                                            placeholder="Contoh: 150000"
-                                        />
-                                        {paymentError && <p className="mt-1 text-xs text-[#e74c3c]">{paymentError}</p>}
-                                    </div>
-                                )}
                             </div>
 
                             <div className="mt-4 rounded-md border border-[#146c43] bg-white p-4 sm:p-5">
@@ -1596,11 +1468,7 @@ const Rental = ({
                             <div className="rounded-md border border-[#146c43] bg-white p-3">
                                 <div className="flex items-center justify-between text-sm text-text-muted">
                                     <span>Status Pembayaran</span>
-                                    <span className="font-semibold text-text-main">{payment.status}</span>
-                                </div>
-                                <div className="mt-1 flex items-center justify-between text-sm text-text-muted">
-                                    <span>Metode</span>
-                                    <span className="font-semibold text-text-main">{payment.method}</span>
+                                    <span className="font-semibold text-text-main">Dipilih setelah review</span>
                                 </div>
                                 <div className="mt-1 flex items-center justify-between text-sm text-text-muted">
                                     <span>Terbayar</span>
@@ -1650,16 +1518,23 @@ const Rental = ({
                             <button
                                 type="button"
                                 className={`${RENTAL_PRIMARY_BUTTON_CLASS} disabled:opacity-60`}
-                                onClick={handleConfirmCheckout}
+                                onClick={handleOpenInitialPayment}
                                 disabled={isSubmitting || !isFinalReviewChecked}
                             >
-                                {isSubmitting ? 'Menyimpan...' : 'Konfirmasi Sewa'}
+                                {isSubmitting ? 'Menyimpan...' : 'Lanjut ke Pembayaran'}
                             </button>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
+
+            <RentalInitialPaymentModal
+                isOpen={isInitialPaymentOpen}
+                rental={{ total: totalAmount, customer }}
+                onClose={handleCloseInitialPayment}
+                onSubmit={handleConfirmCheckout}
+            />
 
             <ReceiptModal
                 isOpen={Boolean(receiptRental)}
