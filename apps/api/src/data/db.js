@@ -1243,6 +1243,53 @@ export async function listRentals({ status } = {}, context) {
   return rentals.map(toRentalDto);
 }
 
+export async function listRentalCalendar({ startDate, endDate, search, status } = {}, context) {
+  const startAt = parseJakartaDateBoundary(startDate, 'start');
+  const endAt = parseJakartaDateBoundary(endDate, 'end');
+
+  if (!startAt || !endAt) {
+    throw new Error('Calendar range requires startDate and endDate');
+  }
+  if (startAt > endAt) {
+    throw new Error('Calendar range is invalid');
+  }
+
+  const normalizedSearch = String(search || '').trim();
+  const normalizedStatus = String(status || '').trim().toLowerCase();
+  const searchFilter = normalizedSearch
+    ? {
+        OR: [
+          { id: { contains: normalizedSearch, mode: 'insensitive' } },
+          { customerName: { contains: normalizedSearch, mode: 'insensitive' } },
+          { customerPhone: { contains: normalizedSearch, mode: 'insensitive' } },
+          { items: { some: { itemName: { contains: normalizedSearch, mode: 'insensitive' } } } },
+        ],
+      }
+    : {};
+  const paymentFilter = normalizedStatus === 'unpaid'
+    ? { paymentStatus: { in: ['BELUM_BAYAR', 'SEBAGIAN'] } }
+    : {};
+  const where = withTenantBranchScope({
+    deletedAt: null,
+    status: 'Active',
+    plannedReturnDate: { gte: startAt, lte: endAt },
+    ...searchFilter,
+    ...paymentFilter,
+  }, context, { includeBranchNull: false });
+
+  const rentals = await prisma.rental.findMany({
+    where,
+    include: {
+      items: true,
+      payments: true,
+      charges: true,
+    },
+    orderBy: [{ plannedReturnDate: 'asc' }, { id: 'desc' }],
+  });
+
+  return rentals.map(toRentalDto);
+}
+
 function parseJakartaDateBoundary(value, boundary) {
   const dateKey = String(value || '').trim();
   if (!dateKey) {

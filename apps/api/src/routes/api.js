@@ -53,6 +53,7 @@ import {
   listItems,
   listItemsPage,
   listRentals,
+  listRentalCalendar,
   listRentalHistoryPage,
   listReturns,
   listUsers,
@@ -1266,6 +1267,18 @@ export async function apiRoute(req, res, env) {
       const body = createRentalSchema.parse(await readBody(req));
       const rental = await createRental(body, { ...context, actorUserId: actor.id });
       sendSuccess(res, 201, rental);
+      return true;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/rentals/calendar') {
+      await ensureAuth();
+      const context = await ensureRequestContext();
+      sendSuccess(res, 200, await listRentalCalendar({
+        startDate: searchParams.get('startDate') || undefined,
+        endDate: searchParams.get('endDate') || undefined,
+        search: searchParams.get('search') || undefined,
+        status: searchParams.get('status') || undefined,
+      }, context));
       return true;
     }
 

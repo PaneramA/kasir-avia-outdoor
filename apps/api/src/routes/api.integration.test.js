@@ -1253,6 +1253,26 @@ describe('critical API workflow integration', () => {
       expect(rentals.status).toBe(200);
       expect(rentals.body.data).toHaveLength(3);
 
+      const calendarRentals = await callApi(
+        'GET',
+        '/api/rentals/calendar?startDate=2026-07-01&endDate=2026-08-01',
+        { token: ownerToken, tenantId, branchId },
+      );
+      expect(calendarRentals.status).toBe(200);
+      expect(calendarRentals.body.data).toHaveLength(3);
+      expect(calendarRentals.body.data.every((rental) => rental.status === 'Active')).toBe(true);
+      expect(calendarRentals.body.data.map((rental) => rental.plannedReturnDate)
+        .every((date) => date >= '2026-07-01T00:00:00.000Z' && date <= '2026-08-01T23:59:59.999Z')).toBe(true);
+
+      const searchedCalendarRentals = await callApi(
+        'GET',
+        '/api/rentals/calendar?startDate=2026-07-01&endDate=2026-08-01&search=Customer%201',
+        { token: ownerToken, tenantId, branchId },
+      );
+      expect(searchedCalendarRentals.status).toBe(200);
+      expect(searchedCalendarRentals.body.data).toHaveLength(1);
+      expect(searchedCalendarRentals.body.data[0].customer.name).toBe('Customer 1');
+
       const rentalHistory = await callApi('GET', '/api/rentals/history?limit=2', {
         token: ownerToken, tenantId, branchId,
       });
