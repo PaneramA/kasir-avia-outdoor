@@ -35,6 +35,15 @@ export const APP_CACHE_KEYS = {
   ),
   categories: (userId, tenantId, branchId) => createBranchKey('app/categories', userId, tenantId, branchId),
   rentals: (userId, tenantId, branchId) => createBranchKey('app/rentals', userId, tenantId, branchId),
+  returnCalendar: (userId, tenantId, branchId, range = '', search = '', status = 'all') => createBranchKey(
+    'app/return-calendar',
+    userId,
+    tenantId,
+    branchId,
+    normalizeCacheScopeValue(range),
+    normalizeCacheScopeValue(search).toLowerCase(),
+    normalizeCacheScopeValue(status),
+  ),
   dashboard: (userId, tenantId, branchId, recentStatus = '') => createBranchKey(
     'app/dashboard',
     userId,
@@ -97,6 +106,7 @@ const FINANCIAL_MUTATION_NAMESPACES = new Set([
 
 const RENTAL_MUTATION_NAMESPACES = new Set([
   'app/rentals',
+  'app/return-calendar',
   'app/rental-history',
   'app/dashboard',
   'app/financial-recap',

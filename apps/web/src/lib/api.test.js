@@ -149,6 +149,28 @@ describe('web API client state and requests', () => {
     ]);
   });
 
+  it('requests and normalizes rentals for a calendar range', async () => {
+    localStorage.setItem('avia_api_token', 'token-1');
+    fetch.mockResolvedValue(jsonResponse([
+      { id: 'rental-1', status: 'active', payment: { status: 'belum_bayar' } },
+    ]));
+    const api = await loadApi();
+
+    await expect(api.fetchRentalCalendar({
+      startDate: '2026-09-01',
+      endDate: '2026-09-30',
+      search: 'Bambang & Co',
+      status: 'unpaid',
+    })).resolves.toEqual([
+      expect.objectContaining({ id: 'rental-1', status: 'Active' }),
+    ]);
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:4000/api/rentals/calendar?startDate=2026-09-01&endDate=2026-09-30&search=Bambang+%26+Co&status=unpaid',
+      expect.anything(),
+    );
+  });
+
   it('records a rental payment and normalizes the ledger-backed rental response', async () => {
     localStorage.setItem('avia_api_token', 'token-1');
     fetch.mockResolvedValue(jsonResponse({

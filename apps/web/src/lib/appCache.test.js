@@ -44,6 +44,7 @@ describe('application SWR cache policy', () => {
       ['inventory pagination', () => APP_CACHE_KEYS.inventoryPage('user-a', 'tenant-a', 'branch-a')],
       ['categories', () => APP_CACHE_KEYS.categories('user-a', 'tenant-a', 'branch-a')],
       ['rentals', () => APP_CACHE_KEYS.rentals('user-a', 'tenant-a', 'branch-a')],
+      ['return calendar', () => APP_CACHE_KEYS.returnCalendar('user-a', 'tenant-a', 'branch-a', '2026-09-01:2026-09-30', 'Bambang', 'unpaid')],
       ['dashboard', () => APP_CACHE_KEYS.dashboard('user-a', 'tenant-a', 'branch-a')],
       ['financial recap', () => APP_CACHE_KEYS.financialRecap('user-a', 'tenant-a', 'branch-a', {})],
       ['rental history', () => APP_CACHE_KEYS.rentalHistory('user-a', 'tenant-a', 'branch-a', {})],
@@ -130,11 +131,13 @@ describe('application SWR cache policy', () => {
     const financialScope = (key) => isFinancialMutationKeyForScope(key, 'user-a', 'tenant-a', 'branch-a')
 
     expect(rentalScope(APP_CACHE_KEYS.rentals('user-a', 'tenant-a', 'branch-a'))).toBe(true)
+    expect(rentalScope(APP_CACHE_KEYS.returnCalendar('user-a', 'tenant-a', 'branch-a', '2026-09-01:2026-09-30', 'Bambang', 'unpaid'))).toBe(true)
     expect(rentalScope(APP_CACHE_KEYS.rentalHistory('user-a', 'tenant-a', 'branch-a', {}))).toBe(true)
     expect(rentalScope(APP_CACHE_KEYS.dashboard('user-a', 'tenant-a', 'branch-a'))).toBe(true)
     expect(financialScope(APP_CACHE_KEYS.financialRecap('user-a', 'tenant-a', 'branch-a', {}))).toBe(true)
 
     expect(rentalScope(APP_CACHE_KEYS.rentals('user-b', 'tenant-a', 'branch-a'))).toBe(false)
+    expect(rentalScope(APP_CACHE_KEYS.returnCalendar('user-a', 'tenant-b', 'branch-a', '2026-09-01:2026-09-30'))).toBe(false)
     expect(financialScope(APP_CACHE_KEYS.financialRecap('user-a', 'tenant-b', 'branch-a', {}))).toBe(false)
   })
 })
