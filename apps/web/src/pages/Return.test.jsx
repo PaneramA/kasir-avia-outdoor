@@ -128,7 +128,7 @@ describe('Return page theme', () => {
       <Return rentals={[activeOverdueRental]} onProcessReturn={vi.fn()} />,
     );
 
-    fireEvent.click(screen.getByText('Ayu Pratiwi'));
+    fireEvent.click(screen.getAllByText('Ayu Pratiwi')[0]);
 
     const classNames = getClassNames(container);
     expect(classNames).not.toMatch(/#d97706|#ffedd5|#fff3e6|#fff1e5|#c76410|#8f4100|#2ecc71|#27ae60/);
@@ -158,22 +158,22 @@ describe('Return page theme', () => {
       target: { value: 'carrier' },
     });
 
-    expect(screen.getByText('Bima Santoso')).toBeInTheDocument();
-    expect(screen.queryByText('Ayu Pratiwi')).not.toBeInTheDocument();
-    expect(screen.queryByText('Citra Lestari')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Bima Santoso').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('Ayu Pratiwi')).toHaveLength(0);
+    expect(screen.queryAllByText('Citra Lestari')).toHaveLength(0);
 
     fireEvent.change(screen.getByPlaceholderText('Cari customer, nomor HP, ID, atau barang...'), {
       target: { value: '087700001111' },
     });
 
-    expect(screen.getByText('Citra Lestari')).toBeInTheDocument();
-    expect(screen.queryByText('Bima Santoso')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Citra Lestari').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('Bima Santoso')).toHaveLength(0);
   });
 
   it('shows the identity card hold badge beside the customer name', () => {
     render(<Return rentals={[activeOverdueRental]} onProcessReturn={vi.fn()} />);
 
-    fireEvent.click(screen.getByText('Ayu Pratiwi'));
+    fireEvent.click(screen.getAllByText('Ayu Pratiwi')[0]);
 
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByText('Ayu Pratiwi')).toBeInTheDocument();
@@ -192,16 +192,16 @@ describe('Return page theme', () => {
       target: { value: 'dueToday' },
     });
 
-    expect(screen.getByText('Bima Santoso')).toBeInTheDocument();
-    expect(screen.queryByText('Ayu Pratiwi')).not.toBeInTheDocument();
-    expect(screen.queryByText('Citra Lestari')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Bima Santoso').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('Ayu Pratiwi')).toHaveLength(0);
+    expect(screen.queryAllByText('Citra Lestari')).toHaveLength(0);
 
     fireEvent.change(screen.getByLabelText(/filter status pengembalian/i), {
       target: { value: 'unpaid' },
     });
 
-    expect(screen.getByText('Ayu Pratiwi')).toBeInTheDocument();
-    expect(screen.queryByText('Bima Santoso')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Ayu Pratiwi').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('Bima Santoso')).toHaveLength(0);
   });
 
   it('keeps the page fixed and assigns scrolling to the calendar region', () => {
@@ -214,13 +214,14 @@ describe('Return page theme', () => {
 
     expect(screen.getByTestId('return-page-shell').className).toContain('lg:h-[calc(100vh-8rem)]');
     expect(screen.getByTestId('return-calendar-shell').className).toContain('min-h-0');
-    expect(document.querySelector('.return-calendar-scroll').className).toContain('overflow-auto');
+    expect(document.querySelector('.return-calendar-scroll').className).not.toContain('overflow-auto');
+    expect(document.querySelector('.return-calendar-scroll').className).toContain('overflow-visible');
   });
 
   it('keeps the return action area anchored inside the detail panel', () => {
     render(<Return rentals={[activeOverdueRental]} onProcessReturn={vi.fn()} />);
 
-    fireEvent.click(screen.getByText('Ayu Pratiwi'));
+    fireEvent.click(screen.getAllByText('Ayu Pratiwi')[0]);
 
     const actionArea = screen.getByTestId('return-detail-actions');
     expect(actionArea.className).toContain('border-t');
@@ -231,7 +232,7 @@ describe('Return page theme', () => {
   it('mounts the return detail modal above the calendar layer', () => {
     render(<Return rentals={[activeOverdueRental]} onProcessReturn={vi.fn()} />);
 
-    fireEvent.click(screen.getByText('Ayu Pratiwi'));
+    fireEvent.click(screen.getAllByText('Ayu Pratiwi')[0]);
 
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveClass('return-detail-overlay');
@@ -249,7 +250,7 @@ describe('Return page theme', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('Ayu Pratiwi'));
+    fireEvent.click(screen.getAllByText('Ayu Pratiwi')[0]);
 
     expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
   });
@@ -275,11 +276,11 @@ describe('Return page theme', () => {
       />,
     );
 
-    expect(screen.getByText('Dewi Anggraini')).toBeInTheDocument();
+    expect(screen.getAllByText('Dewi Anggraini').length).toBeGreaterThan(0);
     fireEvent.change(screen.getByPlaceholderText('Cari customer, nomor HP, ID, atau barang...'), {
       target: { value: 'Dewi' },
     });
-    expect(screen.getByText('Dewi Anggraini')).toBeInTheDocument();
+    expect(screen.getAllByText('Dewi Anggraini').length).toBeGreaterThan(0);
   });
 
   it('allows an unpaid rental to be returned without forcing settlement', async () => {
@@ -289,7 +290,7 @@ describe('Return page theme', () => {
 
     render(<Return rentals={[activeOverdueRental]} onProcessReturn={onProcessReturn} />);
 
-    fireEvent.click(screen.getByText('Ayu Pratiwi'));
+    fireEvent.click(screen.getAllByText('Ayu Pratiwi')[0]);
     fireEvent.click(screen.getByRole('button', { name: /selesaikan pengembalian/i }));
 
     expect(onProcessReturn).toHaveBeenCalledWith({
@@ -303,7 +304,7 @@ describe('Return page theme', () => {
   it('shows the late-fee breakdown using late days multiplied by the daily rate', () => {
     render(<Return rentals={[activeOverdueRental]} onProcessReturn={vi.fn()} />);
 
-    fireEvent.click(screen.getByText('Ayu Pratiwi'));
+    fireEvent.click(screen.getAllByText('Ayu Pratiwi')[0]);
 
     expect(screen.getByText(/3 hari x Rp 100\.000/i)).toBeInTheDocument();
   });

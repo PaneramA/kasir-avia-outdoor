@@ -4,6 +4,17 @@ import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+
+const flatpickrOpen = vi.hoisted(() => vi.fn());
+vi.mock('flatpickr', () => ({
+  default: vi.fn(() => ({
+    open: flatpickrOpen,
+    destroy: vi.fn(),
+    setDate: vi.fn(),
+  })),
+}));
+vi.mock('flatpickr/dist/flatpickr.css', () => ({}));
+
 import ReturnCalendar from './ReturnCalendar.jsx';
 
 const rental = {
@@ -23,12 +34,21 @@ describe('ReturnCalendar', () => {
     expect(screen.getByRole('button', { name: 'Bulan' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Minggu' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hari' })).toBeInTheDocument();
-    expect(screen.getByText('Bambang')).toBeInTheDocument();
+    expect(screen.getAllByText('Bambang').length).toBeGreaterThan(0);
     const eventHeading = screen.getByTestId('return-rental-heading-rental-1');
     expect(eventHeading).toHaveTextContent('Bambang');
     expect(eventHeading).not.toHaveTextContent('item');
     expect(eventHeading).not.toHaveTextContent('Kartu tidak ditahan');
     expect(eventHeading.closest('.fc-event')).toHaveClass('return-event--payment-unpaid');
+  });
+
+  it('removes the duplicated inner heading and exposes mobile date navigation', () => {
+    render(<ReturnCalendar rentals={[rental]} onViewChange={vi.fn()} />);
+
+    expect(screen.queryByRole('heading', { name: 'Jadwal Pengembalian' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('return-mobile-agenda')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /pilih tanggal pengembalian/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /hari ini/i }).length).toBeGreaterThan(0);
   });
 
   it('notifies the parent when a view is selected', () => {
@@ -44,6 +64,6 @@ describe('ReturnCalendar', () => {
 
     expect(screen.getByTestId('return-calendar-shell')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('Gagal memuat jadwal.');
-    expect(screen.getByLabelText('Memuat kalender')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Memuat kalender').length).toBeGreaterThan(0);
   });
 });
